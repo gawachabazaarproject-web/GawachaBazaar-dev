@@ -1,0 +1,58 @@
+[project]
+name = "gawachabazaar-backend"
+version = "0.1.0"
+description = "Gawacha Bazaar - Production Backend Service"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.110.0,<1.0.0",
+    "uvicorn[standard]>=0.28.0,<1.0.0",
+    "pydantic>=2.6.0,<3.0.0",
+    "pydantic-settings>=2.2.0,<3.0.0",
+    "sqlalchemy>=2.0.28,<3.0.0",
+    "psycopg[binary]>=3.1.18,<4.0.0",
+    "alembic>=1.13.1,<2.0.0",
+    "email-validator>=2.1.0",
+    "pyjwt[crypto]>=2.8.0,<3.0.0",
+    "argon2-cffi>=23.1.0",
+    "python-dotenv>=1.0.1",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.1.0,<9.0.0",
+    "pytest-asyncio>=0.23.5,<1.0.0",
+    "httpx>=0.27.0,<1.0.0",
+    "ruff>=0.3.0,<1.0.0",
+]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 88
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes
+    "I",    # isort
+    "B",    # flake8-bugbear
+    "UP",   # pyupgrade
+]
+ignore = [
+    "E501", # line length handled by formatter
+    "B008", # do not perform function calls in argument defaults (FastAPI Depends)
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["app"]
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+asyncio_mode = "auto"
+filterwarnings = [
+    "ignore::DeprecationWarning",
+    "ignore:.*deprecated.*:Warning",
+]

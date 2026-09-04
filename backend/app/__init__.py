@@ -1,0 +1,1 @@
+"""GawachaBazaar Backend Application Package."""

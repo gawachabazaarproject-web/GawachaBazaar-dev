@@ -1,0 +1,30 @@
+# Git & IDE
+.git
+.gitignore
+.vscode
+.idea
+
+# Environments
+.env
+.env.*
+!.env.example
+
+# Python & virtual environment
+venv/
+.venv/
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+
+# Testing & Linting
+.pytest_cache/
+.coverage
+htmlcov/
+.ruff_cache/
+
+# Logs
+*.log
+logs/
