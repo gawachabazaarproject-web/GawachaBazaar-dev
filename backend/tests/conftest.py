@@ -32,10 +32,10 @@ def db_session(test_engine) -> Generator[Session, None, None]:
     SessionLocalTest = sessionmaker(bind=connection, autocommit=False, autoflush=False)
     session = SessionLocalTest()
 
-    # Clean test tables before each test
+    # Clean test tables before each test in dependency order
     session.execute(
         text(
-            "TRUNCATE TABLE user_roles, addresses, users, roles RESTART IDENTITY CASCADE;"
+            "TRUNCATE TABLE quality_checks, batches, farms, user_roles, addresses, users, roles RESTART IDENTITY CASCADE;"
         )
     )
     session.commit()
