@@ -16,6 +16,8 @@ from app.db.base import Base
 
 if TYPE_CHECKING:
     from app.models.address import Address
+    from app.models.farm import Farm
+    from app.models.quality_check import QualityCheck
     from app.models.user_role import UserRole
 
 
@@ -70,7 +72,7 @@ class User(Base):
         nullable=False,
     )
 
-    # Authoritative 1:N relationships
+    # Phase 1: Authoritative 1:N relationships
     user_roles: Mapped[list["UserRole"]] = relationship(
         "UserRole",
         back_populates="user",
@@ -80,4 +82,14 @@ class User(Base):
         "Address",
         back_populates="user",
         cascade="all, delete-orphan",
+    )
+
+    # Phase 2: Farm & Quality Check relationships (restricted deletion)
+    farms: Mapped[list["Farm"]] = relationship(
+        "Farm",
+        back_populates="owner",
+    )
+    quality_checks_performed: Mapped[list["QualityCheck"]] = relationship(
+        "QualityCheck",
+        back_populates="checked_by_user",
     )
