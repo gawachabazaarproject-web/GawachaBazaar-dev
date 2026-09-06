@@ -21,6 +21,7 @@ from app.db.base import Base
 
 if TYPE_CHECKING:
     from app.models.farm import Farm
+    from app.models.product import Product
     from app.models.quality_check import QualityCheck
 
 
@@ -44,6 +45,7 @@ class Batch(Base):
             name="ck_batches_unit",
         ),
         Index("ix_batches_farm_id", "farm_id"),
+        Index("ix_batches_product_id", "product_id"),
         Index("ix_batches_harvest_date", "harvest_date"),
         Index("ix_batches_status", "status"),
     )
@@ -56,6 +58,11 @@ class Batch(Base):
     farm_id: Mapped[int] = mapped_column(
         BigInteger,
         ForeignKey("farms.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    product_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("products.id", ondelete="RESTRICT"),
         nullable=False,
     )
     batch_code: Mapped[str] = mapped_column(
@@ -97,6 +104,10 @@ class Batch(Base):
     # Authoritative ORM relationships
     farm: Mapped["Farm"] = relationship(
         "Farm",
+        back_populates="batches",
+    )
+    product: Mapped["Product"] = relationship(
+        "Product",
         back_populates="batches",
     )
     quality_checks: Mapped[list["QualityCheck"]] = relationship(
