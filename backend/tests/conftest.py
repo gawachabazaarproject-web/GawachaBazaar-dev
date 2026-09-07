@@ -35,7 +35,9 @@ def db_session(test_engine) -> Generator[Session, None, None]:
     # Clean test tables before each test in dependency order
     session.execute(
         text(
-            "TRUNCATE TABLE quality_checks, batches, farms, user_roles, addresses, users, roles RESTART IDENTITY CASCADE;"
+            "TRUNCATE TABLE prices, product_images, quality_checks, batches, "
+            "product_variants, products, categories, farms, user_roles, addresses, users, roles "
+            "RESTART IDENTITY CASCADE;"
         )
     )
     session.commit()
