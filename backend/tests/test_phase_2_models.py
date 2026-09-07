@@ -6,7 +6,9 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.models.batch import Batch
+from app.models.category import Category
 from app.models.farm import Farm
+from app.models.product import Product
 from app.models.quality_check import QualityCheck
 from app.models.user import User
 
@@ -53,14 +55,38 @@ def _create_farm(
     return farm
 
 
+def _create_product(db_session: Session) -> Product:
+    """Helper to create a valid product for batch testing."""
+    cat = db_session.query(Category).first()
+    if not cat:
+        cat = Category(name="Test Produce", slug="test-produce", status="ACTIVE")
+        db_session.add(cat)
+        db_session.flush()
+    prod = db_session.query(Product).first()
+    if not prod:
+        prod = Product(
+            category_id=cat.id,
+            name="Test Tomato",
+            slug="test-tomato",
+            status="ACTIVE",
+        )
+        db_session.add(prod)
+        db_session.flush()
+    return prod
+
+
 def _create_batch(
     db_session: Session,
     farm_id: int,
     batch_code: str = "BATCH-2026-001",
+    product_id: int | None = None,
 ) -> Batch:
     """Helper to create a valid batch for testing."""
+    if product_id is None:
+        product_id = _create_product(db_session).id
     batch = Batch(
         farm_id=farm_id,
+        product_id=product_id,
         batch_code=batch_code,
         harvest_date=date(2026, 9, 1),
         expiry_date=date(2026, 9, 10),
@@ -218,8 +244,10 @@ def test_8_batch_code_uniqueness(db_session: Session) -> None:
     farm = _create_farm(db_session, user.id)
     _create_batch(db_session, farm.id, batch_code="UNIQUE-001")
 
+    prod = _create_product(db_session)
     duplicate_batch = Batch(
         farm_id=farm.id,
+        product_id=prod.id,
         batch_code="UNIQUE-001",
         harvest_date=date(2026, 9, 2),
         quantity=Decimal("100.000"),
@@ -237,9 +265,11 @@ def test_9_batch_quantity_positive(db_session: Session) -> None:
     user = _create_user(db_session)
     farm = _create_farm(db_session, user.id)
 
+    prod = _create_product(db_session)
     # Zero quantity
     zero_batch = Batch(
         farm_id=farm.id,
+        product_id=prod.id,
         batch_code="ZERO-001",
         harvest_date=date(2026, 9, 1),
         quantity=Decimal("0.000"),
@@ -254,6 +284,7 @@ def test_9_batch_quantity_positive(db_session: Session) -> None:
     # Negative quantity
     neg_batch = Batch(
         farm_id=farm.id,
+        product_id=prod.id,
         batch_code="NEG-001",
         harvest_date=date(2026, 9, 1),
         quantity=Decimal("-10.000"),
@@ -271,8 +302,10 @@ def test_10_batch_expiry_after_harvest(db_session: Session) -> None:
     user = _create_user(db_session)
     farm = _create_farm(db_session, user.id)
 
+    prod = _create_product(db_session)
     invalid_expiry_batch = Batch(
         farm_id=farm.id,
+        product_id=prod.id,
         batch_code="EXP-INVALID",
         harvest_date=date(2026, 9, 10),
         expiry_date=date(2026, 9, 5),  # Expiry earlier than harvest!
@@ -300,9 +333,11 @@ def test_11_batch_status_check(db_session: Session) -> None:
         "REJECTED",
         "EXPIRED",
     ]
+    prod = _create_product(db_session)
     for idx, s in enumerate(valid_statuses):
         b = Batch(
             farm_id=farm.id,
+            product_id=prod.id,
             batch_code=f"BATCH-STATUS-{idx}",
             harvest_date=date(2026, 9, 1),
             quantity=Decimal("10.000"),
@@ -315,6 +350,7 @@ def test_11_batch_status_check(db_session: Session) -> None:
 
     invalid_b = Batch(
         farm_id=farm.id,
+        product_id=prod.id,
         batch_code="BATCH-INVALID-STATUS",
         harvest_date=date(2026, 9, 1),
         quantity=Decimal("10.000"),
@@ -333,9 +369,11 @@ def test_12_batch_unit_check(db_session: Session) -> None:
     farm = _create_farm(db_session, user.id)
 
     valid_units = ["KG", "G", "L", "ML", "UNIT", "DOZEN", "BOX", "CRATE"]
+    prod = _create_product(db_session)
     for idx, u in enumerate(valid_units):
         b = Batch(
             farm_id=farm.id,
+            product_id=prod.id,
             batch_code=f"BATCH-UNIT-{idx}",
             harvest_date=date(2026, 9, 1),
             quantity=Decimal("1.000"),
@@ -348,6 +386,7 @@ def test_12_batch_unit_check(db_session: Session) -> None:
 
     invalid_u = Batch(
         farm_id=farm.id,
+        product_id=prod.id,
         batch_code="BATCH-INVALID-UNIT",
         harvest_date=date(2026, 9, 1),
         quantity=Decimal("10.000"),
