@@ -16,7 +16,9 @@ from app.db.base import Base
 
 if TYPE_CHECKING:
     from app.models.address import Address
+    from app.models.cart import Cart
     from app.models.farm import Farm
+    from app.models.order import Order
     from app.models.packaging_operation import PackagingOperation
     from app.models.quality_check import QualityCheck
     from app.models.user_role import UserRole
@@ -97,4 +99,14 @@ class User(Base):
     packaging_operations: Mapped[list["PackagingOperation"]] = relationship(
         "PackagingOperation",
         back_populates="performed_by",
+    )
+
+    # Phase 6: Cart & Order relationships (restricted deletion)
+    carts: Mapped[list["Cart"]] = relationship(
+        "Cart",
+        back_populates="user",
+    )
+    orders: Mapped[list["Order"]] = relationship(
+        "Order",
+        back_populates="user",
     )

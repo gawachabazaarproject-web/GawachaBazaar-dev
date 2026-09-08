@@ -1,17 +1,22 @@
 """Domain models package.
 
 Exposes Phase 1 (Identity & Access), Phase 2 (Farm & Traceability),
-Phase 3 (Catalog & Products), Phase 4 (Inventory & Stock), and
-Phase 5 (Packaging & Labeling) SQLAlchemy models so that Base.metadata
-contains all table definitions.
+Phase 3 (Catalog & Products), Phase 4 (Inventory & Stock),
+Phase 5 (Packaging & Labeling), and Phase 6 (Cart & Orders)
+SQLAlchemy models so that Base.metadata contains all table definitions.
 """
 
 from app.models.address import Address
 from app.models.batch import Batch
+from app.models.cart import Cart
+from app.models.cart_item import CartItem
 from app.models.category import Category
 from app.models.farm import Farm
 from app.models.inventory_location import InventoryLocation
 from app.models.inventory_lot import InventoryLot
+from app.models.order import Order
+from app.models.order_address import OrderAddress
+from app.models.order_item import OrderItem
 from app.models.packaging_input import PackagingInput
 from app.models.packaging_operation import PackagingOperation
 from app.models.packaging_output import PackagingOutput
@@ -28,10 +33,15 @@ from app.models.user_role import UserRole
 __all__ = [
     "Address",
     "Batch",
+    "Cart",
+    "CartItem",
     "Category",
     "Farm",
     "InventoryLocation",
     "InventoryLot",
+    "Order",
+    "OrderAddress",
+    "OrderItem",
     "PackagingInput",
     "PackagingOperation",
     "PackagingOutput",
