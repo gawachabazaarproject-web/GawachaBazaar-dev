@@ -954,9 +954,6 @@ def test_42_unwanted_tables_do_not_exist(test_engine) -> None:
     unwanted_tables = {
         "inventory",
         "warehouses",
-        "carts",
-        "orders",
-        "order_items",
         "payments",
         "coupons",
         "promotions",
