@@ -17,6 +17,7 @@ from app.db.base import Base
 if TYPE_CHECKING:
     from app.models.address import Address
     from app.models.farm import Farm
+    from app.models.packaging_operation import PackagingOperation
     from app.models.quality_check import QualityCheck
     from app.models.user_role import UserRole
 
@@ -92,4 +93,8 @@ class User(Base):
     quality_checks_performed: Mapped[list["QualityCheck"]] = relationship(
         "QualityCheck",
         back_populates="checked_by_user",
+    )
+    packaging_operations: Mapped[list["PackagingOperation"]] = relationship(
+        "PackagingOperation",
+        back_populates="performed_by",
     )
