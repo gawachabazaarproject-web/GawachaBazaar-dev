@@ -2,7 +2,7 @@ from unittest.mock import MagicMock
 
 from starlette.testclient import TestClient
 
-from app.db.session import get_db
+from app.dependencies.database import get_db
 from app.main import app
 
 

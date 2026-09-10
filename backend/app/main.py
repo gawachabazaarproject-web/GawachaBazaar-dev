@@ -1,6 +1,5 @@
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from typing import Any
 
 from fastapi import Depends, FastAPI, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -11,8 +10,10 @@ from sqlalchemy.orm import Session
 from app.api.v1.router import api_router
 from app.core.config import settings
 from app.core.logging import logger
-from app.db.session import get_db
-from app.exceptions import register_exception_handlers
+from app.core.request_id import RequestIDMiddleware
+from app.dependencies.database import get_db
+from app.exceptions.handlers import register_exception_handlers
+from app.schemas.base import DatabaseHealthResponse, HealthResponse
 
 
 @asynccontextmanager
@@ -40,6 +41,9 @@ def create_application() -> FastAPI:
         lifespan=lifespan,
     )
 
+    # Request correlation & structured execution timing (outer ASGI middleware)
+    app.add_middleware(RequestIDMiddleware)
+
     # Configure CORS
     if settings.ALLOWED_ORIGINS:
         app.add_middleware(
@@ -57,16 +61,30 @@ def create_application() -> FastAPI:
     app.include_router(api_router, prefix="/api/v1")
 
     # Root health endpoints
-    @app.get("/health", tags=["health"], summary="Service Health Check")
-    def health_check() -> dict[str, Any]:
+    @app.get(
+        "/health",
+        response_model=HealthResponse,
+        tags=["health"],
+        summary="Service Health Check",
+    )
+    def health_check() -> HealthResponse:
         """Verify service operational status."""
-        return {
-            "status": "ok",
-            "app": settings.APP_NAME,
-            "environment": settings.APP_ENV,
-        }
+        return HealthResponse(
+            status="ok",
+            app=settings.APP_NAME,
+            environment=settings.APP_ENV,
+        )
 
-    @app.get("/health/db", tags=["health"], summary="Database Health Check")
+    @app.get(
+        "/health/db",
+        response_model=DatabaseHealthResponse,
+        responses={
+            status.HTTP_200_OK: {"model": DatabaseHealthResponse},
+            status.HTTP_503_SERVICE_UNAVAILABLE: {"model": DatabaseHealthResponse},
+        },
+        tags=["health"],
+        summary="Database Health Check",
+    )
     def database_health_check(db: Session = Depends(get_db)) -> JSONResponse:
         """Execute lightweight connectivity probe against the database."""
         try:
