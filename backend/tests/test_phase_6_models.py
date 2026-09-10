@@ -123,6 +123,7 @@ def _create_order(
     total_amount: Decimal = Decimal("350.00"),
     currency: str = "INR",
     placed_at: datetime | None = None,
+    cart_id: int | None = None,
 ) -> Order:
     """Helper to create an order."""
     if placed_at is None:
@@ -134,6 +135,7 @@ def _create_order(
         total_amount=total_amount,
         currency=currency,
         placed_at=placed_at,
+        cart_id=cart_id,
     )
     db_session.add(order)
     db_session.commit()
@@ -515,6 +517,73 @@ class TestOrderModel:
             db_session.commit()
         db_session.rollback()
 
+    def test_order_cart_id_nullable_and_references_cart(self, db_session: Session) -> None:
+        user = _create_user(db_session)
+        cart = _create_cart(db_session, user.id)
+        order = _create_order(db_session, user.id, order_number="ORD-CART-1", cart_id=cart.id)
+
+        assert order.cart_id == cart.id
+        assert order.cart is not None
+        assert order.cart.id == cart.id
+
+    def test_order_without_cart_id_valid(self, db_session: Session) -> None:
+        user = _create_user(db_session)
+        order = _create_order(db_session, user.id, order_number="ORD-NO-CART", cart_id=None)
+
+        assert order.cart_id is None
+        assert order.cart is None
+
+    def test_multiple_orders_with_null_cart_id_allowed(self, db_session: Session) -> None:
+        user = _create_user(db_session)
+        o1 = _create_order(db_session, user.id, order_number="ORD-NULL-1", cart_id=None)
+        o2 = _create_order(db_session, user.id, order_number="ORD-NULL-2", cart_id=None)
+
+        assert o1.id is not None
+        assert o2.id is not None
+        assert o1.cart_id is None
+        assert o2.cart_id is None
+
+    def test_order_cart_id_unique_enforced(self, db_session: Session) -> None:
+        user = _create_user(db_session)
+        cart = _create_cart(db_session, user.id)
+        _create_order(db_session, user.id, order_number="ORD-UNIQUE-CART-1", cart_id=cart.id)
+
+        with pytest.raises(IntegrityError) as exc_info:
+            _create_order(db_session, user.id, order_number="ORD-UNIQUE-CART-2", cart_id=cart.id)
+        db_session.rollback()
+        assert "uq_orders_cart_id" in str(exc_info.value)
+
+    def test_order_cart_fk_enforced(self, db_session: Session) -> None:
+        user = _create_user(db_session)
+        with pytest.raises(IntegrityError):
+            order = Order(
+                user_id=user.id,
+                order_number="ORD-FK-FAIL",
+                status="PENDING",
+                total_amount=Decimal("100.00"),
+                currency="INR",
+                placed_at=datetime.now(UTC),
+                cart_id=999999,
+            )
+            db_session.add(order)
+            db_session.commit()
+        db_session.rollback()
+
+    def test_delete_cart_restricted_with_order(self, db_session: Session) -> None:
+        user = _create_user(db_session)
+        cart = _create_cart(db_session, user.id)
+        _create_order(db_session, user.id, order_number="ORD-DEL-RESTRICT", cart_id=cart.id)
+
+        with pytest.raises(IntegrityError):
+            db_session.delete(cart)
+            db_session.commit()
+        db_session.rollback()
+
+    def test_order_cart_id_schema_invariants(self) -> None:
+        assert hasattr(Order, "cart_id")
+        mapper = inspect(Order)
+        assert mapper.columns["cart_id"].nullable is True
+
 
 # ============================================================================
 # 4. Order Items Tests
@@ -812,6 +881,13 @@ class TestOrderAddressModel:
         assert "user_id" not in column_names
         assert "updated_at" not in column_names
 
+    def test_order_addresses_redundant_index_not_in_model(self) -> None:
+        """Verify redundant index ix_order_addresses_order_id was removed from model."""
+        index_names = [idx.name for idx in OrderAddress.__table__.indexes]
+        assert "ix_order_addresses_order_id" not in index_names
+        constraint_names = [c.name for c in OrderAddress.__table__.constraints]
+        assert "uq_order_addresses_order_id" in constraint_names
+
 
 # ============================================================================
 # 6. Relationship Navigation Tests
@@ -907,6 +983,30 @@ class TestRelationshipNavigation:
         assert order.address.id == addr.id
         assert addr.order.id == order.id
 
+    def test_cart_and_order_navigation(self, db_session: Session) -> None:
+        user = _create_user(db_session)
+        cart = _create_cart(db_session, user.id)
+        order = _create_order(db_session, user.id, cart_id=cart.id)
+        db_session.refresh(cart)
+        db_session.refresh(order)
+
+        assert len(cart.orders) == 1
+        assert cart.orders[0].id == order.id
+        assert order.cart is not None
+        assert order.cart.id == cart.id
+
+    def test_delete_order_does_not_delete_cart(self, db_session: Session) -> None:
+        user = _create_user(db_session)
+        cart = _create_cart(db_session, user.id)
+        order = _create_order(db_session, user.id, cart_id=cart.id)
+        cart_id = cart.id
+
+        db_session.delete(order)
+        db_session.commit()
+
+        surviving_cart = db_session.get(Cart, cart_id)
+        assert surviving_cart is not None
+
 
 # ============================================================================
 # 7. Database Catalog & PostgreSQL Audits
@@ -986,3 +1086,58 @@ class TestDatabaseCatalogAudit:
         assert "city" in columns
         assert "state" in columns
         assert "postal_code" in columns
+
+    def test_orders_cart_id_in_db_catalog(self, db_session: Session) -> None:
+        """Verify DB column catalog directly for orders.cart_id."""
+        result = db_session.execute(
+            text(
+                "SELECT column_name, is_nullable FROM information_schema.columns "
+                "WHERE table_name = 'orders' AND column_name = 'cart_id' AND table_schema = 'public';"
+            )
+        ).fetchall()
+        assert len(result) == 1
+        assert result[0][0] == "cart_id"
+        assert result[0][1] == "YES"
+
+    def test_orders_cart_id_unique_constraint_in_db(self, db_session: Session) -> None:
+        """Verify uq_orders_cart_id unique constraint exists in PostgreSQL catalog."""
+        result = db_session.execute(
+            text(
+                "SELECT conname FROM pg_constraint "
+                "WHERE conname = 'uq_orders_cart_id' AND contype = 'u';"
+            )
+        ).fetchall()
+        assert len(result) == 1
+
+    def test_orders_cart_id_fk_in_db(self, db_session: Session) -> None:
+        """Verify fk_orders_cart_id_carts FK with RESTRICT exists in PostgreSQL catalog."""
+        result = db_session.execute(
+            text(
+                "SELECT conname, confdeltype FROM pg_constraint "
+                "WHERE conname = 'fk_orders_cart_id_carts' AND contype = 'f';"
+            )
+        ).fetchall()
+        assert len(result) == 1
+        assert result[0][1] == "r"
+
+    def test_order_addresses_redundant_index_removed_from_db(self, db_session: Session) -> None:
+        """Verify ix_order_addresses_order_id does not exist in PostgreSQL indexes."""
+        result = db_session.execute(
+            text(
+                "SELECT indexname FROM pg_indexes "
+                "WHERE tablename = 'order_addresses' AND schemaname = 'public';"
+            )
+        ).fetchall()
+        index_names = {row[0] for row in result}
+        assert "ix_order_addresses_order_id" not in index_names
+        assert "uq_order_addresses_order_id" in index_names
+
+    def test_order_addresses_unique_constraint_remains_in_db(self, db_session: Session) -> None:
+        """Verify uq_order_addresses_order_id unique constraint exists in PostgreSQL catalog."""
+        result = db_session.execute(
+            text(
+                "SELECT conname FROM pg_constraint "
+                "WHERE conname = 'uq_order_addresses_order_id' AND contype = 'u';"
+            )
+        ).fetchall()
+        assert len(result) == 1

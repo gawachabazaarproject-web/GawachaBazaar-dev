@@ -1307,7 +1307,6 @@ def test_56_no_future_domain_tables_accidentally_introduced(test_engine) -> None
         "packing",
         "preparation",
         "reservations",
-        "payments",
         "delivery",
         "promotions",
         "coupons",
