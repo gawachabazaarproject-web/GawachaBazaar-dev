@@ -1262,7 +1262,6 @@ def test_56_no_unwanted_tables_introduced(test_engine) -> None:
         "packages",
         "individual_packages",
         "reservations",
-        "payments",
         "delivery",
         "promotions",
         "coupons",

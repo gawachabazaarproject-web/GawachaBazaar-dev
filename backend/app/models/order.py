@@ -21,6 +21,7 @@ from app.db.base import Base
 if TYPE_CHECKING:
     from app.models.order_address import OrderAddress
     from app.models.order_item import OrderItem
+    from app.models.payment import Payment
     from app.models.user import User
 
 
@@ -93,6 +94,11 @@ class Order(Base):
     )
     address: Mapped["OrderAddress | None"] = relationship(
         "OrderAddress",
+        back_populates="order",
+        uselist=False,
+    )
+    payment: Mapped["Payment | None"] = relationship(
+        "Payment",
         back_populates="order",
         uselist=False,
     )
