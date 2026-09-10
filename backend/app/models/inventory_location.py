@@ -17,6 +17,7 @@ from app.db.base import Base
 
 if TYPE_CHECKING:
     from app.models.inventory_lot import InventoryLot
+    from app.models.packaging_operation import PackagingOperation
 
 
 class InventoryLocation(Base):
@@ -89,5 +90,9 @@ class InventoryLocation(Base):
     # Relationships
     lots: Mapped[list["InventoryLot"]] = relationship(
         "InventoryLot",
+        back_populates="location",
+    )
+    packaging_operations: Mapped[list["PackagingOperation"]] = relationship(
+        "PackagingOperation",
         back_populates="location",
     )
