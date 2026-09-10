@@ -18,6 +18,7 @@ from app.db.base import Base
 
 if TYPE_CHECKING:
     from app.models.cart_item import CartItem
+    from app.models.order import Order
     from app.models.user import User
 
 
@@ -75,4 +76,9 @@ class Cart(Base):
         "CartItem",
         back_populates="cart",
         cascade="all, delete-orphan",
+    )
+    orders: Mapped[list["Order"]] = relationship(
+        "Order",
+        back_populates="cart",
+        passive_deletes=True,
     )

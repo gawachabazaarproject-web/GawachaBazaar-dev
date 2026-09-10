@@ -7,7 +7,6 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Identity,
-    Index,
     Numeric,
     String,
     UniqueConstraint,
@@ -27,7 +26,6 @@ class OrderAddress(Base):
     __tablename__ = "order_addresses"
     __table_args__ = (
         UniqueConstraint("order_id", name="uq_order_addresses_order_id"),
-        Index("ix_order_addresses_order_id", "order_id"),
     )
 
     id: Mapped[int] = mapped_column(

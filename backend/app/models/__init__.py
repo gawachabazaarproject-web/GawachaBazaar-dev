@@ -2,8 +2,9 @@
 
 Exposes Phase 1 (Identity & Access), Phase 2 (Farm & Traceability),
 Phase 3 (Catalog & Products), Phase 4 (Inventory & Stock),
-Phase 5 (Packaging & Labeling), and Phase 6 (Cart & Orders)
-SQLAlchemy models so that Base.metadata contains all table definitions.
+Phase 5 (Packaging & Labeling), Phase 6 (Cart & Orders), and
+Phase 7 (Payments) SQLAlchemy models so that Base.metadata contains
+all table definitions.
 """
 
 from app.models.address import Address
@@ -20,6 +21,8 @@ from app.models.order_item import OrderItem
 from app.models.packaging_input import PackagingInput
 from app.models.packaging_operation import PackagingOperation
 from app.models.packaging_output import PackagingOutput
+from app.models.payment import Payment
+from app.models.payment_transaction import PaymentTransaction
 from app.models.price import Price
 from app.models.product import Product
 from app.models.product_image import ProductImage
@@ -45,6 +48,8 @@ __all__ = [
     "PackagingInput",
     "PackagingOperation",
     "PackagingOutput",
+    "Payment",
+    "PaymentTransaction",
     "Price",
     "Product",
     "ProductImage",

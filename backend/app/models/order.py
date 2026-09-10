@@ -19,8 +19,10 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.base import Base
 
 if TYPE_CHECKING:
+    from app.models.cart import Cart
     from app.models.order_address import OrderAddress
     from app.models.order_item import OrderItem
+    from app.models.payment import Payment
     from app.models.user import User
 
 
@@ -30,6 +32,7 @@ class Order(Base):
     __tablename__ = "orders"
     __table_args__ = (
         UniqueConstraint("order_number", name="uq_orders_order_number"),
+        UniqueConstraint("cart_id", name="uq_orders_cart_id"),
         CheckConstraint(
             "status IN ('PENDING', 'CONFIRMED', 'CANCELLED', 'COMPLETED')",
             name="ck_orders_status",
@@ -49,6 +52,11 @@ class Order(Base):
         BigInteger,
         ForeignKey("users.id", ondelete="RESTRICT"),
         nullable=False,
+    )
+    cart_id: Mapped[int | None] = mapped_column(
+        BigInteger,
+        ForeignKey("carts.id", ondelete="RESTRICT"),
+        nullable=True,
     )
     order_number: Mapped[str] = mapped_column(
         String(100),
@@ -87,12 +95,21 @@ class Order(Base):
         "User",
         back_populates="orders",
     )
+    cart: Mapped["Cart | None"] = relationship(
+        "Cart",
+        back_populates="orders",
+    )
     items: Mapped[list["OrderItem"]] = relationship(
         "OrderItem",
         back_populates="order",
     )
     address: Mapped["OrderAddress | None"] = relationship(
         "OrderAddress",
+        back_populates="order",
+        uselist=False,
+    )
+    payment: Mapped["Payment | None"] = relationship(
+        "Payment",
         back_populates="order",
         uselist=False,
     )
