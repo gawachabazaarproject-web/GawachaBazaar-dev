@@ -8,8 +8,10 @@ will be registered here as each phase is implemented.
 from fastapi import APIRouter
 
 from app.api.v1.auth import router as auth_router
+from app.api.v1.cart import router as cart_router
 from app.api.v1.catalog import router as catalog_router
 from app.api.v1.inventory import router as inventory_router
+from app.api.v1.orders import router as orders_router
 from app.api.v1.packaging import router as packaging_router
 from app.schemas.base import PingResponse
 
@@ -26,6 +28,12 @@ api_router.include_router(inventory_router, prefix="/inventory", tags=["inventor
 
 # Packaging domain routes (internal staff only: ADMIN, HUB_STAFF, OPERATIONS)
 api_router.include_router(packaging_router, prefix="/packaging", tags=["packaging"])
+
+# Cart domain routes (CUSTOMER-only; also hosts POST /cart/checkout)
+api_router.include_router(cart_router, prefix="/cart", tags=["cart"])
+
+# Order domain routes (CUSTOMER-only, user-scoped reads)
+api_router.include_router(orders_router, prefix="/orders", tags=["orders"])
 
 
 @api_router.get(

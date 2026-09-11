@@ -7,7 +7,6 @@ convention already established by AuthService), so routes stay one-liners.
 
 from datetime import UTC, datetime
 
-from sqlalchemy import or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload, selectinload
 
@@ -38,6 +37,7 @@ from app.schemas.catalog import (
     UpdateProductRequest,
     UpdateProductVariantRequest,
 )
+from app.services.pricing import get_current_prices_for_variants
 
 _ACTIVE = "ACTIVE"
 
@@ -455,31 +455,14 @@ class CatalogService:
     def _get_current_prices_for_variants(
         self, variant_ids: list[int]
     ) -> dict[int, Price]:
-        """Resolve the single current price per variant in one query (no N+1).
+        """Resolve the single current price per variant.
 
-        Eligible: is_active AND valid_from <= now AND (valid_to IS NULL OR valid_to >= now).
-        Tie-break: most recent valid_from wins.
+        Extracted to app.services.pricing in Phase 13 so Cart/Order services
+        can reuse the exact same rule instead of duplicating it. This method
+        stays as a thin wrapper so existing call sites within this file are
+        unaffected.
         """
-        if not variant_ids:
-            return {}
-
-        now = datetime.now(UTC)
-        rows = (
-            self.db.query(Price)
-            .filter(
-                Price.variant_id.in_(variant_ids),
-                Price.is_active.is_(True),
-                Price.valid_from <= now,
-                or_(Price.valid_to.is_(None), Price.valid_to >= now),
-            )
-            .order_by(Price.variant_id, Price.valid_from.desc())
-            .all()
-        )
-        current: dict[int, Price] = {}
-        for row in rows:
-            if row.variant_id not in current:
-                current[row.variant_id] = row
-        return current
+        return get_current_prices_for_variants(self.db, variant_ids)
 
     def _to_variant_response(
         self, variant: ProductVariant, current_price: Price | None = None

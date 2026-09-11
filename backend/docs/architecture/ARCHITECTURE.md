@@ -365,8 +365,17 @@ detail: [PHASE_9_RBAC.md](PHASE_9_RBAC.md).
 - Order address is snapshotted into `order_addresses` (1:1, unique `order_id`).
 - `orders.cart_id` is unique and `ON DELETE RESTRICT` — exact checkout lineage, one order per cart
   maximum, cart is never hard-deleted out from under a placed order.
-- Order creation does **not** itself mutate inventory (that's an inventory-service concern, not yet
-  built).
+- Order creation does **not** itself mutate inventory — confirmed by test in Phase 13, and remains
+  true even though `InventoryService` now exists (Phase 11): checkout deliberately never imports it.
+- **Implemented in Phase 13**: `OrderService.checkout` (`app/services/order.py`) is the one atomic
+  checkout transaction — locks the cart row (found by `user_id ORDER BY id DESC`, deliberately
+  unfiltered by status — see the Phase 13 doc for why a status filter would break retry safety under
+  PostgreSQL's `FOR UPDATE` row-exclusion behavior), then purchased variant rows in ascending id
+  order, revalidates catalog state, resolves current prices via the shared
+  `app/services/pricing.py` rule, snapshots into `order_items`/`order_addresses`, and commits once.
+  `orders.cart_id UNIQUE` + the cart-row lock give checkout domain-level retry safety (duplicate/
+  concurrent checkout resolves to the same order) with no idempotency-key table. Full detail:
+  [PHASE_13_CART_ORDERS_API.md](../api/PHASE_13_CART_ORDERS_API.md).
 
 ## 16. Payment Principles
 
@@ -422,26 +431,26 @@ always add a new one (Phase 8.1 and Phase 9 both followed this).
 
 ## 21. Current Active Development Phase
 
-**Phase 12 — Packaging & Labeling API — implemented.** The Phase 5 packaging schema
-(`packaging_operations`/`packaging_inputs`/`packaging_outputs`) now has a real, internal-staff-only
-API under `/api/v1/packaging` (`ADMIN`/`HUB_STAFF`/`OPERATIONS` only). No schema migration was
-needed. `PackagingService.complete_operation` (`app/services/packaging.py`) is the one atomic
-business transaction in this domain — see §14 and
-[PHASE_12_PACKAGING_API.md](../api/PHASE_12_PACKAGING_API.md) for the full algorithm, locking order,
-and traceability re-validation. It reuses `InventoryService` rather than duplicating movement logic:
-two new non-committing methods were added there — `apply_movement` (the validated core factored out
-of `create_movement`, confirmed behavior-preserving by a full Phase 11 regression run afterward) and
-`get_or_create_lot_no_commit` (output lot resolution, reusing Phase 11's batch/variant product-match
-invariant). No label functionality was built — labels are not finalized and explicitly out of scope.
+**Phase 13 — Cart, Checkout & Orders API — implemented.** The Phase 6 commerce schema
+(`carts`/`cart_items`/`orders`/`order_items`/`order_addresses`) now has a real, `CUSTOMER`-only API
+under `/api/v1/cart` and `/api/v1/orders`. No schema migration was needed.
+`OrderService.checkout` (`app/services/order.py`) is the one atomic checkout transaction — see §15
+and [PHASE_13_CART_ORDERS_API.md](../api/PHASE_13_CART_ORDERS_API.md) for the full algorithm and,
+critically, why its cart-locating lock query must NOT filter by `status = 'ACTIVE'` (a subtlety in
+how PostgreSQL's `FOR UPDATE` re-evaluates a WHERE clause after unblocking, which would otherwise
+silently break retry safety). Pricing logic was extracted from `CatalogService` into
+`app/services/pricing.py` this phase so Catalog/Cart/Order all share one rule instead of three —
+extracting it also fixed a determinism gap (missing `id DESC` tie-break) present since Phase 10,
+verified not to have changed catalog's behavior via full regression. Checkout deliberately never
+imports `InventoryService` or touches payments — both remain untouched, confirmed by test.
 
-Phase 11's inventory API and its documented `db.begin()`-under-authenticated-routes gotcha (§13)
-remain as previously recorded — Phase 12 is a second confirmation of that same pattern, not a new
+Phase 11/12's `db.begin()`-under-authenticated-routes gotcha (§13/§14) applies here too and was
+followed correctly — `checkout` never calls it.
+
+Still not built: farm, payment, delivery APIs — each should follow the established pattern (thin
+router → service returning schema instances directly → `require_roles` for any protected endpoint,
+reuse rather than duplicate sibling-domain business logic where safe) rather than introducing a new
 one.
-
-Still not built: farm, cart, order, payment, delivery APIs — each should follow the established
-pattern (thin router → service returning schema instances directly → `require_roles` for any
-protected endpoint, reuse rather than duplicate sibling-domain business logic where safe) rather than
-introducing a new one.
 
 ## 22. Explicitly Rejected / Out-of-Scope Architectural Ideas
 
