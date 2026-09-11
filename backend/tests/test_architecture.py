@@ -37,7 +37,9 @@ def test_health_endpoint(client: TestClient) -> None:
     assert validated.environment in ["development", "testing", "staging", "production"]
 
 
-def test_database_health_endpoint_with_live_db(client: TestClient, db_session: Session) -> None:
+def test_database_health_endpoint_with_live_db(
+    client: TestClient, db_session: Session
+) -> None:
     """Verify /health/db returns HTTP 200 with test DB."""
     response = client.get("/health/db")
     assert response.status_code == 200
@@ -117,13 +119,13 @@ def test_database_dependency_lifecycle() -> None:
 
 
 def test_auth_dependency_boundaries_not_wired_to_active_routes() -> None:
-    """Verify get_current_user and require_roles exist as architectural boundaries."""
+    """Verify get_current_user enforces authentication and require_roles exists as Phase 9 boundary."""
     mock_db = MagicMock(spec=Session)
 
-    # Calling get_current_user raises explicit AuthenticationError
+    # Calling get_current_user without credentials raises AuthenticationError
     with pytest.raises(AuthenticationError) as exc_info:
-        get_current_user(db=mock_db)
-    assert "Phase 8" in exc_info.value.message
+        get_current_user(credentials=None, db=mock_db)
+    assert "Not authenticated" in exc_info.value.message
 
     # Role checker factory raises explicit AuthorizationError
     role_checker = require_roles("admin")
