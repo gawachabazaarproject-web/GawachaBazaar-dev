@@ -11,6 +11,7 @@ for clients to prevent leakage of internal architecture, queries, or secrets.
 """
 
 from fastapi import FastAPI, Request, status
+from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
@@ -56,7 +57,9 @@ def register_exception_handlers(app: FastAPI) -> None:
             content={
                 "code": "REQUEST_VALIDATION_ERROR",
                 "message": "Validation error in request parameters or body",
-                "details": exc.errors(),
+                # Pydantic v2 error `ctx` can carry raw Python values (e.g. Decimal
+                # from a `gt=0` constraint) that json.dumps cannot serialize directly.
+                "details": jsonable_encoder(exc.errors()),
             },
         )
 
