@@ -344,9 +344,17 @@ detail: [PHASE_9_RBAC.md](PHASE_9_RBAC.md).
   `packaging_outputs` (new/updated packaged lots using existing `ProductVariant`s).
 - Strictly packaging/labeling — not manufacturing, recipes, or BOM.
 - **Single-batch traceability invariant**: an output inventory lot must trace to exactly one source
-  batch — mixing multiple source batches into one output lot is forbidden (enforced at the service
-  layer once implemented; not yet built).
+  batch — mixing multiple source batches into one output lot is forbidden. **Implemented in Phase 12**:
+  `PackagingService.add_output` requires the declared `batch_id` to match a batch actually present
+  among the operation's current inputs, and `complete_operation` re-validates this at completion
+  time (an input can be removed after an output references its batch). Full detail:
+  [PHASE_12_PACKAGING_API.md](../api/PHASE_12_PACKAGING_API.md).
 - Individual physical package IDs are not tracked at this granularity.
+- **Completion is one atomic transaction** (`PackagingService.complete_operation`): locks the
+  operation row (serializes concurrent completion of the same operation), locks every input/output
+  lot in one consistently-ordered query, applies `ADJUSTMENT_OUT` to inputs and `RECEIPT` to outputs
+  via `InventoryService.apply_movement` (reused, not duplicated), then a single commit. No inventory
+  change happens when inputs/outputs are merely added — only at `/complete`.
 
 ## 15. Cart / Order Principles
 
@@ -414,26 +422,26 @@ always add a new one (Phase 8.1 and Phase 9 both followed this).
 
 ## 21. Current Active Development Phase
 
-**Phase 11 — Inventory & Stock API — implemented.** The Phase 4 inventory schema
-(`inventory_locations`/`inventory_lots`/`stock_movements`) now has a real, internal-staff-only API
-under `/api/v1/inventory` (`ADMIN`/`HUB_STAFF`/`OPERATIONS` only — no public access), via
-`InventoryService` (`app/services/inventory.py`). No schema migration was needed. Stock quantity
-changes exclusively through row-locked, atomic movement recording — see §13 and
-[PHASE_11_INVENTORY_API.md](../api/PHASE_11_INVENTORY_API.md) for the full transaction-design
-explanation, including a documented gotcha about `db.begin()` under authenticated routes that any
-future service in this codebase should be aware of. One unresolved business decision is recorded
-there: whether `batches.status` should gate inventory-lot eligibility (currently unrestricted, since
-no prior phase established such a rule).
+**Phase 12 — Packaging & Labeling API — implemented.** The Phase 5 packaging schema
+(`packaging_operations`/`packaging_inputs`/`packaging_outputs`) now has a real, internal-staff-only
+API under `/api/v1/packaging` (`ADMIN`/`HUB_STAFF`/`OPERATIONS` only). No schema migration was
+needed. `PackagingService.complete_operation` (`app/services/packaging.py`) is the one atomic
+business transaction in this domain — see §14 and
+[PHASE_12_PACKAGING_API.md](../api/PHASE_12_PACKAGING_API.md) for the full algorithm, locking order,
+and traceability re-validation. It reuses `InventoryService` rather than duplicating movement logic:
+two new non-committing methods were added there — `apply_movement` (the validated core factored out
+of `create_movement`, confirmed behavior-preserving by a full Phase 11 regression run afterward) and
+`get_or_create_lot_no_commit` (output lot resolution, reusing Phase 11's batch/variant product-match
+invariant). No label functionality was built — labels are not finalized and explicitly out of scope.
 
-A pre-existing bug in the shared `app/exceptions/handlers.py` validation handler (raw `Decimal`
-values in Pydantic error `ctx` crashing JSON serialization, turning an expected 422 into a 500) was
-found and fixed during Phase 11 — it affects any domain with a `Decimal` `gt=0`/`ge=0` field
-(Phase 10's catalog schemas included), not just inventory.
+Phase 11's inventory API and its documented `db.begin()`-under-authenticated-routes gotcha (§13)
+remain as previously recorded — Phase 12 is a second confirmation of that same pattern, not a new
+one.
 
-Still not built: farm, packaging, cart, order, payment, delivery APIs — each should follow the
-established pattern (thin router → service returning schema instances directly → `require_roles`
-for any protected endpoint) rather than introducing a new one. Packaging in particular will
-eventually call `InventoryService`'s movement logic transactionally, but does not yet.
+Still not built: farm, cart, order, payment, delivery APIs — each should follow the established
+pattern (thin router → service returning schema instances directly → `require_roles` for any
+protected endpoint, reuse rather than duplicate sibling-domain business logic where safe) rather than
+introducing a new one.
 
 ## 22. Explicitly Rejected / Out-of-Scope Architectural Ideas
 

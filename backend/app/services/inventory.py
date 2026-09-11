@@ -232,6 +232,108 @@ class InventoryService:
     # Stock Movements
     # ------------------------------------------------------------------
 
+    def apply_movement(
+        self,
+        lot: InventoryLot,
+        movement_type: str,
+        quantity: Decimal,
+        performed_by_user_id: int,
+        *,
+        reference_type: str | None = None,
+        reference_id: int | None = None,
+        occurred_at: datetime | None = None,
+        remarks: str | None = None,
+    ) -> StockMovement:
+        """Validate and apply one movement against an already row-locked lot.
+
+        Does NOT commit - the caller owns the transaction boundary and must
+        have already locked `lot` via `.with_for_update()` in the same
+        transaction. This is the shared core other services (e.g. Packaging
+        completion) reuse to participate in a larger atomic transaction
+        instead of each movement committing independently.
+        """
+        if lot.status == _INACTIVE:
+            raise BusinessValidationError(
+                "Cannot record a movement against an INACTIVE inventory lot."
+            )
+
+        direction = _MOVEMENT_DIRECTION[movement_type]
+        new_quantity = lot.quantity + (direction * quantity)
+
+        if new_quantity < 0:
+            raise ConflictError(
+                "Insufficient stock: this movement would result in negative quantity."
+            )
+
+        lot.quantity = new_quantity
+        if new_quantity == 0:
+            lot.status = _DEPLETED
+        elif direction > 0 and lot.status == _DEPLETED:
+            # A positive movement reactivates a DEPLETED lot. INACTIVE lots
+            # are rejected above and never auto-activate.
+            lot.status = _ACTIVE
+
+        movement = StockMovement(
+            inventory_lot_id=lot.id,
+            movement_type=movement_type,
+            quantity=quantity,
+            reference_type=reference_type,
+            reference_id=reference_id,
+            performed_by_user_id=performed_by_user_id,
+            occurred_at=occurred_at or datetime.now(UTC),
+            remarks=remarks,
+        )
+        self.db.add(movement)
+        return movement
+
+    def get_or_create_lot_no_commit(
+        self, batch_id: int, variant_id: int, location_id: int
+    ) -> InventoryLot:
+        """Get-or-create the lot for (batch, variant, location) without committing.
+
+        Caller owns the transaction boundary (used by Packaging output
+        resolution, which must not commit until the whole completion
+        transaction succeeds). Applies the same batch/variant product-match
+        validation as create_lot() (INVARIANT 9).
+        """
+        existing = (
+            self.db.query(InventoryLot)
+            .filter(
+                InventoryLot.batch_id == batch_id,
+                InventoryLot.variant_id == variant_id,
+                InventoryLot.location_id == location_id,
+            )
+            .first()
+        )
+        if existing:
+            return existing
+
+        batch = self.db.query(Batch).filter(Batch.id == batch_id).first()
+        if not batch:
+            raise NotFoundError("Batch not found.")
+        variant = (
+            self.db.query(ProductVariant)
+            .filter(ProductVariant.id == variant_id)
+            .first()
+        )
+        if not variant:
+            raise NotFoundError("Product variant not found.")
+        if batch.product_id != variant.product_id:
+            raise BusinessValidationError(
+                "Batch and variant belong to different products."
+            )
+
+        lot = InventoryLot(
+            batch_id=batch_id,
+            variant_id=variant_id,
+            location_id=location_id,
+            quantity=Decimal("0"),
+            status=_DEPLETED,
+        )
+        self.db.add(lot)
+        self.db.flush()
+        return lot
+
     def create_movement(
         self,
         lot_id: int,
@@ -251,39 +353,16 @@ class InventoryService:
         if not lot:
             raise NotFoundError("Inventory lot not found.")
 
-        if lot.status == _INACTIVE:
-            raise BusinessValidationError(
-                "Cannot record a movement against an INACTIVE inventory lot."
-            )
-
-        direction = _MOVEMENT_DIRECTION[data.movement_type]
-        delta: Decimal = direction * data.quantity
-        new_quantity = lot.quantity + delta
-
-        if new_quantity < 0:
-            raise ConflictError(
-                "Insufficient stock: this movement would result in negative quantity."
-            )
-
-        lot.quantity = new_quantity
-        if new_quantity == 0:
-            lot.status = _DEPLETED
-        elif direction > 0 and lot.status == _DEPLETED:
-            # A positive movement reactivates a DEPLETED lot. INACTIVE lots
-            # are rejected above and never auto-activate.
-            lot.status = _ACTIVE
-
-        movement = StockMovement(
-            inventory_lot_id=lot.id,
-            movement_type=data.movement_type,
-            quantity=data.quantity,
+        movement = self.apply_movement(
+            lot,
+            data.movement_type,
+            data.quantity,
+            performed_by_user_id,
             reference_type=data.reference_type,
             reference_id=data.reference_id,
-            performed_by_user_id=performed_by_user_id,
-            occurred_at=data.occurred_at or datetime.now(UTC),
+            occurred_at=data.occurred_at,
             remarks=data.remarks,
         )
-        self.db.add(movement)
 
         try:
             self.db.commit()
