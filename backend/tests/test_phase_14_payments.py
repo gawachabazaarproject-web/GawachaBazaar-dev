@@ -31,6 +31,7 @@ from app.core.security import create_access_token, hash_password
 from app.dependencies.payments import get_payment_gateway
 from app.main import app
 from app.models.auth_session import AuthSession
+from app.models.inventory_reservation import InventoryReservation
 from app.models.order import Order
 from app.models.payment import Payment
 from app.models.payment_transaction import PaymentTransaction
@@ -189,6 +190,16 @@ def _create_order(
     db_session: Session, user: User, *, total_amount: Decimal = Decimal("100.00"),
     currency: str = "INR", status: str = "PENDING",
 ) -> Order:
+    """Bypasses checkout (this file tests Payment behavior, not checkout),
+    but Phase 15 made "every order has a reservation" a structural
+    invariant that PaymentService now depends on
+    (commit_reservation_for_order gates order confirmation) - so this
+    helper creates a matching ACTIVE reservation (with no allocated
+    items, since there is no real inventory behind these bare test
+    orders) to keep it valid under that invariant. Without this, every
+    COD/UPI-success test in this file would incorrectly get a 409/skip
+    for "reservation not found".
+    """
     order = Order(
         user_id=user.id, cart_id=None,
         order_number=f"ORD-{secrets.token_hex(6).upper()}",
@@ -196,6 +207,14 @@ def _create_order(
         placed_at=datetime.now(UTC),
     )
     db_session.add(order)
+    db_session.flush()
+    db_session.add(
+        InventoryReservation(
+            order_id=order.id,
+            status="ACTIVE",
+            expires_at=datetime.now(UTC) + timedelta(minutes=30),
+        )
+    )
     db_session.commit()
     db_session.refresh(order)
     return order

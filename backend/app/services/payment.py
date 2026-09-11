@@ -22,6 +22,17 @@ a client-supplied value. Status only ever moves through
 `transition_payment_status` (app/services/payment_state.py), driven by
 either our own gateway call's synchronous result or an authenticated
 webhook/verify gateway response.
+
+PHASE 15 INTEGRATION: order confirmation is now gated by successfully
+committing the order's inventory reservation
+(InventoryReservationService.commit_reservation_for_order), not just by
+payment status. This is invoked from the two places order confirmation
+already happened - `_confirm_cod` and `_confirm_order_if_paid` - and
+nowhere else. It is what implements "a payment success arriving after the
+reservation already expired must not resurrect it": if the commit call
+returns False, the order is left exactly as it was and a
+PAYMENT_RESERVATION_MISMATCH reconciliation event is logged, never a
+silent auto-confirm.
 """
 
 import hashlib
@@ -49,6 +60,7 @@ from app.schemas.payment import (
     PaymentInitiationResponse,
     PaymentResponse,
 )
+from app.services.inventory_reservation import InventoryReservationService
 from app.services.payment_gateway import (
     GatewayConnectionError,
     GatewayError,
@@ -396,7 +408,25 @@ class PaymentService:
         """COD: payment stays PENDING (cash collected later, future
         Delivery phase); order confirms immediately. No gateway call, no
         transaction row - per Phase 7's documented COD lifecycle.
+
+        Phase 15: confirmation is gated by committing the order's
+        inventory reservation. COD is not exempt from the 30-minute
+        reservation window (it is fixed at checkout time, before any
+        payment method is known) - if the customer waits past it before
+        ever choosing COD, this rolls back (discarding the just-created
+        PENDING payment row too) rather than confirming an order with no
+        held inventory behind it.
         """
+        committed = InventoryReservationService(self.db).commit_reservation_for_order(
+            order, now=datetime.now(UTC)
+        )
+        if not committed:
+            self.db.rollback()
+            raise ConflictError(
+                "This order's inventory reservation has expired and can no "
+                "longer be confirmed via Cash on Delivery."
+            )
+
         order.status = "CONFIRMED"
         try:
             self.db.commit()
@@ -615,10 +645,30 @@ class PaymentService:
         return True
 
     def _confirm_order_if_paid(self, order: Order, payment: Payment) -> None:
-        """Caller must already hold the order row lock."""
+        """Caller must already hold the order row lock.
+
+        Phase 15: order confirmation additionally requires committing the
+        order's inventory reservation. If the reservation already expired
+        (or was otherwise released) before this payment resolved, the
+        reservation is NOT resurrected and the order is NOT confirmed -
+        this is the late-payment-after-expiry case, logged as a
+        reconciliation event rather than silently applied. The payment
+        itself still stays PAID; only order confirmation is withheld.
+        """
         if payment.status != PaymentStatus.PAID:
             return
         if order.status == "PENDING":
+            committed = InventoryReservationService(
+                self.db
+            ).commit_reservation_for_order(order, now=datetime.now(UTC))
+            if not committed:
+                logger.error(
+                    "PAYMENT_RESERVATION_MISMATCH: order_id=%s payment_id=%s payment "
+                    "PAID but reservation could not be committed (expired/released) "
+                    "- order left PENDING, not auto-confirmed",
+                    order.id, payment.id,
+                )
+                return
             order.status = "CONFIRMED"
             logger.info(
                 "PAYMENT_ORDER_CONFIRMED: order_id=%s payment_id=%s", order.id, payment.id

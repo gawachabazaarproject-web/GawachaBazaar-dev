@@ -26,7 +26,13 @@ from app.schemas.inventory import (
     StockMovementResponse,
     UpdateInventoryLocationRequest,
 )
+from app.schemas.inventory_reservation import (
+    InventoryReservationDetailResponse,
+    InventoryReservationListResponse,
+    InventoryReservationResponse,
+)
 from app.services.inventory import InventoryService
+from app.services.inventory_reservation import InventoryReservationService
 
 router = APIRouter(dependencies=[Depends(require_roles(ADMIN, HUB_STAFF, OPERATIONS))])
 
@@ -175,3 +181,48 @@ def list_movements(
         page,
         page_size,
     )
+
+
+# ---------------------------------------------------------------------------
+# Reservations (ops/admin read + explicit expiry - Phase 15)
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    "/reservations",
+    response_model=InventoryReservationListResponse,
+    summary="List inventory reservations",
+)
+def list_reservations(
+    status_: str | None = Query(default=None, alias="status"),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=MAX_PAGE_SIZE),
+    db: Session = Depends(get_db),
+) -> InventoryReservationListResponse:
+    return InventoryReservationService(db).list_reservations_response(
+        status_, page, page_size
+    )
+
+
+@router.get(
+    "/reservations/{reservation_id}",
+    response_model=InventoryReservationDetailResponse,
+    summary="Get an inventory reservation, including its FIFO lot allocation",
+)
+def get_reservation(
+    reservation_id: int, db: Session = Depends(get_db)
+) -> InventoryReservationDetailResponse:
+    return InventoryReservationService(db).get_reservation_detail_response(
+        reservation_id
+    )
+
+
+@router.post(
+    "/reservations/{reservation_id}/expire",
+    response_model=InventoryReservationResponse,
+    summary="Manually expire an ACTIVE reservation (idempotent no-op if already terminal)",
+)
+def expire_reservation(
+    reservation_id: int, db: Session = Depends(get_db)
+) -> InventoryReservationResponse:
+    return InventoryReservationService(db).expire_reservation_response(reservation_id)

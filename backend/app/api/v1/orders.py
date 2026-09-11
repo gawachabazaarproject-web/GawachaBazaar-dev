@@ -10,9 +10,13 @@ from app.core.roles import CUSTOMER
 from app.dependencies.auth import get_current_user, require_roles
 from app.dependencies.database import get_db
 from app.dependencies.payments import get_payment_gateway
+from app.exceptions.base import NotFoundError
+from app.models.order import Order
 from app.models.user import User
+from app.schemas.inventory_reservation import InventoryReservationResponse
 from app.schemas.order import MAX_PAGE_SIZE, OrderDetailResponse, OrderListResponse
 from app.schemas.payment import PaymentResponse
+from app.services.inventory_reservation import InventoryReservationService
 from app.services.order import OrderService
 from app.services.payment import PaymentService
 from app.services.payment_gateway import PaymentGateway
@@ -55,3 +59,23 @@ def get_order_payment(
     gateway: PaymentGateway = Depends(get_payment_gateway),
 ) -> PaymentResponse:
     return PaymentService(db, gateway).get_payment_for_order(current_user.id, order_id)
+
+
+@router.get(
+    "/{order_id}/reservation",
+    response_model=InventoryReservationResponse,
+    summary="Get the inventory reservation for one of the current user's orders",
+)
+def get_order_reservation(
+    order_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> InventoryReservationResponse:
+    order = (
+        db.query(Order)
+        .filter(Order.id == order_id, Order.user_id == current_user.id)
+        .first()
+    )
+    if not order:
+        raise NotFoundError("Order not found.")
+    return InventoryReservationService(db).get_reservation_response_for_order(order.id)

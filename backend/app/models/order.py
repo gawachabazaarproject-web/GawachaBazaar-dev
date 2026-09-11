@@ -20,6 +20,8 @@ from app.db.base import Base
 
 if TYPE_CHECKING:
     from app.models.cart import Cart
+    from app.models.fulfillment import Fulfillment
+    from app.models.inventory_reservation import InventoryReservation
     from app.models.order_address import OrderAddress
     from app.models.order_item import OrderItem
     from app.models.payment import Payment
@@ -34,7 +36,7 @@ class Order(Base):
         UniqueConstraint("order_number", name="uq_orders_order_number"),
         UniqueConstraint("cart_id", name="uq_orders_cart_id"),
         CheckConstraint(
-            "status IN ('PENDING', 'CONFIRMED', 'CANCELLED', 'COMPLETED')",
+            "status IN ('PENDING', 'CONFIRMED', 'CANCELLED', 'COMPLETED', 'EXPIRED')",
             name="ck_orders_status",
         ),
         CheckConstraint("total_amount >= 0", name="ck_orders_total_amount"),
@@ -110,6 +112,16 @@ class Order(Base):
     )
     payment: Mapped["Payment | None"] = relationship(
         "Payment",
+        back_populates="order",
+        uselist=False,
+    )
+    reservation: Mapped["InventoryReservation | None"] = relationship(
+        "InventoryReservation",
+        back_populates="order",
+        uselist=False,
+    )
+    fulfillment: Mapped["Fulfillment | None"] = relationship(
+        "Fulfillment",
         back_populates="order",
         uselist=False,
     )
