@@ -24,6 +24,7 @@ from app.models.packaging_operation import PackagingOperation
 from app.models.packaging_output import PackagingOutput
 from app.models.payment import Payment
 from app.models.payment_transaction import PaymentTransaction
+from app.models.payment_webhook_event import PaymentWebhookEvent
 from app.models.price import Price
 from app.models.product import Product
 from app.models.product_image import ProductImage
@@ -52,6 +53,7 @@ __all__ = [
     "PackagingOutput",
     "Payment",
     "PaymentTransaction",
+    "PaymentWebhookEvent",
     "Price",
     "Product",
     "ProductImage",

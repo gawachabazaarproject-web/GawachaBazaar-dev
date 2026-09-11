@@ -33,6 +33,16 @@ class Settings(BaseSettings):
         "postgresql+psycopg://postgres:postgres@localhost:5432/gawachabazaar"
     )
 
+    # PNB payment gateway (Phase 14) - placeholder values only. No real PNB
+    # merchant integration specification exists yet; see
+    # docs/architecture/PHASE_14_PAYMENTS.md - PNB Integration Boundary.
+    # PNBGateway.initiate_payment/query_status raise NotImplementedError
+    # regardless of these values until rewritten against the real contract.
+    PNB_MERCHANT_ID: str = "dev-pnb-merchant-id-placeholder"
+    PNB_WEBHOOK_SECRET: str = "dev-pnb-webhook-secret-placeholder-min-32-chars"
+    PNB_BASE_URL: str = "https://pnb-uat.example.invalid"
+    PNB_TIMEOUT_SECONDS: float = 10.0
+
     # CORS
     ALLOWED_ORIGINS: list[str] = ["http://localhost:3000", "http://localhost:5173"]
 

@@ -383,8 +383,23 @@ detail: [PHASE_9_RBAC.md](PHASE_9_RBAC.md).
 - One payment can have many `payment_transactions` (gateway attempts/retries), each with a unique
   `idempotency_key`.
 - Supported methods today: `UPI`, `COD` only.
-- No payment gateway is integrated yet — no webhook handling, no signature verification.
 - Never store: card numbers, CVV, UPI PIN, OTPs, gateway secrets.
+- **Implemented in Phase 14**: `PaymentService` (`app/services/payment.py`) owns initiation, retry,
+  client-triggered reconciliation (`/verify`), and webhook processing. An explicit state machine
+  (`app/services/payment_state.py`) is the only path `payments.status`/`payment_transactions.status`
+  can change through — `PAID` and `CANCELLED` are hard terminal states, a late/duplicate event can
+  never downgrade `PAID`. Webhook authenticity (placeholder HMAC-SHA256 — see below) is verified
+  before any DB mutation; `UNIQUE(gateway_name, event_id)` on the new `payment_webhook_events` table
+  (plus `payments.gateway_name`/`gateway_order_id`, jointly unique) makes duplicate/concurrent webhook
+  delivery safe without an in-memory dedup cache. Full detail, including a real concurrency bug found
+  and fixed via SQLAlchemy's identity-map/`with_for_update()` interaction:
+  [PHASE_14_PAYMENTS_API.md](../api/PHASE_14_PAYMENTS_API.md).
+- **No real PNB gateway integration exists.** No PNB merchant specification was found anywhere in
+  this repository. `PNBGateway.initiate_payment`/`query_status` deliberately raise
+  `NotImplementedError` rather than inventing a contract; only the webhook signature
+  verification/parsing use a clearly-labeled placeholder scheme. `FakePNBGateway` (test-only) is
+  injected via a `get_payment_gateway` FastAPI dependency override, mirroring the existing `get_db`
+  override pattern, so the full domain is tested without real PNB connectivity.
 
 ## 17. Security Principles
 
@@ -431,26 +446,31 @@ always add a new one (Phase 8.1 and Phase 9 both followed this).
 
 ## 21. Current Active Development Phase
 
-**Phase 13 — Cart, Checkout & Orders API — implemented.** The Phase 6 commerce schema
-(`carts`/`cart_items`/`orders`/`order_items`/`order_addresses`) now has a real, `CUSTOMER`-only API
-under `/api/v1/cart` and `/api/v1/orders`. No schema migration was needed.
-`OrderService.checkout` (`app/services/order.py`) is the one atomic checkout transaction — see §15
-and [PHASE_13_CART_ORDERS_API.md](../api/PHASE_13_CART_ORDERS_API.md) for the full algorithm and,
-critically, why its cart-locating lock query must NOT filter by `status = 'ACTIVE'` (a subtlety in
-how PostgreSQL's `FOR UPDATE` re-evaluates a WHERE clause after unblocking, which would otherwise
-silently break retry safety). Pricing logic was extracted from `CatalogService` into
-`app/services/pricing.py` this phase so Catalog/Cart/Order all share one rule instead of three —
-extracting it also fixed a determinism gap (missing `id DESC` tie-break) present since Phase 10,
-verified not to have changed catalog's behavior via full regression. Checkout deliberately never
-imports `InventoryService` or touches payments — both remain untouched, confirmed by test.
+**Phase 14 — Payments (PNB UPI + COD) — domain implemented, PNB integration deliberately incomplete.**
+The Phase 7 payments schema now has a real, `CUSTOMER`-only API (`/api/v1/payments`,
+`/api/v1/orders/{id}/payment`) plus one additive migration (`payments.gateway_name`/`gateway_order_id`,
+and the new `payment_webhook_events` table for durable webhook deduplication). `PaymentService`
+(`app/services/payment.py`) owns initiation, retry, `/verify` reconciliation, and webhook processing,
+all driven through an explicit state machine (`app/services/payment_state.py`) — see §16 and
+[PHASE_14_PAYMENTS_API.md](../api/PHASE_14_PAYMENTS_API.md) for the full transaction/locking/webhook
+algorithm and a second real concurrency bug found and fixed this phase (SQLAlchemy's identity map
+silently serving a stale object from a `with_for_update()` re-query after an earlier unlocked read of
+the same row — fixed with `.populate_existing()`; this is a general SQLAlchemy gotcha any future
+"lock this row, but I need its FK first" pattern should watch for). **No PNB merchant integration
+specification exists in this repository** — `PNBGateway.initiate_payment`/`query_status` honestly
+raise `NotImplementedError` rather than inventing PNB's real contract; only the webhook signature
+scheme is implemented, as a clearly-labeled placeholder. UPI therefore cannot complete against a real
+gateway yet — this is a deliberate, documented gap, not an oversight.
 
-Phase 11/12's `db.begin()`-under-authenticated-routes gotcha (§13/§14) applies here too and was
-followed correctly — `checkout` never calls it.
+Phase 10-13's `db.begin()`-under-authenticated-routes gotcha (§13/§14/§15) applies here too and was
+followed correctly — `PaymentService` never calls it, including in its one `async def` route (the
+webhook endpoint, which needs the raw request body — the sync DB work is explicitly run via
+`starlette.concurrency.run_in_threadpool` so it doesn't block the event loop, a first in this
+codebase and the only async route so far).
 
-Still not built: farm, payment, delivery APIs — each should follow the established pattern (thin
-router → service returning schema instances directly → `require_roles` for any protected endpoint,
-reuse rather than duplicate sibling-domain business logic where safe) rather than introducing a new
-one.
+Still not built: farm, delivery APIs — each should follow the established pattern (thin router →
+service returning schema instances directly → `require_roles` for any protected endpoint, reuse
+rather than duplicate sibling-domain business logic where safe) rather than introducing a new one.
 
 ## 22. Explicitly Rejected / Out-of-Scope Architectural Ideas
 

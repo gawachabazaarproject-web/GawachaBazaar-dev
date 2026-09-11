@@ -29,6 +29,11 @@ class Payment(Base):
     __tablename__ = "payments"
     __table_args__ = (
         UniqueConstraint("order_id", name="uq_payments_order_id"),
+        UniqueConstraint(
+            "gateway_name",
+            "gateway_order_id",
+            name="uq_payments_gateway_name_order_id",
+        ),
         CheckConstraint(
             "payment_method IN ('UPI', 'COD')",
             name="ck_payments_payment_method",
@@ -67,6 +72,19 @@ class Payment(Base):
     currency: Mapped[str] = mapped_column(
         String(3),
         nullable=False,
+    )
+    # Gateway-level order/session reference, created once per payment
+    # obligation on first UPI initiation and reused across retry attempts
+    # within that same obligation (distinct from
+    # payment_transactions.gateway_transaction_id, which is per-attempt).
+    # Always NULL for COD. Added in Phase 14.
+    gateway_name: Mapped[str | None] = mapped_column(
+        String(50),
+        nullable=True,
+    )
+    gateway_order_id: Mapped[str | None] = mapped_column(
+        String(150),
+        nullable=True,
     )
     paid_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
