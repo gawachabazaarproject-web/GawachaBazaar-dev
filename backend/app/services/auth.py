@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.logging import logger
+from app.core.roles import CUSTOMER
 from app.core.security import (
     create_access_token,
     decode_access_token,
@@ -70,7 +71,7 @@ class AuthService:
         try:
             with _transaction(self.db):
                 # Verify baseline CUSTOMER role exists
-                customer_role = self.db.query(Role).filter_by(name="CUSTOMER").first()
+                customer_role = self.db.query(Role).filter_by(name=CUSTOMER).first()
                 if not customer_role:
                     logger.error(
                         "AUTH_ROLE_NOT_FOUND: Baseline CUSTOMER role is missing in database."
