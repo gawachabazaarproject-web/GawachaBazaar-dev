@@ -121,4 +121,5 @@ class Farm(Base):
     batches: Mapped[list["Batch"]] = relationship(
         "Batch",
         back_populates="farm",
+        passive_deletes=True,
     )

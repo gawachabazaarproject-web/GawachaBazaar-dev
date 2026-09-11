@@ -16,6 +16,7 @@ from app.db.base import Base
 
 if TYPE_CHECKING:
     from app.models.address import Address
+    from app.models.batch import Batch
     from app.models.cart import Cart
     from app.models.farm import Farm
     from app.models.order import Order
@@ -99,6 +100,13 @@ class User(Base):
     packaging_operations: Mapped[list["PackagingOperation"]] = relationship(
         "PackagingOperation",
         back_populates="performed_by",
+    )
+
+    # Phase 8.1: Wholesaler supplied batches (restricted deletion)
+    batches_supplied: Mapped[list["Batch"]] = relationship(
+        "Batch",
+        back_populates="wholesaler",
+        passive_deletes=True,
     )
 
     # Phase 6: Cart & Order relationships (restricted deletion)

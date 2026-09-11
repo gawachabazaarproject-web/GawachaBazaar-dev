@@ -23,6 +23,7 @@ if TYPE_CHECKING:
     from app.models.farm import Farm
     from app.models.product import Product
     from app.models.quality_check import QualityCheck
+    from app.models.user import User
 
 
 class Batch(Base):
@@ -44,6 +45,7 @@ class Batch(Base):
             "unit IN ('KG', 'G', 'L', 'ML', 'UNIT', 'DOZEN', 'BOX', 'CRATE')",
             name="ck_batches_unit",
         ),
+        Index("ix_batches_wholesaler_user_id", "wholesaler_user_id"),
         Index("ix_batches_farm_id", "farm_id"),
         Index("ix_batches_product_id", "product_id"),
         Index("ix_batches_harvest_date", "harvest_date"),
@@ -55,10 +57,15 @@ class Batch(Base):
         Identity(),
         primary_key=True,
     )
-    farm_id: Mapped[int] = mapped_column(
+    wholesaler_user_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    farm_id: Mapped[int | None] = mapped_column(
         BigInteger,
         ForeignKey("farms.id", ondelete="RESTRICT"),
-        nullable=False,
+        nullable=True,
     )
     product_id: Mapped[int] = mapped_column(
         BigInteger,
@@ -102,7 +109,11 @@ class Batch(Base):
     )
 
     # Authoritative ORM relationships
-    farm: Mapped["Farm"] = relationship(
+    wholesaler: Mapped["User"] = relationship(
+        "User",
+        back_populates="batches_supplied",
+    )
+    farm: Mapped["Farm | None"] = relationship(
         "Farm",
         back_populates="batches",
     )
