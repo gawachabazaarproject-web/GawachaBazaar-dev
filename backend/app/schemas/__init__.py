@@ -15,6 +15,15 @@ Architecture Conventions:
    - <Resource>ListResponse: collection/paginated output contract
 """
 
+from app.schemas.auth import (
+    LoginRequest,
+    LogoutResponse,
+    RefreshTokenRequest,
+    RefreshTokenResponse,
+    RegisterRequest,
+    TokenResponse,
+    UserResponse,
+)
 from app.schemas.base import (
     BaseSchema,
     DatabaseHealthResponse,
@@ -28,5 +37,12 @@ __all__ = [
     "DatabaseHealthResponse",
     "ErrorResponse",
     "HealthResponse",
+    "LoginRequest",
+    "LogoutResponse",
     "PingResponse",
+    "RefreshTokenRequest",
+    "RefreshTokenResponse",
+    "RegisterRequest",
+    "TokenResponse",
+    "UserResponse",
 ]
