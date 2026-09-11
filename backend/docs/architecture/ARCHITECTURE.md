@@ -328,9 +328,15 @@ detail: [PHASE_9_RBAC.md](PHASE_9_RBAC.md).
 - `stock_movements` = **append-only audit ledger**; `quantity` always strictly positive; direction
   is implied by `movement_type`.
 - `InventoryLot` is uniquely keyed on `(batch_id, variant_id, location_id)`.
-- Row-level locking (`SELECT ... FOR UPDATE`) for concurrent stock mutation is a **future**
-  requirement (not yet implemented — no inventory service exists yet). Python-only locks must never
-  substitute for DB-level concurrency control when it is eventually built.
+- **Implemented in Phase 11**: `InventoryService.create_movement` uses `SELECT ... FOR UPDATE`
+  (`app/services/inventory.py`) to lock the lot row for the duration of validate→update→insert→commit.
+  Quantity can change **only** through `POST /inventory/lots/{id}/movements` — there is no direct
+  quantity-mutation endpoint. `batch.product_id == variant.product_id` is enforced in service code
+  (the database does not enforce it). Full detail: [PHASE_11_INVENTORY_API.md](../api/PHASE_11_INVENTORY_API.md).
+- **Transaction-design gotcha** (see Phase 11 doc for full explanation): any service method reached
+  through an authenticated route must **not** call `db.begin()` — `get_current_user` already
+  autobegins the session's transaction via its own reads before the route handler runs. Perform
+  writes against the already-open transaction and call `db.commit()` once at the end instead.
 
 ## 14. Packaging Principles
 
@@ -408,17 +414,26 @@ always add a new one (Phase 8.1 and Phase 9 both followed this).
 
 ## 21. Current Active Development Phase
 
-**Phase 10 — Catalog & Product API — implemented.** The Phase 3 catalog schema
-(`categories`/`products`/`product_variants`/`product_images`/`prices`) now has a real API under
-`/api/v1/catalog`: public active-only browsing (no auth) plus `ADMIN`-only management, via
-`CatalogService` (`app/services/catalog.py`). No schema migration was needed. Full detail:
-[PHASE_10_CATALOG_API.md](../api/PHASE_10_CATALOG_API.md). Still not built: farm, inventory,
-packaging, cart, order, payment, delivery APIs — each should follow this phase's pattern (thin
-router → service returning schema instances directly → `require_roles` for any write endpoint)
-rather than introducing a new one.
+**Phase 11 — Inventory & Stock API — implemented.** The Phase 4 inventory schema
+(`inventory_locations`/`inventory_lots`/`stock_movements`) now has a real, internal-staff-only API
+under `/api/v1/inventory` (`ADMIN`/`HUB_STAFF`/`OPERATIONS` only — no public access), via
+`InventoryService` (`app/services/inventory.py`). No schema migration was needed. Stock quantity
+changes exclusively through row-locked, atomic movement recording — see §13 and
+[PHASE_11_INVENTORY_API.md](../api/PHASE_11_INVENTORY_API.md) for the full transaction-design
+explanation, including a documented gotcha about `db.begin()` under authenticated routes that any
+future service in this codebase should be aware of. One unresolved business decision is recorded
+there: whether `batches.status` should gate inventory-lot eligibility (currently unrestricted, since
+no prior phase established such a rule).
 
-Phase 9 (Role Initialization & RBAC) foundation remains as previously documented in §12/§12a — now
-proven end-to-end by Phase 10's catalog management routes.
+A pre-existing bug in the shared `app/exceptions/handlers.py` validation handler (raw `Decimal`
+values in Pydantic error `ctx` crashing JSON serialization, turning an expected 422 into a 500) was
+found and fixed during Phase 11 — it affects any domain with a `Decimal` `gt=0`/`ge=0` field
+(Phase 10's catalog schemas included), not just inventory.
+
+Still not built: farm, packaging, cart, order, payment, delivery APIs — each should follow the
+established pattern (thin router → service returning schema instances directly → `require_roles`
+for any protected endpoint) rather than introducing a new one. Packaging in particular will
+eventually call `InventoryService`'s movement logic transactionally, but does not yet.
 
 ## 22. Explicitly Rejected / Out-of-Scope Architectural Ideas
 
