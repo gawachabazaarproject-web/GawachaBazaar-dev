@@ -1,0 +1,114 @@
+"""Payment domain routes.
+
+Two separate routers in this one file:
+- `router`: customer-facing, CUSTOMER-only (create/get/retry/verify).
+- `webhook_router`: the PNB gateway callback. No JWT - webhook
+  authenticity is verified via the gateway's own signature scheme inside
+  PaymentService.process_webhook, not FastAPI auth dependencies.
+
+The webhook route is deliberately `async def` (every other route in this
+codebase is sync `def`) because verifying the gateway signature requires
+the EXACT raw request body, which Starlette only exposes via
+`await request.body()`. The synchronous, DB-bound PaymentService call is
+explicitly run via `run_in_threadpool` so it never blocks the event loop -
+this keeps the one async route from silently behaving differently than
+every sync route already does (each of which FastAPI already runs in a
+threadpool automatically).
+"""
+
+from fastapi import APIRouter, Depends, Request, status
+from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
+
+from app.core.roles import CUSTOMER
+from app.dependencies.auth import get_current_user, require_roles
+from app.dependencies.database import get_db
+from app.dependencies.payments import get_payment_gateway
+from app.models.user import User
+from app.schemas.payment import (
+    CreatePaymentRequest,
+    PaymentInitiationResponse,
+    PaymentResponse,
+    WebhookAckResponse,
+)
+from app.services.payment import PaymentService
+from app.services.payment_gateway import PaymentGateway
+
+router = APIRouter(dependencies=[Depends(require_roles(CUSTOMER))])
+webhook_router = APIRouter()
+
+
+@router.post(
+    "",
+    response_model=PaymentInitiationResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Initiate payment for an order (UPI or COD)",
+)
+def create_payment(
+    payload: CreatePaymentRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    gateway: PaymentGateway = Depends(get_payment_gateway),
+) -> PaymentInitiationResponse:
+    return PaymentService(db, gateway).create_payment(current_user.id, payload)
+
+
+@router.get(
+    "/{payment_id}",
+    response_model=PaymentResponse,
+    summary="Get a payment (must belong to the current user)",
+)
+def get_payment(
+    payment_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    gateway: PaymentGateway = Depends(get_payment_gateway),
+) -> PaymentResponse:
+    return PaymentService(db, gateway).get_payment(current_user.id, payment_id)
+
+
+@router.post(
+    "/{payment_id}/retry",
+    response_model=PaymentInitiationResponse,
+    summary="Start a new UPI attempt for a FAILED/EXPIRED payment",
+)
+def retry_payment(
+    payment_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    gateway: PaymentGateway = Depends(get_payment_gateway),
+) -> PaymentInitiationResponse:
+    return PaymentService(db, gateway).retry_payment(current_user.id, payment_id)
+
+
+@router.post(
+    "/{payment_id}/verify",
+    response_model=PaymentResponse,
+    summary="Reconcile payment status against the gateway (never trusts client claims)",
+)
+def verify_payment(
+    payment_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    gateway: PaymentGateway = Depends(get_payment_gateway),
+) -> PaymentResponse:
+    return PaymentService(db, gateway).verify_payment(current_user.id, payment_id)
+
+
+@webhook_router.post(
+    "/pnb",
+    response_model=WebhookAckResponse,
+    summary="PNB gateway webhook callback (no JWT - gateway signature verified internally)",
+)
+async def pnb_webhook(
+    request: Request,
+    db: Session = Depends(get_db),
+    gateway: PaymentGateway = Depends(get_payment_gateway),
+) -> WebhookAckResponse:
+    raw_body = await request.body()
+    headers = dict(request.headers)
+
+    await run_in_threadpool(
+        PaymentService(db, gateway).process_webhook, raw_body, headers
+    )
+    return WebhookAckResponse()

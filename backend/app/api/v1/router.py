@@ -13,6 +13,8 @@ from app.api.v1.catalog import router as catalog_router
 from app.api.v1.inventory import router as inventory_router
 from app.api.v1.orders import router as orders_router
 from app.api.v1.packaging import router as packaging_router
+from app.api.v1.payments import router as payments_router
+from app.api.v1.payments import webhook_router as payments_webhook_router
 from app.schemas.base import PingResponse
 
 api_router = APIRouter()
@@ -34,6 +36,14 @@ api_router.include_router(cart_router, prefix="/cart", tags=["cart"])
 
 # Order domain routes (CUSTOMER-only, user-scoped reads)
 api_router.include_router(orders_router, prefix="/orders", tags=["orders"])
+
+# Payment domain routes (CUSTOMER-only: create/get/retry/verify)
+api_router.include_router(payments_router, prefix="/payments", tags=["payments"])
+
+# PNB gateway webhook (no JWT - authenticity verified via gateway signature)
+api_router.include_router(
+    payments_webhook_router, prefix="/payments/webhooks", tags=["payments"]
+)
 
 
 @api_router.get(
