@@ -7,18 +7,21 @@ never treated as sufficient proof of rollback; the DB state is verified.
 """
 
 from concurrent.futures import ThreadPoolExecutor
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 
 from sqlalchemy.orm import Session
 from starlette.testclient import TestClient
 
-from app.core.roles import ADMIN, CUSTOMER
+from app.core.roles import ADMIN, CUSTOMER, WHOLESALER
 from app.core.security import create_access_token, hash_password
 from app.models.address import Address
 from app.models.auth_session import AuthSession
+from app.models.batch import Batch
 from app.models.cart import Cart
 from app.models.category import Category
+from app.models.inventory_location import InventoryLocation
+from app.models.inventory_lot import InventoryLot
 from app.models.order import Order
 from app.models.order_address import OrderAddress
 from app.models.order_item import OrderItem
@@ -128,11 +131,50 @@ def _create_address(db_session: Session, user: User, *, label: str = "Home") -> 
     return addr
 
 
+def _stock_variant(
+    db_session: Session, product: Product, variant: ProductVariant, *,
+    tag: str, quantity: Decimal = Decimal("1000.000"),
+) -> InventoryLot:
+    """Gives a variant abundant available inventory so checkout's Phase 15
+    reservation step succeeds transparently - this file tests cart/checkout
+    behavior, not inventory allocation, so stock is never the limiting
+    factor unless a test explicitly says otherwise.
+    """
+    wholesaler = _create_user_with_role(
+        db_session, WHOLESALER, f"ws_{tag.lower()}@example.com"
+    )
+    batch = Batch(
+        wholesaler_user_id=wholesaler.id, product_id=product.id,
+        batch_code=f"BATCH-{tag}", harvest_date=date(2026, 1, 1),
+        quantity=quantity, unit="KG", status="APPROVED",
+    )
+    db_session.add(batch)
+    db_session.commit()
+    location = InventoryLocation(
+        name=f"Hub-{tag}", code=f"HUB-{tag}", type="WAREHOUSE",
+        address_line_1="1 Warehouse Rd", city="Nagpur", state="MH",
+        postal_code="440001", status="ACTIVE",
+    )
+    db_session.add(location)
+    db_session.commit()
+    lot = InventoryLot(
+        batch_id=batch.id, variant_id=variant.id, location_id=location.id,
+        quantity=quantity, status="ACTIVE",
+    )
+    db_session.add(lot)
+    db_session.commit()
+    db_session.refresh(lot)
+    return lot
+
+
 def _ready_customer(db_session: Session, tag: str, *, price: Decimal = Decimal("50.00")):
-    """Customer + priced ACTIVE product/variant + address, ready to shop."""
+    """Customer + priced ACTIVE product/variant (with abundant inventory) +
+    address, ready to shop and check out.
+    """
     user, headers = _customer(db_session, tag)
-    _product, variant = _create_product_variant(db_session, tag=tag)
+    product, variant = _create_product_variant(db_session, tag=tag)
     _create_price(db_session, variant, price=price)
+    _stock_variant(db_session, product, variant, tag=tag)
     address = _create_address(db_session, user)
     return user, headers, variant, address
 
@@ -437,10 +479,12 @@ def test_25_cart_status_checked_out(client: TestClient, db_session: Session) -> 
 def test_26_correct_order_total(client: TestClient, db_session: Session) -> None:
     user, headers = _customer(db_session, "T26")
     address = _create_address(db_session, user)
-    _p1, v1 = _create_product_variant(db_session, tag="T26A")
+    p1, v1 = _create_product_variant(db_session, tag="T26A")
     _create_price(db_session, v1, price=Decimal("10.55"))
-    _p2, v2 = _create_product_variant(db_session, tag="T26B")
+    _stock_variant(db_session, p1, v1, tag="T26A")
+    p2, v2 = _create_product_variant(db_session, tag="T26B")
     _create_price(db_session, v2, price=Decimal("3.20"))
+    _stock_variant(db_session, p2, v2, tag="T26B")
 
     client.post("/api/v1/cart/items", json={"variant_id": v1.id, "quantity": "2"}, headers=headers)
     client.post("/api/v1/cart/items", json={"variant_id": v2.id, "quantity": "5"}, headers=headers)
@@ -488,17 +532,30 @@ def test_28_address_snapshot_correct(client: TestClient, db_session: Session) ->
     assert snapshot["postal_code"] == address.postal_code
 
 
-def test_29_inventory_unchanged_after_checkout(client: TestClient, db_session: Session) -> None:
-    from app.models.inventory_lot import InventoryLot
+def test_29_physical_inventory_unchanged_but_reserved_after_checkout(
+    client: TestClient, db_session: Session
+) -> None:
+    """Phase 15 superseded this test's original premise (checkout touches
+    no inventory at all): checkout now reserves inventory as part of the
+    same atomic transaction. What Phase 13 actually guaranteed - physical
+    `quantity` never moves and no StockMovement is ever created by
+    checkout - still holds exactly as before; only the newly-added
+    `reserved_quantity` bookkeeping changes.
+    """
     from app.models.stock_movement import StockMovement
 
     _user, headers, variant, address = _ready_customer(db_session, "T29")
+    lot = db_session.query(InventoryLot).filter_by(variant_id=variant.id).one()
+    original_quantity = lot.quantity
+
     client.post("/api/v1/cart/items", json={"variant_id": variant.id, "quantity": "1"}, headers=headers)
     client.post("/api/v1/cart/checkout", json={"address_id": address.id}, headers=headers)
 
     db_session.expire_all()
-    assert db_session.query(InventoryLot).count() == 0
-    assert db_session.query(StockMovement).count() == 0
+    refreshed_lot = db_session.get(InventoryLot, lot.id)
+    assert refreshed_lot.quantity == original_quantity  # physical stock untouched
+    assert refreshed_lot.reserved_quantity == Decimal("1.000")  # reservation applied
+    assert db_session.query(StockMovement).count() == 0  # consumption is delivery-only
 
 
 def test_30_order_references_cart(client: TestClient, db_session: Session) -> None:

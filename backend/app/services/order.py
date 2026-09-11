@@ -17,6 +17,16 @@ second concurrent request see "no cart" instead of the newly-CHECKED_OUT
 one, breaking the "return the existing order" requirement entirely. Locking
 unconditionally on `user_id` and branching on `status` *after* acquiring
 the lock is what makes retry safety actually work.
+
+PHASE 15 ADDITION: `checkout` now also creates the order's inventory
+reservation (via InventoryReservationService.create_reservation_for_order)
+before the single commit below, so reservation creation is part of the
+same atomic transaction as order creation - if FIFO allocation fails
+(insufficient stock), the exception propagates, nothing commits, and the
+whole checkout (order, items, address, cart status change) rolls back
+together. Checkout itself never decides COD vs UPI or creates a Payment -
+that remains PaymentService's responsibility (POST /payments), unchanged
+from Phase 14. See app/services/inventory_reservation.py for why.
 """
 
 import secrets
@@ -43,6 +53,7 @@ from app.schemas.order import (
     OrderListResponse,
     OrderResponse,
 )
+from app.services.inventory_reservation import InventoryReservationService
 from app.services.pricing import get_current_prices_for_variants
 
 _ACTIVE = "ACTIVE"
@@ -222,8 +233,16 @@ class OrderService:
         self.db.add(order)
         self.db.flush()  # assign order.id for FK references below
 
+        created_items = []
         for row in order_item_rows:
-            self.db.add(OrderItem(order_id=order.id, **row))
+            order_item = OrderItem(order_id=order.id, **row)
+            self.db.add(order_item)
+            created_items.append(order_item)
+        self.db.flush()  # assign order_item.id, needed by reservation allocation
+
+        InventoryReservationService(self.db).create_reservation_for_order(
+            order, created_items
+        )
 
         self.db.add(
             OrderAddress(

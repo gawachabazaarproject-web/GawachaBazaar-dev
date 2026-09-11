@@ -134,14 +134,23 @@ deliberate project decision (see [BACKEND_ARCHITECTURE_V1.md](BACKEND_ARCHITECTU
 ff073dad9cfc  create_phase_4_inventory_and_stock
 e204d99696f6  create_phase_5_packaging_and_labeling
 a493a6752a97  create_phase_6_cart_and_orders
-68d13edaa6f2  add_orders_cart_id_and_remove_redundant_order_address_index
-a4738979ac7c  create_auth_sessions_table            (Phase 8)
-d051168c1d3d  wholesaler_supply_model_batches        (Phase 8.1 — HEAD, see §9)
+68d13edaa6f2  create_phase_7_payments
+a4738979ac7c  add_orders_cart_id_and_remove_redundant_order_address_index
+4d9160d1bcc6  create_auth_sessions_table                            (Phase 8)
+d051168c1d3d  wholesaler_supply_model_batches                       (Phase 8.1)
+37bbdf459894  seed_baseline_roles                                   (Phase 9)
+7b8bd4525a83  add_payment_gateway_reference_and_webhook_events      (Phase 14)
+2603b7a0587e  inventory_reservation_and_fulfillment                 (Phase 15 — HEAD)
 ```
 
-`alembic current` on the local dev database (`gawachabazaar`) reports **`d051168c1d3d (head)`** —
-i.e. the Phase 8.1 migration has **already been applied to the local database**, even though the
-corresponding model/test source changes are still uncommitted working-tree edits (§9).
+> Corrected 2026-09-12: the ID/message pairing above had drifted from `alembic history` in this
+> document's earlier revision (IDs were paired with the wrong phase labels after Phase 9-14 were
+> merged) — re-verified directly against `alembic history` while adding the Phase 15 row. Trust
+> `alembic history`/`alembic heads` over this table if they ever disagree again.
+
+`alembic current` on the local dev database (`gawachabazaar`) now reports **`2603b7a0587e (head)`**
+(the Phase 15 migration) — confirmed applied to both `gawachabazaar` and `gawachabazaar_test` with
+zero autogenerate drift (`alembic check`) as of this phase.
 
 ## 7. Phase 1–8 Summary
 
@@ -156,17 +165,21 @@ corresponding model/test source changes are still uncommitted working-tree edits
 | 7 — Payments | `payments`, `payment_transactions` | One `payments` row per order (unique `order_id`). Multiple `payment_transactions` per payment (retries/attempts), idempotency key unique. Methods: `UPI`, `COD` only. No gateway integration implemented. No card/CVV/UPI-PIN storage anywhere. |
 | 8 — Production Authentication | `auth_sessions` | See §8 below. |
 
-## 8. Current Database Table Inventory (26 tables)
+## 8. Current Database Table Inventory (31 tables, as of Phase 15)
 
 `roles`, `users`, `user_roles`, `addresses`, `auth_sessions`, `farms`, `batches`, `quality_checks`,
 `categories`, `products`, `product_variants`, `product_images`, `prices`, `inventory_locations`,
 `inventory_lots`, `stock_movements`, `packaging_operations`, `packaging_inputs`,
 `packaging_outputs`, `carts`, `cart_items`, `orders`, `order_items`, `order_addresses`, `payments`,
-`payment_transactions`.
+`payment_transactions`, `payment_webhook_events`, `inventory_reservations`,
+`inventory_reservation_items`, `fulfillments`.
 
 No `wholesalers` table exists or is planned (§10). No `warehouses`, `suppliers`, `wishlist`,
-`promotions`, `coupons`, `fulfillments`, `reviews`, `notifications`, or `audit_logs` tables exist —
-any such concept from older diagrams is **not** part of the current schema and must not be assumed.
+`promotions`, `coupons`, `reviews`, `notifications`, or `audit_logs` tables exist — any such concept
+from older diagrams is **not** part of the current schema and must not be assumed.
+`fulfillments` **is** now part of the schema (Phase 15, §21a) — the "not built" list in §22 has been
+updated to reflect this; it is intentionally coarse (order-level status only), not a full logistics
+system (no delivery partner assignment, routing, or proof-of-delivery).
 
 ## 9. Discrepancies Found vs. Provided Project Context
 
@@ -323,10 +336,18 @@ detail: [PHASE_9_RBAC.md](PHASE_9_RBAC.md).
 
 ## 13. Inventory Principles
 
-- `inventory_lots.quantity` = current operational balance (can be 0, never negative — CHECK
-  constraint).
+- `inventory_lots.quantity` = current **physical** balance (can be 0, never negative — CHECK
+  constraint). Only a `stock_movements` row changes it.
+- **Added in Phase 15**: `inventory_lots.reserved_quantity` = inventory promised to
+  ACTIVE/COMMITTED reservations, CHECK `0 <= reserved_quantity <= quantity`.
+  `available = quantity - reserved_quantity` is **computed, never persisted**. Reservation
+  changes `reserved_quantity` only — physical `quantity` is untouched until delivery
+  confirmation (§21a). This is the AVAILABLE → RESERVED → COMMITTED → DELIVERED/CONSUMED
+  lifecycle: reservation ≠ consumption, payment ≠ consumption, picking/packing ≠ consumption.
 - `stock_movements` = **append-only audit ledger**; `quantity` always strictly positive; direction
-  is implied by `movement_type`.
+  is implied by `movement_type`. **Phase 15 reuses `DISPATCH`** (already meaning "goods leaving
+  the facility") for delivery-confirmation physical consumption — no new movement type was added;
+  see §21a.
 - `InventoryLot` is uniquely keyed on `(batch_id, variant_id, location_id)`.
 - **Implemented in Phase 11**: `InventoryService.create_movement` uses `SELECT ... FOR UPDATE`
   (`app/services/inventory.py`) to lock the lot row for the duration of validate→update→insert→commit.
@@ -365,17 +386,26 @@ detail: [PHASE_9_RBAC.md](PHASE_9_RBAC.md).
 - Order address is snapshotted into `order_addresses` (1:1, unique `order_id`).
 - `orders.cart_id` is unique and `ON DELETE RESTRICT` — exact checkout lineage, one order per cart
   maximum, cart is never hard-deleted out from under a placed order.
-- Order creation does **not** itself mutate inventory — confirmed by test in Phase 13, and remains
-  true even though `InventoryService` now exists (Phase 11): checkout deliberately never imports it.
-- **Implemented in Phase 13**: `OrderService.checkout` (`app/services/order.py`) is the one atomic
-  checkout transaction — locks the cart row (found by `user_id ORDER BY id DESC`, deliberately
-  unfiltered by status — see the Phase 13 doc for why a status filter would break retry safety under
-  PostgreSQL's `FOR UPDATE` row-exclusion behavior), then purchased variant rows in ascending id
-  order, revalidates catalog state, resolves current prices via the shared
-  `app/services/pricing.py` rule, snapshots into `order_items`/`order_addresses`, and commits once.
-  `orders.cart_id UNIQUE` + the cart-row lock give checkout domain-level retry safety (duplicate/
-  concurrent checkout resolves to the same order) with no idempotency-key table. Full detail:
-  [PHASE_13_CART_ORDERS_API.md](../api/PHASE_13_CART_ORDERS_API.md).
+- **Superseded in Phase 15**: order creation used to leave inventory completely untouched (true for
+  Phase 13). As of Phase 15, checkout **reserves** inventory (`inventory_lots.reserved_quantity`)
+  atomically as part of the same transaction — physical `quantity` still never moves at checkout;
+  only reservation bookkeeping changes. See §21a.
+- **Implemented in Phase 13, extended in Phase 15**: `OrderService.checkout` (`app/services/order.py`)
+  is the one atomic checkout transaction — locks the cart row (found by `user_id ORDER BY id DESC`,
+  deliberately unfiltered by status — see the Phase 13 doc for why a status filter would break retry
+  safety under PostgreSQL's `FOR UPDATE` row-exclusion behavior), then purchased variant rows in
+  ascending id order, revalidates catalog state, resolves current prices via the shared
+  `app/services/pricing.py` rule, snapshots into `order_items`/`order_addresses`, **creates the
+  order's inventory reservation via `InventoryReservationService.create_reservation_for_order`
+  (Phase 15, §21a) before the single commit** — insufficient stock rolls back the entire checkout,
+  not just the reservation — and commits once. `orders.cart_id UNIQUE` + the cart-row lock give
+  checkout domain-level retry safety (duplicate/concurrent checkout resolves to the same order,
+  and thus the same reservation) with no idempotency-key table. Full detail:
+  [PHASE_13_CART_ORDERS_API.md](../api/PHASE_13_CART_ORDERS_API.md) (checkout mechanics) and
+  [PHASE_15_INVENTORY_RESERVATION_FULFILLMENT_API.md](../api/PHASE_15_INVENTORY_RESERVATION_FULFILLMENT_API.md)
+  (reservation mechanics).
+- Checkout still never decides COD vs UPI or creates a `Payment` row — that remains
+  `POST /payments`'s job (§16), unchanged in request shape since Phase 14.
 
 ## 16. Payment Principles
 
@@ -400,6 +430,21 @@ detail: [PHASE_9_RBAC.md](PHASE_9_RBAC.md).
   verification/parsing use a clearly-labeled placeholder scheme. `FakePNBGateway` (test-only) is
   injected via a `get_payment_gateway` FastAPI dependency override, mirroring the existing `get_db`
   override pattern, so the full domain is tested without real PNB connectivity.
+- **Extended in Phase 15**: order confirmation (`PENDING → CONFIRMED`) is now gated by committing
+  the order's inventory reservation, not payment status alone. `PaymentService._confirm_cod` and
+  `PaymentService._confirm_order_if_paid` both call
+  `InventoryReservationService.commit_reservation_for_order` before touching `order.status` — if
+  the reservation already expired (or was otherwise released), the order is **not** confirmed, even
+  though the payment itself may be legitimately `PAID` (a late-payment-after-expiry reconciliation
+  case, logged as `PAYMENT_RESERVATION_MISMATCH`, never silently resolved). See §21a.
+- **Deliberate Phase 15 deviation, documented in `app/services/inventory_reservation.py`**: a
+  definitively FAILED UPI payment attempt does **not** release its reservation (the spec's literal
+  text called for ACTIVE→RELEASED on failure). Because `inventory_reservations` has
+  `UNIQUE(order_id)` and RELEASED is terminal, releasing on failure would strand a later successful
+  `POST /payments/{id}/retry` with no reservation left to commit, and re-reserving inside
+  `retry_payment` would duplicate FIFO allocation logic in a second place. Instead the reservation
+  stays ACTIVE through a failed attempt (bounded by its own 30-minute expiry) so the existing,
+  unmodified retry flow keeps working.
 
 ## 17. Security Principles
 
@@ -468,9 +513,92 @@ webhook endpoint, which needs the raw request body — the sync DB work is expli
 `starlette.concurrency.run_in_threadpool` so it doesn't block the event loop, a first in this
 codebase and the only async route so far).
 
-Still not built: farm, delivery APIs — each should follow the established pattern (thin router →
-service returning schema instances directly → `require_roles` for any protected endpoint, reuse
-rather than duplicate sibling-domain business logic where safe) rather than introducing a new one.
+Phase 14 background above is now historical — see §21a for the current phase.
+
+Still not built: farm APIs, full delivery logistics (partner assignment, routing, live tracking,
+proof-of-delivery). Each should follow the established pattern (thin router → service returning
+schema instances directly → `require_roles` for any protected endpoint, reuse rather than duplicate
+sibling-domain business logic where safe) rather than introducing a new one.
+
+## 21a. Inventory Reservation & Order Expiry & Fulfillment Foundation (Phase 15)
+
+**Current active phase.** Adds inventory reservation (hold at checkout, before payment),
+a 30-minute order-level payment window, and a minimal order-level fulfillment state machine ending
+in physical inventory consumption at delivery confirmation. New migration
+`2603b7a0587e_inventory_reservation_and_fulfillment` (additive: `inventory_lots.reserved_quantity`
++ CHECK, `orders.ck_orders_status` widened to add `EXPIRED`, three new tables). Full detail:
+[PHASE_15_INVENTORY_RESERVATION_FULFILLMENT_API.md](../api/PHASE_15_INVENTORY_RESERVATION_FULFILLMENT_API.md).
+
+**Core lifecycle**: `AVAILABLE → RESERVED → COMMITTED → DELIVERED/CONSUMED`. Reservation changes
+`inventory_lots.reserved_quantity` only; physical `quantity` is untouched until delivery
+confirmation. Payment commits a reservation; it never itself consumes inventory.
+
+**New tables**:
+- `inventory_reservations` — one per order (`UNIQUE(order_id)`), status
+  `ACTIVE → {COMMITTED, RELEASED, EXPIRED}` (all three terminal), `expires_at` fixed at creation
+  (`checkout time + 30 minutes`, independent of payment method — see below).
+- `inventory_reservation_items` — the FIFO allocation join (`order_item_id` × `inventory_lot_id` ×
+  `quantity`); one order item may span multiple lots. Append-only; delivery confirmation replays
+  this exact allocation rather than recomputing it.
+- `fulfillments` — one per order (`UNIQUE(order_id)`), linear chain
+  `PENDING → PICKING → PACKED → READY_FOR_DELIVERY → OUT_FOR_DELIVERY → DELIVERED`. Created the
+  moment a reservation is first COMMITTED (COD acceptance or UPI payment success).
+
+**FIFO allocation** (`app/services/inventory_reservation.py`,
+`InventoryReservationService.create_reservation_for_order`, called from inside
+`OrderService.checkout` before its single commit): locks every ACTIVE lot for each needed variant
+via `SELECT ... FOR UPDATE ORDER BY created_at ASC, id ASC` — **across all locations**, not scoped
+to one (there is no location-selection concept anywhere else in this codebase, and the spec only
+requires FIFO-by-time ordering, so pooling across locations is the smallest correct design, not a
+gap that needed a new convention). Allocates in memory against freshly-locked quantities; any
+variant left short fails the *entire* reservation (and therefore the entire checkout) with nothing
+partially applied.
+
+**Expiry** is lazy, not worker-dependent: any operation that touches an ACTIVE reservation
+(`commit_reservation_for_order`, a customer `GET .../reservation`, an ops detail read) checks
+`expires_at` against the current server time and atomically expires it inline if overdue, under the
+same row lock used for every other transition — this is what makes the payment-success-vs-expiry
+race resolve to exactly one winner. `expires_at` is set once, at reservation creation, from
+`checkout time + 30 minutes` — **not** UPI-specific: the reservation exists before a payment method
+is ever chosen, so COD is not exempt from the window either (a COD confirmation attempt on an
+already-expired reservation is rejected, not silently allowed). When a reservation actually expires,
+its order moves `PENDING → EXPIRED` (a new explicit terminal status; `orders.ck_orders_status` was
+widened additively to allow it) in the same locked transaction — Order is always locked *before*
+Reservation everywhere this can happen, matching the global lock order below, specifically so this
+doesn't deadlock against the payment-confirmation path racing the same pair of rows.
+
+**Payment integration** (`app/services/payment.py`, unchanged request/response contracts): COD
+confirmation and the payment-success confirmation path (`_confirm_cod`,
+`_confirm_order_if_paid` — the latter shared by initiate/webhook/verify, as in Phase 14) both now
+call `InventoryReservationService.commit_reservation_for_order` before setting `order.status =
+"CONFIRMED"`. If the reservation cannot be committed (already EXPIRED/RELEASED), the order is left
+exactly as it was — this is the enforcement point for "a late payment success must never resurrect
+an expired reservation." See §16 for the one documented deviation from the spec's literal text
+(UPI failure does not release the reservation).
+
+**Delivery confirmation** (`app/services/fulfillment.py`, `FulfillmentService.confirm_delivery`) is
+the sole physical-consumption transaction: lock order → lock fulfillment (idempotent no-op if
+already DELIVERED) → verify `OUT_FOR_DELIVERY` → lock reservation → verify COMMITTED → read its
+allocation items → lock every allocated lot in ascending-id order → for each, apply a `DISPATCH`
+stock movement (reusing `InventoryService.apply_movement`, not duplicating it — `DISPATCH` already
+meant "goods leaving the facility," a direct semantic fit, so no new movement type was added) and
+decrement `reserved_quantity` by the same amount → mark fulfillment DELIVERED, order COMPLETED →
+commit once. No partial fulfillment: any inconsistency aborts the whole transaction.
+
+**Lock ordering**, extending Phase 13/14's Order-before-Payment convention: **Cart → Order →
+Payment → Fulfillment → Reservation → InventoryLots** (lots always last, in `created_at ASC, id ASC`
+FIFO order for allocation or plain `id ASC` for a known set during release/delivery). Every new
+locking helper that does an unlocked pre-read (to discover a foreign key) followed by a locked
+re-read of the *same* row uses `.populate_existing()` on the locked query — the Phase 14
+stale-identity-map gotcha (§21, "lock this row, but I need its FK first") recurred at least twice
+while building this phase (`InventoryReservationService._lock_reservation_by_order_id`,
+`FulfillmentService.confirm_delivery`) and was fixed the same way each time.
+
+**Concurrency-tested** (real threads against real PostgreSQL row locks, `tests/test_phase_15_inventory_reservation_fulfillment.py`):
+two customers racing the last unit of stock, concurrent multi-lot FIFO allocation, concurrent
+manual expiry (double-release-safe), payment-success-vs-expiry (exactly one of
+COMMITTED/EXPIRED wins), concurrent delivery confirmation (no double physical consumption), and
+concurrent checkout across customers for shared limited inventory (no oversell).
 
 ## 22. Explicitly Rejected / Out-of-Scope Architectural Ideas
 
@@ -484,8 +612,14 @@ Not to be introduced without an explicit, separate request:
 - Dual-source (wholesaler + farm simultaneously active) batch model
 - A second refresh-token table to fake full historical replay-family detection
 - Any table implied only by old conceptual diagrams (`suppliers`, `warehouses`, `wishlist`,
-  `promotions`, `coupons`, `fulfillments`, `reviews`, `notifications`, `audit_logs`) — none of these
-  exist in the schema today and none should be created spontaneously
+  `promotions`, `coupons`, `reviews`, `notifications`, `audit_logs`) — none of these exist in the
+  schema today and none should be created spontaneously. `fulfillments` is the one exception: it
+  **was** built in Phase 15, but intentionally minimal (order-level status only) — do not expand it
+  into per-item picking, delivery partner assignment, routing, live tracking, or
+  proof-of-delivery without an explicit separate request; those remain out of scope.
+- `fulfillment_items` (a second lot-allocation table mirroring `inventory_reservation_items`) — not
+  built in Phase 15; `inventory_reservation_items` already records the order_item→lot→quantity
+  allocation delivery confirmation needs, and a second copy would only risk drifting out of sync
 - `permissions`, `role_permissions`, `user_permissions`, `acl_rules` tables (no permission/ACL system
   in Phase 9 — role membership alone is the authorization unit)
 - Role hierarchy/inheritance (e.g. assuming `ADMIN` implies `OPERATIONS`) — not implemented in Phase 9
