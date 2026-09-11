@@ -328,9 +328,15 @@ detail: [PHASE_9_RBAC.md](PHASE_9_RBAC.md).
 - `stock_movements` = **append-only audit ledger**; `quantity` always strictly positive; direction
   is implied by `movement_type`.
 - `InventoryLot` is uniquely keyed on `(batch_id, variant_id, location_id)`.
-- Row-level locking (`SELECT ... FOR UPDATE`) for concurrent stock mutation is a **future**
-  requirement (not yet implemented — no inventory service exists yet). Python-only locks must never
-  substitute for DB-level concurrency control when it is eventually built.
+- **Implemented in Phase 11**: `InventoryService.create_movement` uses `SELECT ... FOR UPDATE`
+  (`app/services/inventory.py`) to lock the lot row for the duration of validate→update→insert→commit.
+  Quantity can change **only** through `POST /inventory/lots/{id}/movements` — there is no direct
+  quantity-mutation endpoint. `batch.product_id == variant.product_id` is enforced in service code
+  (the database does not enforce it). Full detail: [PHASE_11_INVENTORY_API.md](../api/PHASE_11_INVENTORY_API.md).
+- **Transaction-design gotcha** (see Phase 11 doc for full explanation): any service method reached
+  through an authenticated route must **not** call `db.begin()` — `get_current_user` already
+  autobegins the session's transaction via its own reads before the route handler runs. Perform
+  writes against the already-open transaction and call `db.commit()` once at the end instead.
 
 ## 14. Packaging Principles
 
@@ -338,9 +344,17 @@ detail: [PHASE_9_RBAC.md](PHASE_9_RBAC.md).
   `packaging_outputs` (new/updated packaged lots using existing `ProductVariant`s).
 - Strictly packaging/labeling — not manufacturing, recipes, or BOM.
 - **Single-batch traceability invariant**: an output inventory lot must trace to exactly one source
-  batch — mixing multiple source batches into one output lot is forbidden (enforced at the service
-  layer once implemented; not yet built).
+  batch — mixing multiple source batches into one output lot is forbidden. **Implemented in Phase 12**:
+  `PackagingService.add_output` requires the declared `batch_id` to match a batch actually present
+  among the operation's current inputs, and `complete_operation` re-validates this at completion
+  time (an input can be removed after an output references its batch). Full detail:
+  [PHASE_12_PACKAGING_API.md](../api/PHASE_12_PACKAGING_API.md).
 - Individual physical package IDs are not tracked at this granularity.
+- **Completion is one atomic transaction** (`PackagingService.complete_operation`): locks the
+  operation row (serializes concurrent completion of the same operation), locks every input/output
+  lot in one consistently-ordered query, applies `ADJUSTMENT_OUT` to inputs and `RECEIPT` to outputs
+  via `InventoryService.apply_movement` (reused, not duplicated), then a single commit. No inventory
+  change happens when inputs/outputs are merely added — only at `/complete`.
 
 ## 15. Cart / Order Principles
 
@@ -408,17 +422,26 @@ always add a new one (Phase 8.1 and Phase 9 both followed this).
 
 ## 21. Current Active Development Phase
 
-**Phase 10 — Catalog & Product API — implemented.** The Phase 3 catalog schema
-(`categories`/`products`/`product_variants`/`product_images`/`prices`) now has a real API under
-`/api/v1/catalog`: public active-only browsing (no auth) plus `ADMIN`-only management, via
-`CatalogService` (`app/services/catalog.py`). No schema migration was needed. Full detail:
-[PHASE_10_CATALOG_API.md](../api/PHASE_10_CATALOG_API.md). Still not built: farm, inventory,
-packaging, cart, order, payment, delivery APIs — each should follow this phase's pattern (thin
-router → service returning schema instances directly → `require_roles` for any write endpoint)
-rather than introducing a new one.
+**Phase 12 — Packaging & Labeling API — implemented.** The Phase 5 packaging schema
+(`packaging_operations`/`packaging_inputs`/`packaging_outputs`) now has a real, internal-staff-only
+API under `/api/v1/packaging` (`ADMIN`/`HUB_STAFF`/`OPERATIONS` only). No schema migration was
+needed. `PackagingService.complete_operation` (`app/services/packaging.py`) is the one atomic
+business transaction in this domain — see §14 and
+[PHASE_12_PACKAGING_API.md](../api/PHASE_12_PACKAGING_API.md) for the full algorithm, locking order,
+and traceability re-validation. It reuses `InventoryService` rather than duplicating movement logic:
+two new non-committing methods were added there — `apply_movement` (the validated core factored out
+of `create_movement`, confirmed behavior-preserving by a full Phase 11 regression run afterward) and
+`get_or_create_lot_no_commit` (output lot resolution, reusing Phase 11's batch/variant product-match
+invariant). No label functionality was built — labels are not finalized and explicitly out of scope.
 
-Phase 9 (Role Initialization & RBAC) foundation remains as previously documented in §12/§12a — now
-proven end-to-end by Phase 10's catalog management routes.
+Phase 11's inventory API and its documented `db.begin()`-under-authenticated-routes gotcha (§13)
+remain as previously recorded — Phase 12 is a second confirmation of that same pattern, not a new
+one.
+
+Still not built: farm, cart, order, payment, delivery APIs — each should follow the established
+pattern (thin router → service returning schema instances directly → `require_roles` for any
+protected endpoint, reuse rather than duplicate sibling-domain business logic where safe) rather than
+introducing a new one.
 
 ## 22. Explicitly Rejected / Out-of-Scope Architectural Ideas
 
