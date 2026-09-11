@@ -10,6 +10,7 @@ from fastapi import APIRouter
 from app.api.v1.auth import router as auth_router
 from app.api.v1.catalog import router as catalog_router
 from app.api.v1.inventory import router as inventory_router
+from app.api.v1.packaging import router as packaging_router
 from app.schemas.base import PingResponse
 
 api_router = APIRouter()
@@ -22,6 +23,9 @@ api_router.include_router(catalog_router, prefix="/catalog", tags=["catalog"])
 
 # Inventory domain routes (internal staff only: ADMIN, HUB_STAFF, OPERATIONS)
 api_router.include_router(inventory_router, prefix="/inventory", tags=["inventory"])
+
+# Packaging domain routes (internal staff only: ADMIN, HUB_STAFF, OPERATIONS)
+api_router.include_router(packaging_router, prefix="/packaging", tags=["packaging"])
 
 
 @api_router.get(
