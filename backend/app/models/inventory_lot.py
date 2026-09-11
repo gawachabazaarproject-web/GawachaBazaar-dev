@@ -44,10 +44,23 @@ class InventoryLot(Base):
             "status IN ('ACTIVE', 'INACTIVE', 'DEPLETED')",
             name="ck_inventory_lots_status",
         ),
+        CheckConstraint(
+            "reserved_quantity >= 0 AND reserved_quantity <= quantity",
+            name="ck_inventory_lots_reserved_quantity",
+        ),
         Index("ix_inventory_lots_batch_id", "batch_id"),
         Index("ix_inventory_lots_variant_id", "variant_id"),
         Index("ix_inventory_lots_location_id", "location_id"),
         Index("ix_inventory_lots_status", "status"),
+        # Supports the Phase 15 FIFO reservation query: candidate ACTIVE
+        # lots for a variant, locked in (created_at, id) order.
+        Index(
+            "ix_inventory_lots_variant_status_fifo",
+            "variant_id",
+            "status",
+            "created_at",
+            "id",
+        ),
     )
 
     id: Mapped[int] = mapped_column(
@@ -73,6 +86,16 @@ class InventoryLot(Base):
     quantity: Mapped[Decimal] = mapped_column(
         Numeric(12, 3),
         nullable=False,
+    )
+    # Physical `quantity` is never decremented by a reservation - only a
+    # delivery-confirmation DISPATCH movement changes it. `reserved_quantity`
+    # tracks inventory promised to ACTIVE/COMMITTED reservations;
+    # available = quantity - reserved_quantity (computed, never persisted).
+    # Added in Phase 15.
+    reserved_quantity: Mapped[Decimal] = mapped_column(
+        Numeric(12, 3),
+        nullable=False,
+        server_default="0",
     )
     status: Mapped[str] = mapped_column(
         String(30),

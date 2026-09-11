@@ -10,6 +10,7 @@ from fastapi import APIRouter
 from app.api.v1.auth import router as auth_router
 from app.api.v1.cart import router as cart_router
 from app.api.v1.catalog import router as catalog_router
+from app.api.v1.fulfillments import router as fulfillments_router
 from app.api.v1.inventory import router as inventory_router
 from app.api.v1.orders import router as orders_router
 from app.api.v1.packaging import router as packaging_router
@@ -43,6 +44,12 @@ api_router.include_router(payments_router, prefix="/payments", tags=["payments"]
 # PNB gateway webhook (no JWT - authenticity verified via gateway signature)
 api_router.include_router(
     payments_webhook_router, prefix="/payments/webhooks", tags=["payments"]
+)
+
+# Fulfillment domain routes (internal staff + delivery partner:
+# ADMIN, HUB_STAFF, OPERATIONS, DELIVERY_PARTNER)
+api_router.include_router(
+    fulfillments_router, prefix="/fulfillments", tags=["fulfillments"]
 )
 
 
