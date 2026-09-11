@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from starlette.testclient import TestClient
 
 from app.core.config import settings
+from app.dependencies.database import get_db
 from app.main import app
 
 # Explicitly isolate test database: gawachabazaar_test
@@ -35,7 +36,7 @@ def db_session(test_engine) -> Generator[Session, None, None]:
     # Clean test tables before each test in dependency order
     session.execute(
         text(
-            "TRUNCATE TABLE payment_transactions, payments, "
+            "TRUNCATE TABLE auth_sessions, payment_transactions, payments, "
             "order_addresses, order_items, orders, cart_items, carts, "
             "packaging_outputs, packaging_inputs, packaging_operations, "
             "stock_movements, inventory_lots, inventory_locations, "
@@ -53,7 +54,18 @@ def db_session(test_engine) -> Generator[Session, None, None]:
 
 
 @pytest.fixture
-def client() -> Generator[TestClient, None, None]:
-    """TestClient fixture that interacts with the FastAPI app in-process."""
+def client(test_engine, db_session: Session) -> Generator[TestClient, None, None]:
+    """TestClient fixture that interacts with the FastAPI app in-process using isolated test db."""
+    SessionLocalTest = sessionmaker(bind=test_engine, autocommit=False, autoflush=False)
+
+    def override_get_db() -> Generator[Session, None, None]:
+        session = SessionLocalTest()
+        try:
+            yield session
+        finally:
+            session.close()
+
+    app.dependency_overrides[get_db] = override_get_db
     with TestClient(app=app, raise_server_exceptions=False) as c:
         yield c
+    app.dependency_overrides.pop(get_db, None)

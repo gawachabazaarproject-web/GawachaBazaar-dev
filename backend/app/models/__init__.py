@@ -8,6 +8,7 @@ all table definitions.
 """
 
 from app.models.address import Address
+from app.models.auth_session import AuthSession
 from app.models.batch import Batch
 from app.models.cart import Cart
 from app.models.cart_item import CartItem
@@ -35,6 +36,7 @@ from app.models.user_role import UserRole
 
 __all__ = [
     "Address",
+    "AuthSession",
     "Batch",
     "Cart",
     "CartItem",
