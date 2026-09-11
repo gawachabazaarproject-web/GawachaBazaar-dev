@@ -77,14 +77,23 @@ def _create_product(db_session: Session) -> Product:
 
 def _create_batch(
     db_session: Session,
-    farm_id: int,
+    farm_id: int | None = None,
     batch_code: str = "BATCH-2026-001",
     product_id: int | None = None,
+    wholesaler_user_id: int | None = None,
 ) -> Batch:
     """Helper to create a valid batch for testing."""
     if product_id is None:
         product_id = _create_product(db_session).id
+    if wholesaler_user_id is None:
+        wholesaler_user = _create_user(
+            db_session,
+            email=f"ws_{batch_code.lower().replace('-', '_')}@example.com",
+            phone=f"+9198{abs(hash(batch_code)) % 100000000:08d}",
+        )
+        wholesaler_user_id = wholesaler_user.id
     batch = Batch(
+        wholesaler_user_id=wholesaler_user_id,
         farm_id=farm_id,
         product_id=product_id,
         batch_code=batch_code,
@@ -246,6 +255,7 @@ def test_8_batch_code_uniqueness(db_session: Session) -> None:
 
     prod = _create_product(db_session)
     duplicate_batch = Batch(
+        wholesaler_user_id=user.id,
         farm_id=farm.id,
         product_id=prod.id,
         batch_code="UNIQUE-001",
@@ -268,6 +278,7 @@ def test_9_batch_quantity_positive(db_session: Session) -> None:
     prod = _create_product(db_session)
     # Zero quantity
     zero_batch = Batch(
+        wholesaler_user_id=user.id,
         farm_id=farm.id,
         product_id=prod.id,
         batch_code="ZERO-001",
@@ -283,6 +294,7 @@ def test_9_batch_quantity_positive(db_session: Session) -> None:
 
     # Negative quantity
     neg_batch = Batch(
+        wholesaler_user_id=user.id,
         farm_id=farm.id,
         product_id=prod.id,
         batch_code="NEG-001",
@@ -304,6 +316,7 @@ def test_10_batch_expiry_after_harvest(db_session: Session) -> None:
 
     prod = _create_product(db_session)
     invalid_expiry_batch = Batch(
+        wholesaler_user_id=user.id,
         farm_id=farm.id,
         product_id=prod.id,
         batch_code="EXP-INVALID",
@@ -336,6 +349,7 @@ def test_11_batch_status_check(db_session: Session) -> None:
     prod = _create_product(db_session)
     for idx, s in enumerate(valid_statuses):
         b = Batch(
+            wholesaler_user_id=user.id,
             farm_id=farm.id,
             product_id=prod.id,
             batch_code=f"BATCH-STATUS-{idx}",
@@ -349,6 +363,7 @@ def test_11_batch_status_check(db_session: Session) -> None:
     assert db_session.query(Batch).count() == 7
 
     invalid_b = Batch(
+        wholesaler_user_id=user.id,
         farm_id=farm.id,
         product_id=prod.id,
         batch_code="BATCH-INVALID-STATUS",
@@ -372,6 +387,7 @@ def test_12_batch_unit_check(db_session: Session) -> None:
     prod = _create_product(db_session)
     for idx, u in enumerate(valid_units):
         b = Batch(
+            wholesaler_user_id=user.id,
             farm_id=farm.id,
             product_id=prod.id,
             batch_code=f"BATCH-UNIT-{idx}",
@@ -385,6 +401,7 @@ def test_12_batch_unit_check(db_session: Session) -> None:
     assert db_session.query(Batch).count() == len(valid_units)
 
     invalid_u = Batch(
+        wholesaler_user_id=user.id,
         farm_id=farm.id,
         product_id=prod.id,
         batch_code="BATCH-INVALID-UNIT",

@@ -125,9 +125,18 @@ def _create_batch(
     product_id: int,
     batch_code: str = "BATCH-ORANGE-2026-01",
     quantity: Decimal = Decimal("1000.000"),
+    wholesaler_user_id: int | None = None,
 ) -> Batch:
     """Helper to create a harvest batch for testing."""
+    if wholesaler_user_id is None:
+        wholesaler = _create_user(
+            db_session,
+            email=f"ws_{batch_code.lower().replace('-', '_')}@example.com",
+            phone=f"+9195{abs(hash(batch_code)) % 100000000:08d}",
+        )
+        wholesaler_user_id = wholesaler.id
     batch = Batch(
+        wholesaler_user_id=wholesaler_user_id,
         farm_id=farm_id,
         product_id=product_id,
         batch_code=batch_code,

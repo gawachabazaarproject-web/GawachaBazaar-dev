@@ -174,9 +174,18 @@ def _create_batch(
     farm_id: int,
     product_id: int,
     batch_code: str = "BATCH-P3-001",
+    wholesaler_user_id: int | None = None,
 ) -> Batch:
     """Helper to create a valid batch for testing."""
+    if wholesaler_user_id is None:
+        wholesaler = _create_user(
+            db_session,
+            email=f"ws_{batch_code.lower().replace('-', '_')}@example.com",
+            phone=f"+9193{abs(hash(batch_code)) % 100000000:08d}",
+        )
+        wholesaler_user_id = wholesaler.id
     batch = Batch(
+        wholesaler_user_id=wholesaler_user_id,
         farm_id=farm_id,
         product_id=product_id,
         batch_code=batch_code,
@@ -724,6 +733,7 @@ def test_29_batch_requires_valid_product(db_session: Session) -> None:
     farm = _create_farm(db_session, user.id)
 
     invalid_batch = Batch(
+        wholesaler_user_id=user.id,
         farm_id=farm.id,
         product_id=999999,
         batch_code="BATCH-NO-PROD",
