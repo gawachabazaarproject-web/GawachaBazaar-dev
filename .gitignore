@@ -64,3 +64,4 @@ logs/
 
 # Local databases / volumes
 postgres_data/
+backend/uv.lock

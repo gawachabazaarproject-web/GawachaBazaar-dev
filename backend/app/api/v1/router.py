@@ -8,12 +8,16 @@ will be registered here as each phase is implemented.
 from fastapi import APIRouter
 
 from app.api.v1.auth import router as auth_router
+from app.api.v1.catalog import router as catalog_router
 from app.schemas.base import PingResponse
 
 api_router = APIRouter()
 
 # Authentication domain routes
 api_router.include_router(auth_router, prefix="/auth", tags=["auth"])
+
+# Catalog domain routes (public browsing + ADMIN-only management)
+api_router.include_router(catalog_router, prefix="/catalog", tags=["catalog"])
 
 
 @api_router.get(

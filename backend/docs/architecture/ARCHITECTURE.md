@@ -302,8 +302,9 @@ database state** (`user_roles JOIN roles`, not JWT claims), whether the authenti
 **any one** of the given role names. No role hierarchy exists — `ADMIN` does not implicitly satisfy
 a requirement for `OPERATIONS`. Unauthenticated → 401 (`AuthenticationError`, unchanged). Authenticated
 but missing every required role → 403 (`AuthorizationError`, generic message, no role enumeration).
-See [PHASE_9_RBAC.md](PHASE_9_RBAC.md) for full detail. **No route currently depends on it yet** — Phase
-9 built the foundation only; no business API exists to protect.
+See [PHASE_9_RBAC.md](PHASE_9_RBAC.md) for full detail. As of Phase 10, `require_roles(ADMIN)` protects
+every catalog management route (`POST`/`PATCH`/`DELETE` under `/api/v1/catalog/...`) — the first real
+end-to-end proof of this foundation. Public `GET` catalog routes remain unauthenticated by design.
 
 ## 12a. Role Initialization (Phase 9)
 
@@ -407,13 +408,17 @@ always add a new one (Phase 8.1 and Phase 9 both followed this).
 
 ## 21. Current Active Development Phase
 
-**Phase 9 — Role Initialization & RBAC — foundation implemented.** Baseline roles are seeded
-(migration `37bbdf459894`), `require_roles` performs real database-backed authorization, `get_current_
-user`/`require_roles` separation is in place, 401 vs 403 behavior is correct, and multiple-role "any
-of" semantics work. **No route yet depends on `require_roles`** — there are no protected business
-endpoints because no business-domain APIs (catalog, farm, inventory, packaging, cart, order, payment,
-delivery) have been built yet. Those are the next phases, each of which should wire its write endpoints
-through `require_roles` as it's built, rather than revisiting authorization itself.
+**Phase 10 — Catalog & Product API — implemented.** The Phase 3 catalog schema
+(`categories`/`products`/`product_variants`/`product_images`/`prices`) now has a real API under
+`/api/v1/catalog`: public active-only browsing (no auth) plus `ADMIN`-only management, via
+`CatalogService` (`app/services/catalog.py`). No schema migration was needed. Full detail:
+[PHASE_10_CATALOG_API.md](../api/PHASE_10_CATALOG_API.md). Still not built: farm, inventory,
+packaging, cart, order, payment, delivery APIs — each should follow this phase's pattern (thin
+router → service returning schema instances directly → `require_roles` for any write endpoint)
+rather than introducing a new one.
+
+Phase 9 (Role Initialization & RBAC) foundation remains as previously documented in §12/§12a — now
+proven end-to-end by Phase 10's catalog management routes.
 
 ## 22. Explicitly Rejected / Out-of-Scope Architectural Ideas
 
