@@ -9,9 +9,13 @@ from sqlalchemy.orm import Session
 from app.core.roles import CUSTOMER
 from app.dependencies.auth import get_current_user, require_roles
 from app.dependencies.database import get_db
+from app.dependencies.payments import get_payment_gateway
 from app.models.user import User
 from app.schemas.order import MAX_PAGE_SIZE, OrderDetailResponse, OrderListResponse
+from app.schemas.payment import PaymentResponse
 from app.services.order import OrderService
+from app.services.payment import PaymentService
+from app.services.payment_gateway import PaymentGateway
 
 router = APIRouter(dependencies=[Depends(require_roles(CUSTOMER))])
 
@@ -37,3 +41,17 @@ def get_order(
     db: Session = Depends(get_db),
 ) -> OrderDetailResponse:
     return OrderService(db).get_order_detail(current_user.id, order_id)
+
+
+@router.get(
+    "/{order_id}/payment",
+    response_model=PaymentResponse,
+    summary="Get the payment for one of the current user's orders",
+)
+def get_order_payment(
+    order_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    gateway: PaymentGateway = Depends(get_payment_gateway),
+) -> PaymentResponse:
+    return PaymentService(db, gateway).get_payment_for_order(current_user.id, order_id)
