@@ -6,19 +6,29 @@ legally become next.
 
 RESERVATION LIFECYCLE
 ======================
-    ACTIVE -> COMMITTED   (payment succeeded / COD accepted before expiry)
-    ACTIVE -> RELEASED    (generic release - kept reusable for a future
-                           cancellation feature; nothing in Phase 15 calls
-                           this automatically)
-    ACTIVE -> EXPIRED     (30-minute payment window elapsed, detected
-                           lazily by whichever operation next touches the
-                           reservation)
+    ACTIVE    -> COMMITTED   (payment succeeded / COD accepted before expiry)
+    ACTIVE    -> RELEASED    (generic release - order cancelled before
+                              confirmation)
+    ACTIVE    -> EXPIRED     (30-minute payment window elapsed, detected
+                              lazily by whichever operation next touches the
+                              reservation)
+    COMMITTED -> RELEASED    (Phase 18: order cancelled AFTER confirmation
+                              but before delivery - the central Phase 18
+                              rule is "cancel any time before delivery is
+                              completed", and a confirmed order's
+                              reservation is COMMITTED, not ACTIVE, so this
+                              is the one deliberate exception to
+                              COMMITTED's prior terminal-ness. See
+                              InventoryReservationService.release_reservation_for_order.)
 
-COMMITTED, RELEASED, and EXPIRED are all terminal - once a reservation
-leaves ACTIVE it never returns. In particular this means a reservation
-that expired can never be resurrected by a late-arriving payment success;
-see InventoryReservationService.commit_reservation_for_order for how that
-invariant is enforced under a row lock.
+RELEASED and EXPIRED are fully terminal (`TERMINAL_RESERVATION_STATUSES`).
+COMMITTED is terminal in every direction except the one Phase 18 edge
+above. In particular this means a reservation that expired can never be
+resurrected by a late-arriving payment success; see
+InventoryReservationService.commit_reservation_for_order for how that
+invariant is enforced under a row lock. Once RELEASED (whichever prior
+state it came from), a reservation never returns - a cancelled order's
+reservation cannot be recommitted.
 """
 
 from dataclasses import dataclass
@@ -34,7 +44,6 @@ class ReservationStatus(StrEnum):
 
 TERMINAL_RESERVATION_STATUSES = frozenset(
     {
-        ReservationStatus.COMMITTED,
         ReservationStatus.RELEASED,
         ReservationStatus.EXPIRED,
     }
@@ -67,7 +76,7 @@ _RESERVATION_TRANSITIONS: dict[ReservationStatus, frozenset[ReservationStatus]] 
             ReservationStatus.EXPIRED,
         }
     ),
-    ReservationStatus.COMMITTED: frozenset(),
+    ReservationStatus.COMMITTED: frozenset({ReservationStatus.RELEASED}),
     ReservationStatus.RELEASED: frozenset(),
     ReservationStatus.EXPIRED: frozenset(),
 }

@@ -7,10 +7,11 @@ project's explicit instruction for this situation, this module:
 
 1. Defines a small `PaymentGateway` protocol our business logic depends on
    (app/services/payment.py never imports PNB-specific types).
-2. Implements `PNBGateway.initiate_payment` / `query_status` as
-   `NotImplementedError` - we do not know PNB's actual request/response
-   shape, authentication scheme, or endpoint URLs, and inventing them would
-   misrepresent this as a working integration.
+2. Implements `PNBGateway.initiate_payment` / `query_status` /
+   `refund_payment` (Phase 18) as `NotImplementedError` - we do not know
+   PNB's actual request/response shape, authentication scheme, or endpoint
+   URLs, and inventing them would misrepresent this as a working
+   integration.
 3. Implements `PNBGateway.verify_webhook_signature` / `parse_webhook_event`
    using a clearly-labeled PLACEHOLDER scheme (HMAC-SHA256 over the raw
    body), so the webhook safety pipeline (dedup, ordering, concurrency -
@@ -85,6 +86,14 @@ class GatewayInitiateResult:
 
 
 @dataclass(frozen=True)
+class GatewayRefundResult:
+    gateway_refund_id: str | None
+    status: TransactionStatus
+    raw_response: dict | None = None
+    failure_reason: str | None = None
+
+
+@dataclass(frozen=True)
 class GatewayStatusResult:
     gateway_order_id: str
     gateway_transaction_id: str | None
@@ -129,6 +138,16 @@ class PaymentGateway(Protocol):
         gateway_order_id: str,
         gateway_transaction_id: str | None,
     ) -> GatewayStatusResult: ...
+
+    def refund_payment(
+        self,
+        *,
+        gateway_order_id: str,
+        gateway_transaction_id: str | None,
+        amount: Decimal,
+        currency: str,
+        idempotency_key: str,
+    ) -> GatewayRefundResult: ...
 
     def verify_webhook_signature(
         self, *, raw_body: bytes, headers: Mapping[str, str]
@@ -191,6 +210,24 @@ class PNBGateway:
     ) -> GatewayStatusResult:
         raise NotImplementedError(
             _NOT_IMPLEMENTED_MESSAGE.format(operation="query_status")
+        )
+
+    def refund_payment(
+        self,
+        *,
+        gateway_order_id: str,
+        gateway_transaction_id: str | None,
+        amount: Decimal,
+        currency: str,
+        idempotency_key: str,
+    ) -> GatewayRefundResult:
+        """Phase 18: no PNB refund API specification exists in this
+        repository either, so this follows initiate_payment/query_status's
+        own precedent exactly - a clearly labeled structural placeholder,
+        not a working refund integration. See the module docstring.
+        """
+        raise NotImplementedError(
+            _NOT_IMPLEMENTED_MESSAGE.format(operation="refund_payment")
         )
 
     def verify_webhook_signature(
