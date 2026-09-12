@@ -968,7 +968,11 @@ def test_42_unwanted_tables_do_not_exist(test_engine) -> None:
         "promotions",
         "reviews",
         "delivery",
-        "suppliers",
+        # "suppliers" removed from this blocklist in Phase 17 - it was a
+        # premature/speculative table as of Phase 3 and is now a real,
+        # deliberately-built independent business entity (see
+        # ARCHITECTURE.md §21c). Everything else here remains genuinely
+        # out of scope.
         "farmers",
         "procurement",
         "marketplace_vendors",

@@ -4,10 +4,15 @@ Same pure-logic pattern as payment_state.py / reservation_state.py. A
 fulfillment moves through a single linear chain from order confirmation to
 physical delivery:
 
-    PENDING -> PICKING -> PACKED -> READY_FOR_DELIVERY -> OUT_FOR_DELIVERY -> DELIVERED
+    PENDING -> PICKING -> PACKED -> READY_FOR_DELIVERY -> ASSIGNED
+             -> OUT_FOR_DELIVERY -> DELIVERED
 
 DELIVERED is terminal and is the ONLY status that triggers physical
-inventory consumption (see InventoryFulfillmentService.confirm_delivery).
+inventory consumption (see FulfillmentService.confirm_delivery). ASSIGNED
+(Phase 16) additionally requires a delivery_partner_user_id to be set in
+the same transaction - see FulfillmentService.assign_delivery_partner;
+this module only enforces the status ordering, not that side effect.
+
 There is no branch, no skip-ahead, and no reverse transition in this
 phase - substitutions, partial fulfillment, and delivery failure/return
 flows are explicitly out of scope.
@@ -22,6 +27,7 @@ class FulfillmentStatus(StrEnum):
     PICKING = "PICKING"
     PACKED = "PACKED"
     READY_FOR_DELIVERY = "READY_FOR_DELIVERY"
+    ASSIGNED = "ASSIGNED"
     OUT_FOR_DELIVERY = "OUT_FOR_DELIVERY"
     DELIVERED = "DELIVERED"
 
@@ -31,6 +37,7 @@ _FULFILLMENT_ORDER: list[FulfillmentStatus] = [
     FulfillmentStatus.PICKING,
     FulfillmentStatus.PACKED,
     FulfillmentStatus.READY_FOR_DELIVERY,
+    FulfillmentStatus.ASSIGNED,
     FulfillmentStatus.OUT_FOR_DELIVERY,
     FulfillmentStatus.DELIVERED,
 ]

@@ -602,8 +602,15 @@ def test_18_no_unrelated_tables_changed(db_session: Session) -> None:
     assert actual_tables == expected_tables
 
 
-# 19. Database schema contains the new wholesaler_user_id column
+# 19. Database schema contains the wholesaler_user_id column
 def test_19_schema_contains_wholesaler_user_id(db_session: Session) -> None:
+    """Phase 17 relaxed this column from NOT NULL to nullable (additive,
+    safe - every pre-existing row already has a value) so a batch can be
+    sourced from a `Supplier` record alone, with no `User`/wholesaler
+    involved at all. `ck_batches_supplier_or_wholesaler` now guarantees at
+    least one of {wholesaler_user_id, supplier_id} is always set instead.
+    See ARCHITECTURE.md §21c.
+    """
     row = db_session.execute(
         text("""
         SELECT data_type, is_nullable
@@ -613,7 +620,7 @@ def test_19_schema_contains_wholesaler_user_id(db_session: Session) -> None:
     ).fetchone()
     assert row is not None
     assert row[0] == "bigint"
-    assert row[1] == "NO"
+    assert row[1] == "YES"
 
 
 # 20. Index exists on wholesaler_user_id

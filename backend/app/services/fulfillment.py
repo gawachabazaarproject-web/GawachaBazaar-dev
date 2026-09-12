@@ -1,4 +1,5 @@
-"""Fulfillment domain service: status progression and delivery confirmation.
+"""Fulfillment domain service: status progression, delivery-partner
+assignment, and delivery confirmation.
 
 TRANSACTION DESIGN: same autobegin/no-explicit-begin rule as every other
 service in this codebase. `confirm_delivery` is the one large atomic
@@ -9,7 +10,26 @@ LOCK ORDERING: Order -> Fulfillment -> Reservation -> InventoryLots,
 consistent with the order documented in
 app/services/inventory_reservation.py (Order is always locked before any
 Fulfillment/Reservation/Lot row it owns, and lots are always locked in a
-single deterministic id-ASC order).
+single deterministic id-ASC order). `assign_delivery_partner`,
+`mark_out_for_delivery`, and `update_status` only ever touch a single
+Fulfillment row, so there is no cross-row ordering concern for them.
+
+AUTHORIZATION MODEL (Phase 16): the router grants route-level access via
+`require_roles`, but two further checks live here in the service, since
+they depend on data (not just role membership):
+  - "Privileged" staff (ADMIN, HUB_STAFF, OPERATIONS) see/manage every
+    fulfillment. A caller holding ONLY the DELIVERY_PARTNER role is
+    scoped to fulfillments actually assigned to them (`get_fulfillment_or_404`,
+    `list_fulfillments`) - a 404, not a 403, on someone else's fulfillment,
+    matching this codebase's established "don't disclose existence"
+    convention (see PaymentService._get_owned_payment).
+  - Delivery-partner-gated mutations (`mark_out_for_delivery`,
+    `confirm_delivery`) require the acting user to BE the assigned
+    delivery_partner_user_id, with ADMIN as the only override - HUB_STAFF/
+    OPERATIONS are warehouse roles and are deliberately excluded from
+    these two delivery-in-transit actions, mirroring how DELIVERY_PARTNER
+    is excluded from the warehouse-side transitions (`update_status`,
+    `assign_delivery_partner`).
 """
 
 from datetime import UTC, datetime
@@ -18,13 +38,21 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.logging import logger
-from app.exceptions.base import ConflictError, NotFoundError
+from app.core.roles import ADMIN, DELIVERY_PARTNER, HUB_STAFF, OPERATIONS
+from app.exceptions.base import AuthorizationError, ConflictError, NotFoundError
 from app.models.fulfillment import Fulfillment
 from app.models.inventory_lot import InventoryLot
 from app.models.inventory_reservation import InventoryReservation
 from app.models.inventory_reservation_item import InventoryReservationItem
 from app.models.order import Order
-from app.schemas.fulfillment import FulfillmentResponse
+from app.models.role import Role
+from app.models.user import User
+from app.models.user_role import UserRole
+from app.schemas.fulfillment import (
+    CustomerFulfillmentResponse,
+    FulfillmentListResponse,
+    FulfillmentResponse,
+)
 from app.services.fulfillment_state import (
     FulfillmentStatus,
     IllegalFulfillmentTransitionError,
@@ -35,6 +63,7 @@ from app.services.reservation_state import ReservationStatus
 
 _DELIVERY_MOVEMENT_TYPE = "DISPATCH"
 _DELIVERY_REFERENCE_TYPE = "ORDER"
+_PRIVILEGED_ROLES = (ADMIN, HUB_STAFF, OPERATIONS)
 
 
 class FulfillmentService:
@@ -42,10 +71,45 @@ class FulfillmentService:
         self.db = db
 
     # ------------------------------------------------------------------
+    # Role/ownership helpers
+    # ------------------------------------------------------------------
+
+    def _has_any_role(self, user_id: int, *role_names: str) -> bool:
+        return (
+            self.db.query(UserRole)
+            .join(Role, UserRole.role_id == Role.id)
+            .filter(UserRole.user_id == user_id, Role.name.in_(role_names))
+            .first()
+            is not None
+        )
+
+    def _is_privileged(self, user_id: int) -> bool:
+        return self._has_any_role(user_id, *_PRIVILEGED_ROLES)
+
+    def _assert_can_act_as_delivery_partner(
+        self, fulfillment: Fulfillment, current_user: User
+    ) -> None:
+        """Only the assigned delivery partner, or ADMIN as an
+        administrative override, may perform delivery-in-transit actions.
+        HUB_STAFF/OPERATIONS are warehouse roles and are deliberately
+        excluded here even though they can perform the earlier
+        picking/packing/ready/assign steps.
+        """
+        if fulfillment.delivery_partner_user_id == current_user.id:
+            return
+        if self._has_any_role(current_user.id, ADMIN):
+            return
+        raise AuthorizationError(
+            "You are not the delivery partner assigned to this fulfillment."
+        )
+
+    # ------------------------------------------------------------------
     # Reads
     # ------------------------------------------------------------------
 
-    def get_fulfillment_or_404(self, fulfillment_id: int) -> Fulfillment:
+    def get_fulfillment_or_404(
+        self, fulfillment_id: int, current_user: User
+    ) -> FulfillmentResponse:
         fulfillment = (
             self.db.query(Fulfillment)
             .filter(Fulfillment.id == fulfillment_id)
@@ -53,21 +117,95 @@ class FulfillmentService:
         )
         if fulfillment is None:
             raise NotFoundError("Fulfillment not found.")
-        return fulfillment
+        if (
+            fulfillment.delivery_partner_user_id != current_user.id
+            and not self._is_privileged(current_user.id)
+        ):
+            # Same "don't disclose existence to a non-owner" convention as
+            # PaymentService._get_owned_payment - a DELIVERY_PARTNER who
+            # isn't assigned gets the identical 404 a nonexistent id would.
+            raise NotFoundError("Fulfillment not found.")
+        return FulfillmentResponse.model_validate(fulfillment)
+
+    def list_fulfillments(
+        self,
+        current_user: User,
+        *,
+        status: str | None,
+        delivery_partner_user_id: int | None,
+        page: int,
+        page_size: int,
+    ) -> FulfillmentListResponse:
+        query = self.db.query(Fulfillment)
+        if status is not None:
+            query = query.filter(Fulfillment.status == status)
+
+        if self._is_privileged(current_user.id):
+            if delivery_partner_user_id is not None:
+                query = query.filter(
+                    Fulfillment.delivery_partner_user_id == delivery_partner_user_id
+                )
+        else:
+            # A non-privileged caller (DELIVERY_PARTNER) is always scoped
+            # to their own assignments - any client-supplied
+            # delivery_partner_user_id filter is ignored rather than
+            # honored, so one partner can never enumerate another's load.
+            query = query.filter(
+                Fulfillment.delivery_partner_user_id == current_user.id
+            )
+
+        total = query.count()
+        items = (
+            query.order_by(Fulfillment.id.desc())
+            .offset((page - 1) * page_size)
+            .limit(page_size)
+            .all()
+        )
+        return FulfillmentListResponse(
+            items=[FulfillmentResponse.model_validate(f) for f in items],
+            page=page,
+            page_size=page_size,
+            total=total,
+        )
+
+    def get_fulfillment_response_for_order(self, order_id: int) -> FulfillmentResponse:
+        """Ops-facing. Caller (route) is responsible for any ownership
+        check beyond role - this mirrors PaymentService.get_payment_for_order.
+        """
+        fulfillment = (
+            self.db.query(Fulfillment).filter(Fulfillment.order_id == order_id).first()
+        )
+        if fulfillment is None:
+            raise NotFoundError("Fulfillment not found for this order.")
+        return FulfillmentResponse.model_validate(fulfillment)
+
+    def get_customer_fulfillment_response_for_order(
+        self, order_id: int
+    ) -> CustomerFulfillmentResponse:
+        fulfillment = (
+            self.db.query(Fulfillment).filter(Fulfillment.order_id == order_id).first()
+        )
+        if fulfillment is None:
+            raise NotFoundError("Fulfillment not found for this order.")
+        return CustomerFulfillmentResponse.model_validate(fulfillment)
 
     # ------------------------------------------------------------------
-    # Status progression (PENDING -> ... -> OUT_FOR_DELIVERY)
+    # Status progression (PENDING -> PICKING -> PACKED -> READY_FOR_DELIVERY)
     # ------------------------------------------------------------------
 
     def update_status(self, fulfillment_id: int, new_status: str) -> FulfillmentResponse:
-        """Advances the fulfillment exactly one step in the fixed chain.
-        DELIVERED is rejected here - it is only reachable via
-        `confirm_delivery`, which is the only path that consumes physical
-        inventory and confirms the order.
+        """Advances the fulfillment exactly one warehouse step. ASSIGNED,
+        OUT_FOR_DELIVERY, and DELIVERED are rejected here - each has its
+        own dedicated endpoint with its own extra validation (assignment
+        target, delivery-partner ownership, physical consumption).
         """
-        if new_status == FulfillmentStatus.DELIVERED:
+        if new_status in (
+            FulfillmentStatus.ASSIGNED,
+            FulfillmentStatus.OUT_FOR_DELIVERY,
+            FulfillmentStatus.DELIVERED,
+        ):
             raise ConflictError(
-                "Use POST /fulfillments/{id}/deliver to mark a fulfillment DELIVERED."
+                f"Use the dedicated endpoint to move a fulfillment to {new_status}."
             )
 
         fulfillment = self._lock_fulfillment(fulfillment_id)
@@ -99,19 +237,117 @@ class FulfillmentService:
         return FulfillmentResponse.model_validate(fulfillment)
 
     # ------------------------------------------------------------------
+    # Delivery partner assignment (READY_FOR_DELIVERY -> ASSIGNED)
+    # ------------------------------------------------------------------
+
+    def assign_delivery_partner(
+        self, fulfillment_id: int, delivery_partner_user_id: int
+    ) -> FulfillmentResponse:
+        """Lock fulfillment -> verify READY_FOR_DELIVERY -> ASSIGNED is
+        legal -> verify the target user exists and holds DELIVERY_PARTNER
+        -> set delivery_partner_user_id + assigned_at -> transition ->
+        commit. Single-row transaction (no Order/Reservation touched), so
+        there is no lock-ordering concern beyond the fulfillment row
+        itself.
+
+        Deliberately does NOT use `transition_fulfillment_status`'s
+        generic same-state-is-a-no-op rule here: that rule exists so a
+        retried warehouse action (e.g. PICKING -> PICKING) is a harmless
+        idempotent no-op, but assignment is not idempotent in that sense
+        - a second call could name a DIFFERENT delivery_partner_user_id,
+        and treating current==target(ASSIGNED) as a no-op would silently
+        let it overwrite the first assignment instead of being rejected.
+        So the only legal current status here is READY_FOR_DELIVERY,
+        checked explicitly and unconditionally.
+        """
+        fulfillment = self._lock_fulfillment(fulfillment_id)
+
+        if FulfillmentStatus(fulfillment.status) != FulfillmentStatus.READY_FOR_DELIVERY:
+            raise ConflictError(
+                f"Cannot assign a delivery partner from status {fulfillment.status}."
+            )
+
+        target_user = (
+            self.db.query(User).filter(User.id == delivery_partner_user_id).first()
+        )
+        if target_user is None:
+            raise NotFoundError("Delivery partner user not found.")
+        if not self._has_any_role(target_user.id, DELIVERY_PARTNER):
+            raise ConflictError(
+                "The target user does not hold the DELIVERY_PARTNER role."
+            )
+
+        now = datetime.now(UTC)
+        fulfillment.delivery_partner_user_id = target_user.id
+        fulfillment.assigned_at = now
+        fulfillment.status = FulfillmentStatus.ASSIGNED
+
+        try:
+            self.db.commit()
+        except IntegrityError as exc:
+            self.db.rollback()
+            raise ConflictError(
+                "Could not assign delivery partner due to a conflicting update."
+            ) from exc
+        self.db.refresh(fulfillment)
+
+        logger.info(
+            "FULFILLMENT_ASSIGNED: fulfillment_id=%s delivery_partner_user_id=%s",
+            fulfillment.id, target_user.id,
+        )
+        return FulfillmentResponse.model_validate(fulfillment)
+
+    # ------------------------------------------------------------------
+    # Out for delivery (ASSIGNED -> OUT_FOR_DELIVERY, partner-owned)
+    # ------------------------------------------------------------------
+
+    def mark_out_for_delivery(
+        self, fulfillment_id: int, current_user: User
+    ) -> FulfillmentResponse:
+        fulfillment = self._lock_fulfillment(fulfillment_id)
+        self._assert_can_act_as_delivery_partner(fulfillment, current_user)
+
+        try:
+            result = transition_fulfillment_status(
+                FulfillmentStatus(fulfillment.status), FulfillmentStatus.OUT_FOR_DELIVERY
+            )
+        except IllegalFulfillmentTransitionError as exc:
+            raise ConflictError(
+                f"Cannot mark OUT_FOR_DELIVERY from status {exc.current.value}."
+            ) from exc
+
+        if result.applied:
+            fulfillment.status = FulfillmentStatus.OUT_FOR_DELIVERY
+            logger.info(
+                "FULFILLMENT_OUT_FOR_DELIVERY: fulfillment_id=%s delivery_partner_user_id=%s",
+                fulfillment.id, fulfillment.delivery_partner_user_id,
+            )
+
+        try:
+            self.db.commit()
+        except IntegrityError as exc:
+            self.db.rollback()
+            raise ConflictError(
+                "Could not update fulfillment due to a conflicting update."
+            ) from exc
+        self.db.refresh(fulfillment)
+        return FulfillmentResponse.model_validate(fulfillment)
+
+    # ------------------------------------------------------------------
     # Delivery confirmation (the only physical-consumption path)
     # ------------------------------------------------------------------
 
     def confirm_delivery(
-        self, fulfillment_id: int, performed_by_user_id: int
+        self, fulfillment_id: int, current_user: User
     ) -> FulfillmentResponse:
-        """Atomically: lock order -> lock fulfillment -> verify
-        OUT_FOR_DELIVERY (idempotent no-op if already DELIVERED) -> lock
-        reservation -> verify COMMITTED -> read its allocation items ->
-        lock every allocated lot in a fixed id-ASC order -> decrease both
-        `quantity` (via the existing DISPATCH stock-movement path) and
-        `reserved_quantity` on each -> mark fulfillment DELIVERED -> mark
-        order COMPLETED -> commit once.
+        """Atomically: lock order -> lock fulfillment -> verify ownership
+        (assigned delivery partner, or ADMIN override) -> verify
+        OUT_FOR_DELIVERY (idempotent no-op if already DELIVERED) -> verify
+        order CONFIRMED -> lock reservation -> verify COMMITTED -> read
+        its allocation items -> lock every allocated lot in a fixed
+        id-ASC order -> decrease both `quantity` (via the existing
+        DISPATCH stock-movement path) and `reserved_quantity` on each ->
+        mark fulfillment DELIVERED -> mark order COMPLETED -> commit once.
 
         No partial fulfillment: if any lot can no longer support its
         allocated quantity (should be unreachable given the reservation
@@ -150,6 +386,8 @@ class FulfillmentService:
             .first()
         )
 
+        self._assert_can_act_as_delivery_partner(fulfillment, current_user)
+
         if FulfillmentStatus(fulfillment.status) == FulfillmentStatus.DELIVERED:
             self.db.commit()  # idempotent: nothing left to do, release locks
             return FulfillmentResponse.model_validate(fulfillment)
@@ -162,6 +400,11 @@ class FulfillmentService:
             raise ConflictError(
                 f"Cannot mark fulfillment DELIVERED from status {exc.current.value}."
             ) from exc
+
+        if order.status != "CONFIRMED":
+            raise ConflictError(
+                f"Cannot confirm delivery: order status is {order.status}, not CONFIRMED."
+            )
 
         reservation = (
             self.db.query(InventoryReservation)
@@ -203,7 +446,7 @@ class FulfillmentService:
                 lot,
                 _DELIVERY_MOVEMENT_TYPE,
                 item.quantity,
-                performed_by_user_id,
+                current_user.id,
                 reference_type=_DELIVERY_REFERENCE_TYPE,
                 reference_id=order.id,
                 occurred_at=datetime.now(UTC),
@@ -225,8 +468,9 @@ class FulfillmentService:
         self.db.refresh(fulfillment)
 
         logger.info(
-            "FULFILLMENT_DELIVERED: fulfillment_id=%s order_id=%s lots_consumed=%s",
-            fulfillment.id, order.id, len(items),
+            "FULFILLMENT_DELIVERED: fulfillment_id=%s order_id=%s lots_consumed=%s "
+            "performed_by_user_id=%s",
+            fulfillment.id, order.id, len(items), current_user.id,
         )
         return FulfillmentResponse.model_validate(fulfillment)
 

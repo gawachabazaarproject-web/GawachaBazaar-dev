@@ -165,21 +165,27 @@ zero autogenerate drift (`alembic check`) as of this phase.
 | 7 — Payments | `payments`, `payment_transactions` | One `payments` row per order (unique `order_id`). Multiple `payment_transactions` per payment (retries/attempts), idempotency key unique. Methods: `UPI`, `COD` only. No gateway integration implemented. No card/CVV/UPI-PIN storage anywhere. |
 | 8 — Production Authentication | `auth_sessions` | See §8 below. |
 
-## 8. Current Database Table Inventory (31 tables, as of Phase 15)
+## 8. Current Database Table Inventory (40 tables, as of Phase 17)
 
 `roles`, `users`, `user_roles`, `addresses`, `auth_sessions`, `farms`, `batches`, `quality_checks`,
 `categories`, `products`, `product_variants`, `product_images`, `prices`, `inventory_locations`,
 `inventory_lots`, `stock_movements`, `packaging_operations`, `packaging_inputs`,
 `packaging_outputs`, `carts`, `cart_items`, `orders`, `order_items`, `order_addresses`, `payments`,
 `payment_transactions`, `payment_webhook_events`, `inventory_reservations`,
-`inventory_reservation_items`, `fulfillments`.
+`inventory_reservation_items`, `fulfillments`, `suppliers`, `supplier_products`,
+`supplier_evaluations`, `bulk_customer_profiles`, `bulk_order_requests`,
+`bulk_order_request_items`, `quotes`, `quote_versions`, `quote_items`.
 
-No `wholesalers` table exists or is planned (§10). No `warehouses`, `suppliers`, `wishlist`,
-`promotions`, `coupons`, `reviews`, `notifications`, or `audit_logs` tables exist — any such concept
-from older diagrams is **not** part of the current schema and must not be assumed.
-`fulfillments` **is** now part of the schema (Phase 15, §21a) — the "not built" list in §22 has been
-updated to reflect this; it is intentionally coarse (order-level status only), not a full logistics
-system (no delivery partner assignment, routing, or proof-of-delivery).
+No `wholesalers` table exists or is planned (§10). `suppliers` **is** now part of the schema
+(Phase 17, §21c) - it is a deliberately distinct concept from the old "wholesaler" idea; see §10
+and §21c for why both `batches.wholesaler_user_id` and `batches.supplier_id` now coexist. No
+`warehouses`, `wishlist`, `promotions`, `coupons`, `reviews`, `notifications`, or `audit_logs`
+tables exist — any such concept from older diagrams is **not** part of the current schema and must
+not be assumed.
+`fulfillments` **is** now part of the schema (Phase 15, §21a; delivery-partner assignment added in
+Phase 16, §21b) — the "not built" list in §22 has been updated to reflect this; it is intentionally
+coarse (order-level status + basic assignment only), not a full logistics system (no routing, live
+tracking, or proof-of-delivery).
 
 ## 9. Discrepancies Found vs. Provided Project Context
 
@@ -268,16 +274,30 @@ running dev database (`gawachabazaar`) and the full relevant test suite. Finding
 No correction to the migration, models, or ORM relationships was found necessary. No new migration
 was created.
 
-## 10. Why There Is No `wholesalers` Table
+## 10. Why There Is No `wholesalers` Table (and Why `suppliers` Is Different)
 
 Per [WHOLESALER_SUPPLY_MODEL.md](WHOLESALER_SUPPLY_MODEL.md) §7, all actors are unified under
 `users` + `user_roles` (M:N to `roles`). A wholesaler is simply a `User` whose `user_roles` include
 a `WHOLESALER` role. `batches.wholesaler_user_id → users.id (ON DELETE RESTRICT)` is the sole FK
 representing supply origin at the database level; **role membership is an application-layer
 concern**, not a DB constraint (deliberately — no cross-table CHECK/trigger enforcing role
-membership, to keep the DB layer portable and fast). Do not create a `wholesalers` profile table
-unless/until dedicated B2B attributes (GSTIN, APMC license, bank mandate, etc.) are explicitly
-requested.
+membership, to keep the DB layer portable and fast). This section's original guidance ("do not
+create a `wholesalers` profile table") still holds - no such table exists.
+
+**Phase 17 correction**: "wholesaler" turned out to conflate two different business concepts. A
+**Supplier** (Phase 17) is a business GawachaBazaar buys FROM - it does **not** need a login and is
+therefore deliberately **not** a `User` (unlike a wholesaler, which always was one). `suppliers` is
+an independent business-record table, not a `wholesalers` profile table wrapping a `User` - the
+distinction this section originally warned against (inventing user-wrapper tables) does not apply,
+because a `Supplier` has no associated `User` to wrap. `batches.supplier_id` and
+`batches.wholesaler_user_id` now coexist on the same row (additive migration, Phase 17) - see §21c
+for the full reasoning and the CHECK constraint that guarantees every batch still has at least one
+traceable origin. Fully retiring `wholesaler_user_id` is an explicit, undone future stage.
+
+An entirely separate Phase 17 concept, **Bulk Customer**, is the opposite direction (buys FROM
+GawachaBazaar in large quantities) and stays a `User` with the existing `CUSTOMER` role plus an
+optional `BulkCustomerProfile` - no new role, no new auth flow. Supplier ≠ Bulk Customer ≠ Customer;
+see §21c.
 
 ## 11. Authentication Architecture (Phase 8 — implemented)
 
@@ -513,16 +533,18 @@ webhook endpoint, which needs the raw request body — the sync DB work is expli
 `starlette.concurrency.run_in_threadpool` so it doesn't block the event loop, a first in this
 codebase and the only async route so far).
 
-Phase 14 background above is now historical — see §21a for the current phase.
+Phase 14/15 background above is now historical — see §21b for the current phase.
 
-Still not built: farm APIs, full delivery logistics (partner assignment, routing, live tracking,
-proof-of-delivery). Each should follow the established pattern (thin router → service returning
-schema instances directly → `require_roles` for any protected endpoint, reuse rather than duplicate
-sibling-domain business logic where safe) rather than introducing a new one.
+Still not built: farm APIs, advanced delivery logistics (routing, live tracking, ETA prediction,
+geofencing/delivery zones, proof-of-delivery/signature/OTP capture). Basic delivery-partner
+assignment IS built (Phase 16, §21b). Each new domain should follow the established pattern (thin
+router → service returning schema instances directly → `require_roles` for any protected endpoint,
+reuse rather than duplicate sibling-domain business logic where safe) rather than introducing a new
+one.
 
 ## 21a. Inventory Reservation & Order Expiry & Fulfillment Foundation (Phase 15)
 
-**Current active phase.** Adds inventory reservation (hold at checkout, before payment),
+Adds inventory reservation (hold at checkout, before payment),
 a 30-minute order-level payment window, and a minimal order-level fulfillment state machine ending
 in physical inventory consumption at delivery confirmation. New migration
 `2603b7a0587e_inventory_reservation_and_fulfillment` (additive: `inventory_lots.reserved_quantity`
@@ -599,6 +621,215 @@ two customers racing the last unit of stock, concurrent multi-lot FIFO allocatio
 manual expiry (double-release-safe), payment-success-vs-expiry (exactly one of
 COMMITTED/EXPIRED wins), concurrent delivery confirmation (no double physical consumption), and
 concurrent checkout across customers for shared limited inventory (no oversell).
+
+## 21b. Fulfillment & Delivery Operations (Phase 16)
+
+Extends Phase 15's order-level `Fulfillment` with a delivery-partner
+assignment step and full RBAC-scoped delivery-in-transit actions. New migration
+`2c63b696c267_fulfillment_delivery_assignment` (additive: `fulfillments.delivery_partner_user_id`,
+`fulfillments.inventory_location_id`, `fulfillments.assigned_at`, `ck_fulfillments_status` widened
+to add `ASSIGNED`). Full detail:
+[PHASE_16_FULFILLMENT_DELIVERY_API.md](../api/PHASE_16_FULFILLMENT_DELIVERY_API.md).
+
+**Extended state machine**:
+
+```
+PENDING → PICKING → PACKED → READY_FOR_DELIVERY → ASSIGNED → OUT_FOR_DELIVERY → DELIVERED
+```
+
+Only DELIVERED consumes physical inventory - picking, packing, staging, assignment, and dispatch
+are all pure status bookkeeping. `app/services/fulfillment_state.py`'s generic linear-chain
+transition logic (unchanged since Phase 15) picked up the new `ASSIGNED` step automatically by
+inserting one entry into its ordered status list - no transition-matrix rewrite was needed.
+
+**Delivery partner = User + role, not a new table**: identical precedent to Wholesaler
+(Phase 8.1). `fulfillments.delivery_partner_user_id` is a nullable FK to `users.id`; assignment
+validates the target holds the `DELIVERY_PARTNER` role via the same `user_roles JOIN roles` pattern
+`require_roles` itself uses - there is no `delivery_partners` profile table and none is planned
+unless dedicated attributes are ever requested.
+
+**A real architectural conflict, resolved**: the spec's mental model was "one fulfillment ↔ one
+inventory location," but Phase 15 deliberately pools FIFO allocation across ALL locations for a
+variant (no location-selection concept exists anywhere in this codebase). A single reservation can
+therefore legitimately span multiple locations. Smallest compatible fix:
+`fulfillments.inventory_location_id` is nullable and populated by
+`InventoryReservationService._ensure_fulfillment` only when every lot the reservation actually
+allocated from shares one location; a genuinely multi-location allocation leaves it `NULL` rather
+than recording a misleading single location. No location-selection convention was invented.
+
+**Assignment is not a same-state no-op**: `FulfillmentService.assign_delivery_partner` deliberately
+does NOT reuse `transition_fulfillment_status`'s generic "current == target is a harmless no-op"
+rule the way the plain `/status` progression endpoint does. A second assignment call can name a
+*different* `delivery_partner_user_id` than the first - treating ASSIGNED→ASSIGNED as an idempotent
+no-op would silently let it overwrite the original assignment. Assignment instead requires the
+fulfillment to be in READY_FOR_DELIVERY, unconditionally, checked explicitly before touching
+anything else - a real bug caught by `test_16_cannot_reassign_already_assigned_fulfillment` during
+this phase's own test run (the first implementation let a second assignment silently win).
+
+**Delivery-partner ownership** (§29 of the phase spec) is a data check, not a role check, so it
+lives in the service, not in `require_roles`: `FulfillmentService._assert_can_act_as_delivery_partner`
+requires the acting user to BE `fulfillment.delivery_partner_user_id`, with `ADMIN` as the sole
+override. `HUB_STAFF`/`OPERATIONS` are deliberately excluded from `/out-for-delivery` and `/deliver`
+even though they can perform every earlier warehouse step (`/status`, `/assign`) - warehouse
+staff and delivery-in-transit are treated as distinct operational roles. A `DELIVERY_PARTNER` who
+is not the assigned partner gets the same "don't disclose existence" 404 on `GET /fulfillments/{id}`
+that `PaymentService._get_owned_payment` already established for cross-user resource access,
+consistent with 403 only where existence is already implied (mutating a fulfillment id the caller
+just tried to act on).
+
+**Lock ordering** (extends §21a's convention): `Order → Fulfillment → Reservation →
+InventoryLots` for delivery confirmation - unchanged from Phase 15, since `confirm_delivery`'s
+logic is otherwise the same transaction. The new `assign_delivery_partner`, `mark_out_for_delivery`,
+and the plain `/status` progression touch only the single `Fulfillment` row, so they carry no
+cross-row lock-ordering concern. The Phase 14 stale-identity-map gotcha (§21) did not recur in this
+phase's new code - `assign_delivery_partner`/`mark_out_for_delivery` each lock their row as the
+first read in the request, matching the safe pattern.
+
+**Concurrency-tested** (real threads against real PostgreSQL row locks,
+`tests/test_phase_16_fulfillment_delivery.py`): two dispatchers racing assignment of two different
+partners to the same fulfillment (exactly one wins), duplicate concurrent delivery confirmation
+from the same partner (idempotent, no double consumption), a legal transition racing an
+always-illegal one (deterministic final state), delivery racing a concurrent reassignment attempt
+on the same row (safe cross-endpoint serialization), and delivery racing an ops attempt to expire
+the (already-COMMITTED, therefore un-expirable) reservation.
+
+## 21c. Supplier Management + Bulk & Custom Commerce (Phase 17)
+
+**Current active phase.** Introduces two independent business concepts that Phase 8.1's
+"wholesaler" had conflated, and a request→quote→order pipeline for large/custom purchases that
+deliberately reuses every existing Order/Payment/Reservation/Fulfillment mechanism rather than
+building a parallel one. New migration `c683dfa20681_supplier_management_and_bulk_commerce`
+(additive only). Full detail:
+[PHASE_17_SUPPLIER_BULK_COMMERCE_API.md](../api/PHASE_17_SUPPLIER_BULK_COMMERCE_API.md).
+
+**SUPPLIER ≠ BULK CUSTOMER ≠ CUSTOMER** (spec's own framing, preserved exactly):
+- **Supplier**: a business GawachaBazaar buys FROM. New `suppliers` table - deliberately **not** a
+  `User` (no login, no `user_id` anywhere on it), unlike every prior actor in this codebase. Staff
+  (ADMIN/HUB_STAFF/OPERATIONS) maintain supplier records and `supplier_products` links; only ADMIN
+  records `supplier_evaluations` (append-only, six 0-5 dimensions - never a single mutable "current
+  score" column, mirroring `stock_movements`/`payment_transactions`). Ratings are never exposed to
+  customers.
+- **Bulk Customer**: a `User` with the existing `CUSTOMER` role plus an optional
+  `BulkCustomerProfile` - no new role, no new auth flow, identical precedent to how the retail
+  customer already works.
+
+**The Batch/Wholesaler migration conflict, resolved additively (stage 1 of a documented multi-stage
+plan)**: `batches.wholesaler_user_id` (Phase 8.1, `NOT NULL`) is referenced by 8+ test files across
+Phases 2-16 and has zero live route touching it beyond the FK itself (there is, and never was, a
+batch-creation API - batches are only ever created directly via the ORM in tests and, going
+forward, would need one). Rather than rename or drop it, Phase 17 adds nullable
+`batches.supplier_id` alongside it, relaxes `wholesaler_user_id` to nullable (safe - every existing
+row already has a value, so nothing changes for any of those 8+ fixtures), and adds
+`ck_batches_supplier_or_wholesaler` (at least one of the two must be set) so no batch ever loses a
+traceable origin. Fully deprecating `wholesaler_user_id` remains an explicit, undone future stage.
+Batch also gained `purchase_price`/`purchase_currency`/`received_date`/`receiving_reference`
+(all nullable) - the smallest fix for "what did we pay, when did we receive it," extending Batch
+directly rather than a parallel `supplier_purchases` table that could drift from the same physical
+receiving event Batch already represents.
+
+**Supplier purchase price ≠ customer selling price ≠ bulk quote price**: three genuinely different
+numbers, stored in three different places on purpose - `batches.purchase_price` (what GawachaBazaar
+paid a supplier for one physical batch), `prices` (existing Phase 3 customer-facing catalog price,
+untouched), and `quote_items.unit_price` (a negotiated price for one bulk request, scoped to one
+quote version). None of the three tables was reused to store another's concept.
+
+**Core rule for bulk/custom commerce**: a `BulkOrderRequest` is never an `Order`. The pipeline is
+```
+REQUESTED → UNDER_REVIEW → QUOTED → CUSTOMER_ACCEPTED → CONVERTED_TO_ORDER
+```
+(terminal alternatives `REJECTED`/`CANCELLED`/`EXPIRED` reachable from any non-terminal state).
+Nothing touches `orders`/`payments`/`inventory_reservations` before `CONVERTED_TO_ORDER` - this is
+what keeps abandoned or rejected requests from polluting the order system. Quoting is allowed
+directly from `REQUESTED` as a convenience (a straightforward request doesn't need a separate
+"start reviewing" click); `BulkOrderService.create_quote_version` silently advances the request
+through `UNDER_REVIEW` first so the state machine's strict single-step adjacency is never violated
+by a `REQUESTED → QUOTED` jump.
+
+**Quotes are never overwritten**: `Quote` (one per request) → `QuoteVersion` (one row per
+revision, `version_number` strictly increasing, old versions marked `SUPERSEDED` not deleted) →
+`QuoteItem` (per-version line pricing, referencing a concrete `product_variants.id` - unlike the
+looser `BulkOrderRequestItem` it prices, which may be a bare catalog `product_id` or free-form
+`custom_item_name` for Mode B). A customer's `POST .../accept` and admin's eventual convert both
+resolve "the current version" server-side (the one `SENT`, or the one `ACCEPTED`) - the client
+never names a `quote_version_id` for either action.
+
+**Quote version lifecycle is DRAFT → SENT, not immediately-active**: `QuoteVersion.status` is one
+of `DRAFT, SENT, SUPERSEDED, ACCEPTED, REJECTED, EXPIRED, CANCELLED`.
+`BulkOrderService.create_quote_version` always creates a `DRAFT` - private admin work-in-progress,
+invisible to the customer's operative quote and not yet superseding anything; the request's own
+status does **not** move to `QUOTED` at this point. Only the explicit
+`POST .../quote/{version_id}/send` (`send_quote_version`, ADMIN/OPERATIONS) transitions
+`DRAFT → SENT`, supersedes whichever version was previously `SENT` (if any), and moves the request
+to `QUOTED`. `send_quote_version` rejects (409) any `version_id` that is not currently `DRAFT` -
+without that guard, resending an already-`SENT` version would match itself as "the previous SENT
+version" and immediately supersede itself, a genuine bug caught by this phase's own concurrency
+testing and fixed before merge. A separate `POST .../quote/{version_id}/reject`
+(`reject_quote_version`) lets ops withdraw a live `SENT` version (`SENT → REJECTED`) without
+rejecting the whole request - a new version can still be drafted and sent afterward. Quote
+creation and quote sending are deliberately two separate actions/endpoints, matching the spec's
+own framing: drafting is cheap and revisable, sending is the one moment a price becomes a real
+offer to the customer.
+
+**Quote expiry is lazy and server-time-authoritative**: `QuoteVersion.valid_until` (a plain date,
+optional, never client-computed) is checked only at the moment of `accept_quote`, against
+`date.today()` (database/application server time, never a client-supplied timestamp). If the
+`SENT` version being accepted has already passed `valid_until`, `accept_quote` transitions it to
+`EXPIRED` right there (under the same row lock used for acceptance) and rejects the accept with
+409 - this is what makes "accept races expiry" resolve to exactly one deterministic outcome rather
+than a window where an expired quote could still be accepted. No background job or scheduler marks
+quotes expired proactively; per the spec's own "keep it simple, no unnecessary automation"
+instruction, an unaccepted expired quote simply sits `SENT` until someone next tries to accept it.
+
+**Inventory availability for quoting is read-only and never reserves**: `GET
+/bulk-orders/admin/variants/{variant_id}/availability` (`get_variant_availability`) reports
+`total_quantity`/`reserved_quantity`/`available_quantity` (the same `quantity - reserved_quantity`
+computation `InventoryReservationService` uses internally) summed across a variant's `ACTIVE` lots,
+purely so ops can price a quote without promising stock that doesn't exist. It never mutates
+`inventory_lots` and never creates an `InventoryReservation` - the real reservation, with its own
+row-locked re-check, only happens at `convert_to_order`, regardless of what this endpoint reported
+moments earlier.
+
+**Quote→Order conversion idempotency has a database-level backstop, not just a Python check**:
+`bulk_order_requests.order_id` (nullable FK → `orders.id`) is set at the end of `convert_to_order`
+immediately before the status transition to `CONVERTED_TO_ORDER`, and
+`uq_bulk_order_requests_order_id` (`UNIQUE(order_id)`) guarantees no two request rows can ever
+point at the same order. This is defense-in-depth, never relied on alone - the primary protection
+is `_lock_request`'s row lock plus the `CUSTOMER_ACCEPTED`-only status check, which already
+serializes concurrent conversion attempts on the *same* request to exactly one winner (the loser
+re-reads `CONVERTED_TO_ORDER` post-lock and gets a clean 409). `order_id` doubles as the
+retail/bulk traceability signal (join `bulk_order_requests` on `orders.id`) - a separate
+`order_source` column was deliberately **not** added, since it would duplicate the same
+information this column already provides.
+
+**Conversion reuses the existing machinery verbatim** - the single most important design decision
+in this phase: `BulkOrderService.convert_to_order` builds `Order`/`OrderItem`/`OrderAddress` with
+the exact same snapshot fields `OrderService.checkout` already uses (including its
+`_generate_order_number` helper, called directly rather than duplicated), then calls the
+**unmodified** `InventoryReservationService.create_reservation_for_order`. A converted bulk order
+gets the same FIFO allocation, oversell protection, and 30-minute unpaid-window expiry as a retail
+order for free, and pays/fulfills/delivers through the exact same Phase 14/15/16 endpoints
+afterward - nothing bulk-specific was added to any of those flows. If reservation fails
+(insufficient stock), the whole conversion rolls back and the request stays `CUSTOMER_ACCEPTED` for
+a retry, identical to checkout's own insufficient-stock handling.
+
+**Why accept and convert are two separate steps** (not one, even though nothing technically
+prevents folding them together): the state machine's own explicit `CUSTOMER_ACCEPTED` →
+`CONVERTED_TO_ORDER` split gives ops a deliberate checkpoint - re-verify stock/delivery feasibility
+- before the order (and its 30-minute reservation clock) actually starts. `POST .../accept` is
+CUSTOMER-only; `POST .../convert` is ADMIN/OPERATIONS-only.
+
+**HUB_STAFF is deliberately excluded from bulk/custom review, quoting, and conversion** (unlike
+suppliers.py, where it has full access) - pricing and order-conversion decisions are commercial,
+not warehouse-floor operations, mirroring how Phase 16 excluded `HUB_STAFF`/`OPERATIONS` from
+delivery-in-transit actions for the same reason (distinct operational roles, not a hierarchy).
+
+**Lock ordering**: `BulkOrderRequest → Quote → QuoteVersion(s)` is this domain's own chain,
+locked unconditionally on id (the same retry-safe pattern used throughout this codebase) so a
+concurrent accept-vs-requote race resolves to one winner instead of a lost update. It only
+intersects the existing `Cart → Order → Payment → Fulfillment → Reservation → InventoryLots` chain
+at the single moment of conversion, creating a brand-new `Order` (nothing else could be
+concurrently holding a lock on a row that doesn't exist yet) before delegating to
+`InventoryReservationService`'s own established lock order unchanged.
 
 ## 22. Explicitly Rejected / Out-of-Scope Architectural Ideas
 

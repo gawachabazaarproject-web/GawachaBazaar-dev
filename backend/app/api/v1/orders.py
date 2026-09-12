@@ -13,9 +13,11 @@ from app.dependencies.payments import get_payment_gateway
 from app.exceptions.base import NotFoundError
 from app.models.order import Order
 from app.models.user import User
+from app.schemas.fulfillment import CustomerFulfillmentResponse
 from app.schemas.inventory_reservation import InventoryReservationResponse
 from app.schemas.order import MAX_PAGE_SIZE, OrderDetailResponse, OrderListResponse
 from app.schemas.payment import PaymentResponse
+from app.services.fulfillment import FulfillmentService
 from app.services.inventory_reservation import InventoryReservationService
 from app.services.order import OrderService
 from app.services.payment import PaymentService
@@ -79,3 +81,23 @@ def get_order_reservation(
     if not order:
         raise NotFoundError("Order not found.")
     return InventoryReservationService(db).get_reservation_response_for_order(order.id)
+
+
+@router.get(
+    "/{order_id}/fulfillment",
+    response_model=CustomerFulfillmentResponse,
+    summary="Get the safe fulfillment status for one of the current user's orders",
+)
+def get_order_fulfillment(
+    order_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> CustomerFulfillmentResponse:
+    order = (
+        db.query(Order)
+        .filter(Order.id == order_id, Order.user_id == current_user.id)
+        .first()
+    )
+    if not order:
+        raise NotFoundError("Order not found.")
+    return FulfillmentService(db).get_customer_fulfillment_response_for_order(order.id)
