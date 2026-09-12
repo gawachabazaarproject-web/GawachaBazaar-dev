@@ -36,6 +36,7 @@ from decimal import ROUND_HALF_UP, Decimal
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.core.logging import logger
 from app.exceptions.base import ConflictError, NotFoundError
 from app.models.address import Address
 from app.models.cart import Cart
@@ -43,6 +44,7 @@ from app.models.cart_item import CartItem
 from app.models.order import Order
 from app.models.order_address import OrderAddress
 from app.models.order_item import OrderItem
+from app.models.payment import Payment
 from app.models.product import Product
 from app.models.product_variant import ProductVariant
 from app.schemas.order import (
@@ -54,7 +56,13 @@ from app.schemas.order import (
     OrderResponse,
 )
 from app.services.inventory_reservation import InventoryReservationService
+from app.services.order_state import (
+    IllegalOrderTransitionError,
+    OrderStatus,
+    transition_order_status,
+)
 from app.services.pricing import get_current_prices_for_variants
+from app.services.refund import RefundService
 
 _ACTIVE = "ACTIVE"
 _CHECKED_OUT = "CHECKED_OUT"
@@ -100,6 +108,119 @@ class OrderService:
             # Also covers "exists but belongs to another user" - both are
             # 404 to avoid cross-user resource disclosure.
             raise NotFoundError("Order not found.")
+        return self._to_order_detail(order)
+
+    # ------------------------------------------------------------------
+    # Cancellation (Phase 18)
+    # ------------------------------------------------------------------
+
+    def cancel_own_order(
+        self, user_id: int, order_id: int, reason: str | None
+    ) -> OrderDetailResponse:
+        """Customer self-cancellation - ownership-enforced (404, not 403,
+        on another customer's order - this codebase's established
+        "don't disclose existence" convention).
+        """
+        order = self._lock_order_for_cancel(order_id)
+        if order.user_id != user_id:
+            raise NotFoundError("Order not found.")
+        return self._cancel_locked_order(order, actor_user_id=user_id, reason=reason)
+
+    def admin_cancel_order(
+        self, admin_user_id: int, order_id: int, reason: str | None
+    ) -> OrderDetailResponse:
+        """Administrative cancellation - no ownership constraint."""
+        order = self._lock_order_for_cancel(order_id)
+        return self._cancel_locked_order(
+            order, actor_user_id=admin_user_id, reason=reason
+        )
+
+    def _lock_order_for_cancel(self, order_id: int) -> Order:
+        """Locks Order unconditionally on id, FIRST - this is what lets a
+        concurrent cancellation and a concurrent delivery confirmation
+        (FulfillmentService.confirm_delivery also locks Order first, see
+        its module docstring) resolve to exactly one deterministic winner
+        via Postgres's own row lock, rather than a hand-rolled check.
+        """
+        order = (
+            self.db.query(Order).filter(Order.id == order_id).with_for_update().first()
+        )
+        if order is None:
+            raise NotFoundError("Order not found.")
+        return order
+
+    def _cancel_locked_order(
+        self, order: Order, *, actor_user_id: int, reason: str | None
+    ) -> OrderDetailResponse:
+        """Caller must already hold the order row lock. Central rule: an
+        order may be cancelled any time before delivery is completed -
+        i.e. from PENDING or CONFIRMED (which covers every Fulfillment
+        sub-status: PICKING/PACKED/READY_FOR_DELIVERY/ASSIGNED/
+        OUT_FOR_DELIVERY, since the Order itself stays CONFIRMED
+        throughout all of those and only becomes COMPLETED at actual
+        delivery - see order_state.py). Never legal once COMPLETED,
+        EXPIRED, or already CANCELLED.
+
+        One atomic transaction: order status, reservation release, and
+        refund-eligibility creation (online-paid orders only) all commit
+        together or not at all.
+        """
+        now = datetime.now(UTC)
+        try:
+            result = transition_order_status(
+                OrderStatus(order.status), OrderStatus.CANCELLED
+            )
+        except IllegalOrderTransitionError as exc:
+            raise ConflictError(
+                f"Cannot cancel an order in status {exc.current.value}."
+            ) from exc
+
+        if not result.applied:
+            # Already CANCELLED - idempotent no-op, nothing left to do.
+            self.db.commit()
+            return self._to_order_detail(order)
+
+        order.status = OrderStatus.CANCELLED
+        order.cancelled_at = now
+        order.cancelled_by_user_id = actor_user_id
+        order.cancellation_reason = reason
+
+        # Flush BEFORE calling into the reservation service: it internally
+        # re-reads this same Order row via `.populate_existing()` (held
+        # only for lock ordering - see its own docstring), which would
+        # otherwise silently overwrite the four in-memory assignments
+        # above with their still-unflushed (pre-cancellation) database
+        # values, discarding the cancellation entirely without error.
+        self.db.flush()
+
+        # Release the reservation (ACTIVE if never confirmed, COMMITTED if
+        # confirmed but not yet delivered - both are valid release sources
+        # as of this phase). Physical inventory quantity is untouched -
+        # only ever consumed at delivery (FulfillmentService.confirm_delivery).
+        InventoryReservationService(self.db).release_reservation_for_order(
+            order.id, now=now, reason="order_cancelled"
+        )
+
+        # Refund eligibility only for an online payment that actually
+        # reached PAID - COD never creates a refund (nothing was
+        # collected), and an online payment that never reached PAID has
+        # nothing to refund either. Never issues the refund itself - only
+        # ADMIN approval + processing ever moves money.
+        payment = self.db.query(Payment).filter(Payment.order_id == order.id).first()
+        RefundService(self.db).create_refund_if_eligible(order, payment)
+
+        try:
+            self.db.commit()
+        except IntegrityError as exc:
+            self.db.rollback()
+            raise ConflictError(
+                "Could not cancel order due to a conflicting update."
+            ) from exc
+        self.db.refresh(order)
+        logger.info(
+            "ORDER_CANCELLED: order_id=%s actor_user_id=%s reason=%s",
+            order.id, actor_user_id, reason,
+        )
         return self._to_order_detail(order)
 
     # ------------------------------------------------------------------

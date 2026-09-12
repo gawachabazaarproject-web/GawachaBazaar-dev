@@ -4,9 +4,10 @@ Exposes Phase 1 (Identity & Access), Phase 2 (Farm & Traceability),
 Phase 3 (Catalog & Products), Phase 4 (Inventory & Stock),
 Phase 5 (Packaging & Labeling), Phase 6 (Cart & Orders),
 Phase 7 (Payments), Phase 15 (Inventory Reservation & Fulfillment),
-Phase 16 (Fulfillment & Delivery Operations), and Phase 17 (Supplier
-Management + Bulk & Custom Commerce) SQLAlchemy models so that
-Base.metadata contains all table definitions.
+Phase 16 (Fulfillment & Delivery Operations), Phase 17 (Supplier
+Management + Bulk & Custom Commerce), and Phase 18 (Order Cancellation &
+Refund Approval) SQLAlchemy models so that Base.metadata contains all
+table definitions.
 """
 
 from app.models.address import Address
@@ -41,6 +42,7 @@ from app.models.quality_check import QualityCheck
 from app.models.quote import Quote
 from app.models.quote_item import QuoteItem
 from app.models.quote_version import QuoteVersion
+from app.models.refund import Refund
 from app.models.role import Role
 from app.models.stock_movement import StockMovement
 from app.models.supplier import Supplier
@@ -82,6 +84,7 @@ __all__ = [
     "Quote",
     "QuoteItem",
     "QuoteVersion",
+    "Refund",
     "Role",
     "StockMovement",
     "Supplier",

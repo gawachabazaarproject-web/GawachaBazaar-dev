@@ -80,6 +80,7 @@ from app.services.payment_state import (
     is_transaction_terminal,
     transition_payment_status,
 )
+from app.services.refund import RefundService
 
 _GATEWAY_TO_PAYMENT_STATUS: dict[TransactionStatus, PaymentStatus] = {
     TransactionStatus.INITIATED: PaymentStatus.PROCESSING,
@@ -654,6 +655,15 @@ class PaymentService:
         this is the late-payment-after-expiry case, logged as a
         reconciliation event rather than silently applied. The payment
         itself still stays PAID; only order confirmation is withheld.
+
+        Phase 18: a payment can also resolve to PAID AFTER its order was
+        already cancelled (the customer cancelled while a UPI attempt was
+        still PROCESSING). Money was genuinely collected for an order that
+        will never be fulfilled, so this is the second of the two call
+        sites that create refund eligibility (the first being
+        OrderService.cancel_order itself, for the case where the payment
+        was already PAID at cancellation time) - never issuing the refund
+        itself, only making it visible for ADMIN approval.
         """
         if payment.status != PaymentStatus.PAID:
             return
@@ -673,7 +683,15 @@ class PaymentService:
             logger.info(
                 "PAYMENT_ORDER_CONFIRMED: order_id=%s payment_id=%s", order.id, payment.id
             )
-        elif order.status not in ("CONFIRMED", "COMPLETED"):
+        elif order.status == "CANCELLED":
+            RefundService(self.db).create_refund_if_eligible(order, payment)
+            logger.warning(
+                "PAYMENT_RECONCILIATION: order_id=%s payment_id=%s payment resolved "
+                "PAID after the order was already cancelled - refund eligibility "
+                "created for admin review",
+                order.id, payment.id,
+            )
+        elif order.status != "COMPLETED":
             logger.warning(
                 "PAYMENT_RECONCILIATION: order_id=%s payment_id=%s payment PAID but "
                 "order status is %s", order.id, payment.id, order.status,

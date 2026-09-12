@@ -25,11 +25,18 @@ if TYPE_CHECKING:
     from app.models.order_address import OrderAddress
     from app.models.order_item import OrderItem
     from app.models.payment import Payment
+    from app.models.refund import Refund
     from app.models.user import User
 
 
 class Order(Base):
-    """Customer purchase order representing permanent historical commercial record."""
+    """Customer purchase order representing permanent historical commercial record.
+
+    `status` already included 'CANCELLED' from Phase 1 - Phase 18 is the
+    first to actually use it, via app/services/order_state.py's explicit
+    transition rules (a deliberate state change, not a boolean flag) and
+    the three cancellation-audit columns below (all nullable/additive).
+    """
 
     __tablename__ = "orders"
     __table_args__ = (
@@ -91,11 +98,28 @@ class Order(Base):
         onupdate=func.now(),
         nullable=False,
     )
+    # Phase 18 cancellation audit trail - all nullable, set only when
+    # status transitions to CANCELLED via OrderService.cancel_own_order /
+    # admin_cancel_order. Never set/overwritten anywhere else.
+    cancelled_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    cancelled_by_user_id: Mapped[int | None] = mapped_column(
+        BigInteger,
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=True,
+    )
+    cancellation_reason: Mapped[str | None] = mapped_column(
+        String(500),
+        nullable=True,
+    )
 
     # Relationships
     user: Mapped["User"] = relationship(
         "User",
         back_populates="orders",
+        foreign_keys="Order.user_id",
     )
     cart: Mapped["Cart | None"] = relationship(
         "Cart",
@@ -122,6 +146,11 @@ class Order(Base):
     )
     fulfillment: Mapped["Fulfillment | None"] = relationship(
         "Fulfillment",
+        back_populates="order",
+        uselist=False,
+    )
+    refund: Mapped["Refund | None"] = relationship(
+        "Refund",
         back_populates="order",
         uselist=False,
     )

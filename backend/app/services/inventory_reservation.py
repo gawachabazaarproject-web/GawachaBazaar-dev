@@ -389,14 +389,18 @@ class InventoryReservationService:
     def release_reservation_for_order(
         self, order_id: int, *, now: datetime, reason: str = "manual_release"
     ) -> InventoryReservation:
-        """Generic release, kept for reuse by a future cancellation
-        feature. Nothing in Phase 15 calls this automatically - see the
-        class docstring for why UPI payment failure does not call it.
+        """Generic release. Used by Phase 18 order cancellation - a
+        cancellable order's reservation may be ACTIVE (cancelled before
+        confirmation) or COMMITTED (cancelled after confirmation but
+        before delivery, per the "cancel any time before delivery is
+        completed" rule); both are valid release sources. RELEASED/EXPIRED
+        are already-terminal no-ops - see reservation_state.py.
 
         Locks Order before Reservation for the same deadlock-avoidance
         reason as `expire_reservation_for_order`, even though release
         itself never touches `order.status` - that is left to whatever
-        future cancellation feature calls this, since RELEASED here does
+        caller calls this (OrderService.cancel_order sets CANCELLED
+        separately, under the same Order lock), since RELEASED here does
         not imply any particular order status on its own.
         """
         # Held only for lock ordering - this method never reads/writes the
@@ -411,8 +415,8 @@ class InventoryReservationService:
             raise NotFoundError("Reservation not found for this order.")
 
         status = ReservationStatus(reservation.status)
-        if status != ReservationStatus.ACTIVE:
-            return reservation  # terminal already - no-op
+        if status not in (ReservationStatus.ACTIVE, ReservationStatus.COMMITTED):
+            return reservation  # already RELEASED/EXPIRED - no-op
 
         self._release_locked(reservation, target=ReservationStatus.RELEASED, now=now)
         logger.info(

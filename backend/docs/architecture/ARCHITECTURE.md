@@ -165,7 +165,7 @@ zero autogenerate drift (`alembic check`) as of this phase.
 | 7 — Payments | `payments`, `payment_transactions` | One `payments` row per order (unique `order_id`). Multiple `payment_transactions` per payment (retries/attempts), idempotency key unique. Methods: `UPI`, `COD` only. No gateway integration implemented. No card/CVV/UPI-PIN storage anywhere. |
 | 8 — Production Authentication | `auth_sessions` | See §8 below. |
 
-## 8. Current Database Table Inventory (40 tables, as of Phase 17)
+## 8. Current Database Table Inventory (41 tables, as of Phase 18)
 
 `roles`, `users`, `user_roles`, `addresses`, `auth_sessions`, `farms`, `batches`, `quality_checks`,
 `categories`, `products`, `product_variants`, `product_images`, `prices`, `inventory_locations`,
@@ -174,7 +174,10 @@ zero autogenerate drift (`alembic check`) as of this phase.
 `payment_transactions`, `payment_webhook_events`, `inventory_reservations`,
 `inventory_reservation_items`, `fulfillments`, `suppliers`, `supplier_products`,
 `supplier_evaluations`, `bulk_customer_profiles`, `bulk_order_requests`,
-`bulk_order_request_items`, `quotes`, `quote_versions`, `quote_items`.
+`bulk_order_request_items`, `quotes`, `quote_versions`, `quote_items`, `refunds`.
+
+`refunds` is new in Phase 18 (§21d) - no new table for cancellation itself, since `orders` already
+had a `CANCELLED` status value and only gained three nullable audit columns.
 
 No `wholesalers` table exists or is planned (§10). `suppliers` **is** now part of the schema
 (Phase 17, §21c) - it is a deliberately distinct concept from the old "wholesaler" idea; see §10
@@ -830,6 +833,97 @@ intersects the existing `Cart → Order → Payment → Fulfillment → Reservat
 at the single moment of conversion, creating a brand-new `Order` (nothing else could be
 concurrently holding a lock on a row that doesn't exist yet) before delegating to
 `InventoryReservationService`'s own established lock order unchanged.
+
+## 21d. Order Cancellation & Refund Approval (Phase 18)
+
+**Current active phase.** Adds customer/admin order cancellation and an admin-approved refund
+workflow for online payments, without introducing any new state machine for Order beyond what was
+already implicit, and without touching Payment's own state machine at all. New migration
+`6c1e3ba0420b_order_cancellation_and_refund_approval` (additive: 3 nullable columns on `orders`,
+new `refunds` table, widened `payment_transactions.transaction_type` CHECK + nullable `refund_id`).
+Full detail: [PHASE_18_CANCELLATION_REFUNDS_API.md](../api/PHASE_18_CANCELLATION_REFUNDS_API.md).
+
+**Central rule**: a customer may cancel any time before delivery is *completed* - at the Order
+level this means from `PENDING` or `CONFIRMED`, never from `COMPLETED`/`EXPIRED`/already-`CANCELLED`.
+`CONFIRMED` alone covers every Fulfillment sub-status (`PICKING`/`PACKED`/`READY_FOR_DELIVERY`/
+`ASSIGNED`/`OUT_FOR_DELIVERY`) because the Order itself only becomes `COMPLETED` at the moment
+`FulfillmentService.confirm_delivery` succeeds - so "cancellable until delivery is completed" is
+already fully expressed by one new Order-level state machine, `app/services/order_state.py`,
+introduced by this phase (no prior phase needed one; every existing direct `order.status = ...`
+write elsewhere already had its own narrow precondition guard and was deliberately left untouched
+rather than retrofitted - see that module's docstring for the full reasoning).
+
+**`orders.status` already had `'CANCELLED'`** in its CHECK constraint since Phase 1 - this is the
+first phase to actually use it, via a deliberate state transition, never a boolean flag. Three new
+nullable audit columns: `cancelled_at`, `cancelled_by_user_id`, `cancellation_reason`.
+
+**The delivery-vs-cancellation race, resolved by lock ordering alone** - no new locking primitive,
+no idempotency framework: `OrderService._lock_order_for_cancel` and
+`FulfillmentService.confirm_delivery` both lock the `Order` row FIRST, unconditionally on id.
+Whichever transaction acquires that lock first proceeds to completion (`CANCELLED` or `COMPLETED`
+respectively) and commits; the other blocks until then, re-reads the now-committed `order.status`,
+and its own pre-existing status guard (`order_state.transition_order_status` for cancellation;
+`confirm_delivery`'s own `order.status != "CONFIRMED"` check for delivery - unchanged, since
+`CANCELLED != CONFIRMED` already made this case correct with zero code changes) rejects it cleanly.
+The same Order-first lock was added to the three fulfillment-progression methods that previously
+touched only their own `Fulfillment` row (`update_status`, `assign_delivery_partner`,
+`mark_out_for_delivery`) via a new `_lock_order_and_fulfillment` helper plus
+`_assert_order_still_active` - without this, a cancelled order's fulfillment could still have been
+assigned/dispatched (just never *delivered*), which would have violated "fulfillment cannot
+continue at all after cancellation."
+
+**A genuine reservation-state-machine gap, found and fixed**: `InventoryReservationService.release_reservation_for_order`
+already existed (built in Phase 15 "for a future cancellation feature") but only released `ACTIVE`
+reservations - a `CONFIRMED` order's reservation is `COMMITTED`, which was previously terminal with
+no outgoing transitions at all. Phase 18 widens `reservation_state.py`'s transition map with exactly
+one new edge, `COMMITTED → RELEASED`, and widens `release_reservation_for_order`'s own guard to
+accept both source statuses - the smallest fix that makes "release a confirmed-but-undelivered
+order's hold" possible without weakening any other invariant (`RELEASED`/`EXPIRED` remain terminal;
+a released reservation still never recommits). Releasing only decrements `reserved_quantity` on
+each allocated lot - physical `quantity` is never touched by cancellation, only by
+`confirm_delivery`'s `DISPATCH` movement, preserving the Phase 15/16 physical-vs-reserved
+distinction exactly.
+
+**Refund is a separate approval-workflow entity, not a Payment status** - `PaymentStatus.PAID`
+remains terminal (`payment_state.py`, unchanged since Phase 14: "no outgoing transitions, ever").
+A cancelled, previously-PAID order's `Payment` row is never rewritten; instead a new `Refund` row
+(one per order, `PENDING_APPROVAL → APPROVED/REJECTED → PROCESSING → REFUNDED/FAILED`, its own
+`app/services/refund_state.py`) tracks the *approval* lifecycle, and `payment_transactions` gains
+`transaction_type = 'REFUND'` (alongside the existing `'PAYMENT'`) plus a nullable `refund_id` to
+record each gateway refund *attempt* exactly the way a payment attempt already is - an old
+`'PAYMENT'` row is never edited into a refund. `RefundService.create_refund_if_eligible` is
+idempotent on `refunds.order_id UNIQUE` and only ever creates a row (`PENDING_APPROVAL`); it never
+transitions one, and is called from two places: `OrderService.cancel_order` (payment already `PAID`
+at cancellation time) and `PaymentService._confirm_order_if_paid`'s cancelled-order branch (a UPI
+payment that was still `PROCESSING` at cancellation resolves to `PAID` afterward - money was
+genuinely collected for an order that will never be fulfilled, so this closes what would otherwise
+be a silent-loss gap). COD never creates a refund (nothing was collected) and an online payment that
+never reached `PAID` has nothing to refund either.
+
+**Refund processing reuses the existing PaymentGateway abstraction** - `PaymentGateway.refund_payment`
+(new Protocol method) and `PNBGateway.refund_payment` follow `initiate_payment`/`query_status`'s own
+exact precedent: `NotImplementedError`, since no PNB refund specification exists any more than a
+payment one did in Phase 14. `RefundService.process_refund` mirrors `PaymentService._initiate_upi`'s
+shape precisely - short transaction (`APPROVED/FAILED → PROCESSING`, commit, lock released) then the
+outbound gateway call outside any held lock, with the identical three-way outcome handling
+(definitive rejection/`NotImplementedError` → `FAILED`; timeout/connection error → left `PROCESSING`,
+outcome unknown, never `FAILED`; success → `REFUNDED`).
+
+**Refund approval is admin-only, and processing is a separate explicit action from approval** -
+`POST /payments/refunds/{id}/approve`, `/reject`, and `/process` are all `ADMIN`-only; a customer can
+only ever read a refund's status (`GET /orders/{id}/refund`), never approve/reject/trigger its own
+refund. OPERATIONS and HUB_STAFF are deliberately excluded from all three - no existing business rule
+in this codebase grants either role financial/payment authority, and this phase does not introduce
+one (mirroring how bulk/custom pricing decisions were kept ADMIN/OPERATIONS-only and warehouse roles
+excluded in Phase 17).
+
+**Administrative cancellation, without a router-level RBAC refactor**: `POST /orders/{id}/cancel`
+(customer, ownership-enforced, 404 on another customer's order) and
+`POST /orders/admin/{id}/cancel` (ADMIN, no ownership constraint) are two distinct routes on two
+routers (`router` / `admin_router`) both mounted at `/orders`, rather than one shared route trying to
+allow both roles - `orders.py`'s existing `router` already applies `require_roles(CUSTOMER)` as a
+blanket router-level dependency, and changing that to a per-route pattern purely to admit one admin
+action would have risked every other existing customer-only route on it for no required benefit.
 
 ## 22. Explicitly Rejected / Out-of-Scope Architectural Ideas
 

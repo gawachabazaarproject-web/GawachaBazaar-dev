@@ -18,6 +18,15 @@ class CheckoutRequest(BaseSchema):
     address_id: int = Field(..., gt=0)
 
 
+class CancelOrderRequest(BaseSchema):
+    """No status/timestamp/refund field accepted - cancellation is a
+    server-derived state transition (app/services/order_state.py); the
+    client only ever supplies a free-text reason.
+    """
+
+    reason: str | None = Field(default=None, max_length=500)
+
+
 class OrderItemResponse(BaseSchema):
     id: int
     variant_id: int
@@ -48,6 +57,8 @@ class OrderResponse(BaseSchema):
     currency: str
     placed_at: datetime
     created_at: datetime
+    cancelled_at: datetime | None
+    cancellation_reason: str | None
 
 
 class OrderDetailResponse(OrderResponse):
