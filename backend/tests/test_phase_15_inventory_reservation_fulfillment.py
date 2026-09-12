@@ -725,14 +725,44 @@ def _confirm_cod_and_get_fulfillment_id(
     return fulfillment.id
 
 
-def _advance_to_out_for_delivery(client: TestClient, ops_headers: dict, fulfillment_id: int) -> None:
-    for target in ("PICKING", "PACKED", "READY_FOR_DELIVERY", "OUT_FOR_DELIVERY"):
+def _advance_to_out_for_delivery(
+    client: TestClient, db_session: Session, ops_headers: dict, fulfillment_id: int, tag: str
+) -> dict[str, str]:
+    """Phase 16 extended the chain with a mandatory ASSIGNED step and
+    delivery-partner ownership enforcement - advances a fulfillment all
+    the way to OUT_FOR_DELIVERY via the correctly assigned partner, and
+    returns that partner's auth headers for the caller's subsequent
+    /deliver call.
+    """
+    for target in ("PICKING", "PACKED", "READY_FOR_DELIVERY"):
         response = client.post(
             f"/api/v1/fulfillments/{fulfillment_id}/status",
             json={"status": target}, headers=ops_headers,
         )
         assert response.status_code == 200, response.text
         assert response.json()["status"] == target
+
+    partner = _create_user_with_role(
+        db_session, DELIVERY_PARTNER, f"partner_{tag.lower()}@example.com"
+    )
+    partner_headers = _auth_headers(db_session, partner)
+
+    assign_response = client.post(
+        f"/api/v1/fulfillments/{fulfillment_id}/assign",
+        json={"delivery_partner_user_id": partner.id},
+        headers=ops_headers,
+    )
+    assert assign_response.status_code == 200, assign_response.text
+    assert assign_response.json()["status"] == "ASSIGNED"
+    assert assign_response.json()["delivery_partner_user_id"] == partner.id
+
+    out_response = client.post(
+        f"/api/v1/fulfillments/{fulfillment_id}/out-for-delivery", headers=partner_headers
+    )
+    assert out_response.status_code == 200, out_response.text
+    assert out_response.json()["status"] == "OUT_FOR_DELIVERY"
+
+    return partner_headers
 
 
 def test_18_full_fulfillment_lifecycle_consumes_physical_inventory(
@@ -744,9 +774,9 @@ def test_18_full_fulfillment_lifecycle_consumes_physical_inventory(
     fulfillment_id = _confirm_cod_and_get_fulfillment_id(client, db_session, headers, order["id"])
     ops_headers = _staff(db_session, HUB_STAFF, "T18")
 
-    _advance_to_out_for_delivery(client, ops_headers, fulfillment_id)
-
-    deliver_headers = _staff(db_session, DELIVERY_PARTNER, "T18")
+    deliver_headers = _advance_to_out_for_delivery(
+        client, db_session, ops_headers, fulfillment_id, "T18"
+    )
     response = client.post(f"/api/v1/fulfillments/{fulfillment_id}/deliver", headers=deliver_headers)
     assert response.status_code == 200
     assert response.json()["status"] == "DELIVERED"
@@ -767,12 +797,18 @@ def test_18_full_fulfillment_lifecycle_consumes_physical_inventory(
 def test_19_cannot_deliver_before_out_for_delivery(
     client: TestClient, db_session: Session, gateway: FakePNBGateway
 ) -> None:
+    """Uses ADMIN (which bypasses the Phase 16 delivery-partner ownership
+    check) to isolate the pure state-machine rejection - an arbitrary
+    unassigned DELIVERY_PARTNER would now fail ownership (403) before
+    ever reaching this state check, which is covered separately in the
+    Phase 16 test suite.
+    """
     _user, headers, variant, address, _lot = _ready_customer(db_session, "T19")
     order = _checkout(client, headers, variant, address)
     fulfillment_id = _confirm_cod_and_get_fulfillment_id(client, db_session, headers, order["id"])
-    deliver_headers = _staff(db_session, DELIVERY_PARTNER, "T19")
+    admin_headers = _staff(db_session, ADMIN, "T19")
 
-    response = client.post(f"/api/v1/fulfillments/{fulfillment_id}/deliver", headers=deliver_headers)
+    response = client.post(f"/api/v1/fulfillments/{fulfillment_id}/deliver", headers=admin_headers)
     assert response.status_code == 409
 
     db_session.expire_all()
@@ -787,8 +823,9 @@ def test_20_duplicate_delivery_confirmation_does_not_double_consume(
     order = _checkout(client, headers, variant, address, qty="2")
     fulfillment_id = _confirm_cod_and_get_fulfillment_id(client, db_session, headers, order["id"])
     ops_headers = _staff(db_session, HUB_STAFF, "T20")
-    _advance_to_out_for_delivery(client, ops_headers, fulfillment_id)
-    deliver_headers = _staff(db_session, DELIVERY_PARTNER, "T20")
+    deliver_headers = _advance_to_out_for_delivery(
+        client, db_session, ops_headers, fulfillment_id, "T20"
+    )
 
     first = client.post(f"/api/v1/fulfillments/{fulfillment_id}/deliver", headers=deliver_headers)
     assert first.status_code == 200
@@ -996,8 +1033,9 @@ def test_concurrency_e_concurrent_delivery_confirmation_no_double_consumption(
     order = _checkout(client, headers, variant, address, qty="3")
     fulfillment_id = _confirm_cod_and_get_fulfillment_id(client, db_session, headers, order["id"])
     ops_headers = _staff(db_session, HUB_STAFF, "CCE")
-    _advance_to_out_for_delivery(client, ops_headers, fulfillment_id)
-    deliver_headers = _staff(db_session, DELIVERY_PARTNER, "CCE")
+    deliver_headers = _advance_to_out_for_delivery(
+        client, db_session, ops_headers, fulfillment_id, "CCE"
+    )
 
     def deliver():
         return client.post(f"/api/v1/fulfillments/{fulfillment_id}/deliver", headers=deliver_headers)
