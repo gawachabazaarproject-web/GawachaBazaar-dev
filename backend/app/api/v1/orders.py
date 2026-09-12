@@ -1,12 +1,18 @@
-"""Order domain routes: CUSTOMER-only, always scoped to the authenticated user.
+"""Order domain routes.
 
-No status PATCH, no cancellation, no fulfillment status - reads only.
+`router`: CUSTOMER-only, always scoped to the authenticated user - reads,
+self-cancellation, and refund status for one's own orders.
+`admin_router`: ADMIN-only administrative cancellation, mounted under
+`/admin/` to avoid colliding with the customer-facing cancel path (see
+app/api/v1/fulfillments.py / bulk_orders.py for the same per-route-RBAC
+pattern used when one router's roles differ from another's within the
+same domain).
 """
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
-from app.core.roles import CUSTOMER
+from app.core.roles import ADMIN, CUSTOMER
 from app.dependencies.auth import get_current_user, require_roles
 from app.dependencies.database import get_db
 from app.dependencies.payments import get_payment_gateway
@@ -15,15 +21,23 @@ from app.models.order import Order
 from app.models.user import User
 from app.schemas.fulfillment import CustomerFulfillmentResponse
 from app.schemas.inventory_reservation import InventoryReservationResponse
-from app.schemas.order import MAX_PAGE_SIZE, OrderDetailResponse, OrderListResponse
+from app.schemas.order import (
+    MAX_PAGE_SIZE,
+    CancelOrderRequest,
+    OrderDetailResponse,
+    OrderListResponse,
+)
 from app.schemas.payment import PaymentResponse
+from app.schemas.refund import RefundResponse
 from app.services.fulfillment import FulfillmentService
 from app.services.inventory_reservation import InventoryReservationService
 from app.services.order import OrderService
 from app.services.payment import PaymentService
 from app.services.payment_gateway import PaymentGateway
+from app.services.refund import RefundService
 
 router = APIRouter(dependencies=[Depends(require_roles(CUSTOMER))])
+admin_router = APIRouter(dependencies=[Depends(require_roles(ADMIN))])
 
 
 @router.get("", response_model=OrderListResponse, summary="List the current user's orders")
@@ -101,3 +115,44 @@ def get_order_fulfillment(
     if not order:
         raise NotFoundError("Order not found.")
     return FulfillmentService(db).get_customer_fulfillment_response_for_order(order.id)
+
+
+@router.get(
+    "/{order_id}/refund",
+    response_model=RefundResponse,
+    summary="Get the refund status for one of the current user's orders, if any",
+)
+def get_order_refund(
+    order_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> RefundResponse:
+    return RefundService(db).get_refund_for_order(current_user.id, order_id)
+
+
+@router.post(
+    "/{order_id}/cancel",
+    response_model=OrderDetailResponse,
+    summary="Cancel one of the current user's own orders (any time before delivery is completed)",
+)
+def cancel_order(
+    order_id: int,
+    payload: CancelOrderRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> OrderDetailResponse:
+    return OrderService(db).cancel_own_order(current_user.id, order_id, payload.reason)
+
+
+@admin_router.post(
+    "/admin/{order_id}/cancel",
+    response_model=OrderDetailResponse,
+    summary="Administrative cancellation of any order (any time before delivery is completed)",
+)
+def admin_cancel_order(
+    order_id: int,
+    payload: CancelOrderRequest,
+    current_user: User = Depends(require_roles(ADMIN)),
+    db: Session = Depends(get_db),
+) -> OrderDetailResponse:
+    return OrderService(db).admin_cancel_order(current_user.id, order_id, payload.reason)

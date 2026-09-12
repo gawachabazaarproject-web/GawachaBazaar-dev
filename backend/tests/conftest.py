@@ -37,7 +37,7 @@ def db_session(test_engine) -> Generator[Session, None, None]:
     session.execute(
         text(
             "TRUNCATE TABLE auth_sessions, payment_webhook_events, "
-            "payment_transactions, payments, "
+            "payment_transactions, refunds, payments, "
             "quote_items, quote_versions, quotes, "
             "bulk_order_request_items, bulk_order_requests, bulk_customer_profiles, "
             "fulfillments, inventory_reservation_items, inventory_reservations, "

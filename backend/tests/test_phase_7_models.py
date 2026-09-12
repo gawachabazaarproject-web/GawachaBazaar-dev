@@ -349,7 +349,21 @@ class TestPaymentTransactionModel:
         txn = _create_transaction(db_session, payment.id, transaction_type="PAYMENT")
         assert txn.transaction_type == "PAYMENT"
 
-    @pytest.mark.parametrize("invalid_type", ["REFUND", "CHARGEBACK", "AUTH", "CAPTURE", ""])
+    def test_transaction_type_refund_accepted(self, db_session: Session) -> None:
+        """Phase 18 legitimately widened this CHECK to also allow REFUND
+        (a refund gateway attempt, recorded exactly like a payment attempt
+        - see app/models/payment_transaction.py and app/services/refund.py).
+        This was 'REFUND' in test_unsupported_transaction_types_rejected's
+        parametrize list until Phase 18; moved here since it is no longer
+        unsupported.
+        """
+        user = _create_user(db_session)
+        order = _create_order(db_session, user.id)
+        payment = _create_payment(db_session, order.id)
+        txn = _create_transaction(db_session, payment.id, transaction_type="REFUND")
+        assert txn.transaction_type == "REFUND"
+
+    @pytest.mark.parametrize("invalid_type", ["CHARGEBACK", "AUTH", "CAPTURE", ""])
     def test_unsupported_transaction_types_rejected(
         self, db_session: Session, invalid_type: str
     ) -> None:

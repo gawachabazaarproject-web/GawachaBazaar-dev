@@ -11,8 +11,19 @@ consistent with the order documented in
 app/services/inventory_reservation.py (Order is always locked before any
 Fulfillment/Reservation/Lot row it owns, and lots are always locked in a
 single deterministic id-ASC order). `assign_delivery_partner`,
-`mark_out_for_delivery`, and `update_status` only ever touch a single
-Fulfillment row, so there is no cross-row ordering concern for them.
+`mark_out_for_delivery`, and `update_status` now also lock Order first
+(Phase 18, via `_lock_order_and_fulfillment`) purely to serialize against
+a concurrent cancellation - see `_assert_order_still_active` - even though
+none of them otherwise reads/writes the Order row.
+
+PHASE 18 CANCELLATION GUARD: every fulfillment-progressing method rejects
+a non-CONFIRMED order (`_assert_order_still_active` for the three
+warehouse/assignment methods; `confirm_delivery`'s own pre-existing
+`order.status != "CONFIRMED"` check for delivery) - this is what stops a
+cancelled order from ever reaching ASSIGNED/OUT_FOR_DELIVERY/DELIVERED,
+and, combined with the shared Order-first lock order, what makes a
+cancellation racing any of these actions resolve to exactly one
+deterministic outcome rather than a corrupt mixed state.
 
 AUTHORIZATION MODEL (Phase 16): the router grants route-level access via
 `require_roles`, but two further checks live here in the service, since
@@ -208,7 +219,8 @@ class FulfillmentService:
                 f"Use the dedicated endpoint to move a fulfillment to {new_status}."
             )
 
-        fulfillment = self._lock_fulfillment(fulfillment_id)
+        order, fulfillment = self._lock_order_and_fulfillment(fulfillment_id)
+        self._assert_order_still_active(order)
 
         try:
             result = transition_fulfillment_status(
@@ -243,12 +255,13 @@ class FulfillmentService:
     def assign_delivery_partner(
         self, fulfillment_id: int, delivery_partner_user_id: int
     ) -> FulfillmentResponse:
-        """Lock fulfillment -> verify READY_FOR_DELIVERY -> ASSIGNED is
-        legal -> verify the target user exists and holds DELIVERY_PARTNER
-        -> set delivery_partner_user_id + assigned_at -> transition ->
-        commit. Single-row transaction (no Order/Reservation touched), so
-        there is no lock-ordering concern beyond the fulfillment row
-        itself.
+        """Lock order + fulfillment -> verify READY_FOR_DELIVERY -> ASSIGNED
+        is legal -> verify the target user exists and holds
+        DELIVERY_PARTNER -> set delivery_partner_user_id + assigned_at ->
+        transition -> commit. Order is locked first (Phase 18) so a
+        concurrent cancellation (which also locks Order first - see
+        OrderService._lock_order_for_cancel) cannot race an assignment
+        into existing on an order that is being/was just cancelled.
 
         Deliberately does NOT use `transition_fulfillment_status`'s
         generic same-state-is-a-no-op rule here: that rule exists so a
@@ -260,7 +273,8 @@ class FulfillmentService:
         So the only legal current status here is READY_FOR_DELIVERY,
         checked explicitly and unconditionally.
         """
-        fulfillment = self._lock_fulfillment(fulfillment_id)
+        order, fulfillment = self._lock_order_and_fulfillment(fulfillment_id)
+        self._assert_order_still_active(order)
 
         if FulfillmentStatus(fulfillment.status) != FulfillmentStatus.READY_FOR_DELIVERY:
             raise ConflictError(
@@ -304,7 +318,8 @@ class FulfillmentService:
     def mark_out_for_delivery(
         self, fulfillment_id: int, current_user: User
     ) -> FulfillmentResponse:
-        fulfillment = self._lock_fulfillment(fulfillment_id)
+        order, fulfillment = self._lock_order_and_fulfillment(fulfillment_id)
+        self._assert_order_still_active(order)
         self._assert_can_act_as_delivery_partner(fulfillment, current_user)
 
         try:
@@ -402,6 +417,12 @@ class FulfillmentService:
             ) from exc
 
         if order.status != "CONFIRMED":
+            # Phase 18: this is also what stops a CANCELLED order from
+            # ever being delivered - if a concurrent cancellation won the
+            # race for the Order row lock above, `order.status` is
+            # already CANCELLED by the time this re-read happens, so
+            # nothing below (reservation release, DISPATCH movement,
+            # reserved_quantity decrement, DELIVERED/COMPLETED) ever runs.
             raise ConflictError(
                 f"Cannot confirm delivery: order status is {order.status}, not CONFIRMED."
             )
@@ -478,18 +499,59 @@ class FulfillmentService:
     # Locking helpers
     # ------------------------------------------------------------------
 
-    def _lock_fulfillment(self, fulfillment_id: int) -> Fulfillment:
-        """Locks unconditionally on id (no status filter) - same
-        retry-safety pattern used throughout this phase: a status-filtered
-        FOR UPDATE would silently exclude the row once a concurrent
-        transaction changes its status.
+    def _lock_order_and_fulfillment(self, fulfillment_id: int) -> tuple[Order, Fulfillment]:
+        """Locks Order before Fulfillment (Phase 18) - both unconditionally
+        on id (no status filter), the same retry-safety pattern used
+        throughout this codebase: a status-filtered FOR UPDATE would
+        silently exclude the row once a concurrent transaction changes its
+        status. Locking Order FIRST here (mirroring confirm_delivery's own
+        established sequence) is what lets a concurrent cancellation
+        (OrderService._lock_order_for_cancel, which also locks Order
+        first) and a concurrent warehouse/assignment action resolve
+        deterministically via Postgres's row lock rather than a race.
+
+        `.populate_existing()` is required on both re-queries: the initial
+        unlocked Fulfillment read (needed only to discover order_id before
+        Order can be locked first) pollutes this session's identity map -
+        the same Phase 14 stale-identity-map precondition documented in
+        PaymentService._lock_payment_and_order.
         """
-        fulfillment = (
-            self.db.query(Fulfillment)
-            .filter(Fulfillment.id == fulfillment_id)
+        fulfillment_unlocked = (
+            self.db.query(Fulfillment).filter(Fulfillment.id == fulfillment_id).first()
+        )
+        if fulfillment_unlocked is None:
+            raise NotFoundError("Fulfillment not found.")
+        order = (
+            self.db.query(Order)
+            .filter(Order.id == fulfillment_unlocked.order_id)
+            .populate_existing()
             .with_for_update()
             .first()
         )
-        if fulfillment is None:
-            raise NotFoundError("Fulfillment not found.")
-        return fulfillment
+        fulfillment = (
+            self.db.query(Fulfillment)
+            .filter(Fulfillment.id == fulfillment_id)
+            .populate_existing()
+            .with_for_update()
+            .first()
+        )
+        return order, fulfillment
+
+    @staticmethod
+    def _assert_order_still_active(order: Order) -> None:
+        """Phase 18: a cancelled (or otherwise no-longer-CONFIRMED) order
+        must never progress through fulfillment any further - this is the
+        guard that makes "fulfillment cannot continue to ASSIGNED,
+        OUT_FOR_DELIVERY, DELIVERED after cancellation" true for every
+        warehouse/assignment/dispatch action, not just delivery
+        confirmation (which already has its own equivalent check in
+        confirm_delivery, placed after its DELIVERED-idempotent check
+        rather than here, so a repeated /deliver call on an
+        already-delivered - now COMPLETED - order still returns its
+        existing idempotent 200 instead of a 409 from this guard).
+        """
+        if order is None or order.status != "CONFIRMED":
+            raise ConflictError(
+                f"Cannot modify this fulfillment: order status is "
+                f"{order.status if order else 'unknown'}, not CONFIRMED."
+            )

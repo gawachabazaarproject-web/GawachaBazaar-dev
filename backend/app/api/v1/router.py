@@ -14,8 +14,10 @@ from app.api.v1.cart import router as cart_router
 from app.api.v1.catalog import router as catalog_router
 from app.api.v1.fulfillments import router as fulfillments_router
 from app.api.v1.inventory import router as inventory_router
+from app.api.v1.orders import admin_router as orders_admin_router
 from app.api.v1.orders import router as orders_router
 from app.api.v1.packaging import router as packaging_router
+from app.api.v1.payments import admin_router as payments_admin_router
 from app.api.v1.payments import router as payments_router
 from app.api.v1.payments import webhook_router as payments_webhook_router
 from app.api.v1.suppliers import router as suppliers_router
@@ -38,11 +40,15 @@ api_router.include_router(packaging_router, prefix="/packaging", tags=["packagin
 # Cart domain routes (CUSTOMER-only; also hosts POST /cart/checkout)
 api_router.include_router(cart_router, prefix="/cart", tags=["cart"])
 
-# Order domain routes (CUSTOMER-only, user-scoped reads)
+# Order domain routes (CUSTOMER-only, user-scoped reads + self-cancellation;
+# admin_router: ADMIN-only administrative cancellation)
 api_router.include_router(orders_router, prefix="/orders", tags=["orders"])
+api_router.include_router(orders_admin_router, prefix="/orders", tags=["orders"])
 
-# Payment domain routes (CUSTOMER-only: create/get/retry/verify)
+# Payment domain routes (CUSTOMER-only: create/get/retry/verify;
+# admin_router: ADMIN-only refund review/approve/reject/process)
 api_router.include_router(payments_router, prefix="/payments", tags=["payments"])
+api_router.include_router(payments_admin_router, prefix="/payments", tags=["payments"])
 
 # PNB gateway webhook (no JWT - authenticity verified via gateway signature)
 api_router.include_router(
