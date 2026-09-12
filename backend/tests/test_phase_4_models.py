@@ -1320,7 +1320,8 @@ def test_56_no_future_domain_tables_accidentally_introduced(test_engine) -> None
         "promotions",
         "coupons",
         "reviews",
-        "suppliers",
+        # "suppliers" removed from this blocklist in Phase 17 - see
+        # test_phase_3_models.py's equivalent note.
         "procurement",
         "warehouses",
         "stock_snapshots",

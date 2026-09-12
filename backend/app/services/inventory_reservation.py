@@ -265,7 +265,7 @@ class InventoryReservationService:
         if result.applied:
             reservation.status = ReservationStatus.COMMITTED
             reservation.updated_at = now
-            self._ensure_fulfillment(order.id)
+            self._ensure_fulfillment(order.id, reservation.id)
             logger.info(
                 "INVENTORY_RESERVATION_COMMITTED: reservation_id=%s order_id=%s",
                 reservation.id, order.id,
@@ -288,7 +288,7 @@ class InventoryReservationService:
                 "ORDER_EXPIRED: order_id=%s reservation_id=%s", order.id, reservation.id
             )
 
-    def _ensure_fulfillment(self, order_id: int) -> Fulfillment:
+    def _ensure_fulfillment(self, order_id: int, reservation_id: int) -> Fulfillment:
         existing = (
             self.db.query(Fulfillment)
             .filter(Fulfillment.order_id == order_id)
@@ -296,15 +296,39 @@ class InventoryReservationService:
         )
         if existing:
             return existing
+
+        # Phase 16: record the single inventory location the reservation
+        # allocated from, ONLY when every allocated lot shares one
+        # location. Reservations pool lots across ALL locations for a
+        # variant (see this module's FIFO ALLOCATION SCOPE note), so a
+        # multi-location allocation is possible and left NULL here rather
+        # than recording a misleading single location.
+        location_ids = {
+            lot.location_id
+            for lot in (
+                self.db.query(InventoryLot)
+                .join(
+                    InventoryReservationItem,
+                    InventoryReservationItem.inventory_lot_id == InventoryLot.id,
+                )
+                .filter(InventoryReservationItem.reservation_id == reservation_id)
+                .all()
+            )
+        }
+        inventory_location_id = (
+            next(iter(location_ids)) if len(location_ids) == 1 else None
+        )
+
         fulfillment = Fulfillment(
             order_id=order_id,
             status=FulfillmentStatus.PENDING,
+            inventory_location_id=inventory_location_id,
         )
         self.db.add(fulfillment)
         self.db.flush()
         logger.info(
-            "FULFILLMENT_CREATED: fulfillment_id=%s order_id=%s",
-            fulfillment.id, order_id,
+            "FULFILLMENT_CREATED: fulfillment_id=%s order_id=%s inventory_location_id=%s",
+            fulfillment.id, order_id, inventory_location_id,
         )
         return fulfillment
 

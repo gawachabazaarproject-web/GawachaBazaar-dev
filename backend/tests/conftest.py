@@ -38,11 +38,14 @@ def db_session(test_engine) -> Generator[Session, None, None]:
         text(
             "TRUNCATE TABLE auth_sessions, payment_webhook_events, "
             "payment_transactions, payments, "
+            "quote_items, quote_versions, quotes, "
+            "bulk_order_request_items, bulk_order_requests, bulk_customer_profiles, "
             "fulfillments, inventory_reservation_items, inventory_reservations, "
             "order_addresses, order_items, orders, cart_items, carts, "
             "packaging_outputs, packaging_inputs, packaging_operations, "
             "stock_movements, inventory_lots, inventory_locations, "
             "prices, product_images, quality_checks, batches, "
+            "supplier_evaluations, supplier_products, suppliers, "
             "product_variants, products, categories, farms, user_roles, addresses, users, roles "
             "RESTART IDENTITY CASCADE;"
         )

@@ -23,11 +23,23 @@ if TYPE_CHECKING:
     from app.models.farm import Farm
     from app.models.product import Product
     from app.models.quality_check import QualityCheck
+    from app.models.supplier import Supplier
     from app.models.user import User
 
 
 class Batch(Base):
-    """Harvest lot of fresh agricultural produce."""
+    """Harvest lot of fresh agricultural produce.
+
+    Phase 17: `supplier_id` is the new, preferred way to record who
+    supplied this batch (an independent `Supplier` business record, no
+    login required). `wholesaler_user_id` (Phase 8.1: a `User` holding
+    the WHOLESALER role) is kept for full backward compatibility - it is
+    still a valid way to record origin, just no longer the only one. See
+    `ck_batches_supplier_or_wholesaler`: at least one of the two is
+    always required, so no batch ever loses a traceable origin. Fully
+    deprecating `wholesaler_user_id` is an explicit future stage, not
+    attempted in Phase 17.
+    """
 
     __tablename__ = "batches"
     __table_args__ = (
@@ -45,7 +57,16 @@ class Batch(Base):
             "unit IN ('KG', 'G', 'L', 'ML', 'UNIT', 'DOZEN', 'BOX', 'CRATE')",
             name="ck_batches_unit",
         ),
+        CheckConstraint(
+            "wholesaler_user_id IS NOT NULL OR supplier_id IS NOT NULL",
+            name="ck_batches_supplier_or_wholesaler",
+        ),
+        CheckConstraint(
+            "purchase_price IS NULL OR purchase_price > 0",
+            name="ck_batches_purchase_price",
+        ),
         Index("ix_batches_wholesaler_user_id", "wholesaler_user_id"),
+        Index("ix_batches_supplier_id", "supplier_id"),
         Index("ix_batches_farm_id", "farm_id"),
         Index("ix_batches_product_id", "product_id"),
         Index("ix_batches_harvest_date", "harvest_date"),
@@ -57,10 +78,15 @@ class Batch(Base):
         Identity(),
         primary_key=True,
     )
-    wholesaler_user_id: Mapped[int] = mapped_column(
+    wholesaler_user_id: Mapped[int | None] = mapped_column(
         BigInteger,
         ForeignKey("users.id", ondelete="RESTRICT"),
-        nullable=False,
+        nullable=True,
+    )
+    supplier_id: Mapped[int | None] = mapped_column(
+        BigInteger,
+        ForeignKey("suppliers.id", ondelete="RESTRICT"),
+        nullable=True,
     )
     farm_id: Mapped[int | None] = mapped_column(
         BigInteger,
@@ -96,6 +122,26 @@ class Batch(Base):
         String(30),
         nullable=False,
     )
+    # Phase 17: procurement facts Batch didn't previously capture. All
+    # nullable - historical batches predating this phase have none of
+    # these, and a batch may still be entered without full procurement
+    # paperwork (e.g. mid-negotiation).
+    purchase_price: Mapped[Decimal | None] = mapped_column(
+        Numeric(12, 2),
+        nullable=True,
+    )
+    purchase_currency: Mapped[str | None] = mapped_column(
+        String(3),
+        nullable=True,
+    )
+    received_date: Mapped[date | None] = mapped_column(
+        Date,
+        nullable=True,
+    )
+    receiving_reference: Mapped[str | None] = mapped_column(
+        String(100),
+        nullable=True,
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
@@ -109,9 +155,13 @@ class Batch(Base):
     )
 
     # Authoritative ORM relationships
-    wholesaler: Mapped["User"] = relationship(
+    wholesaler: Mapped["User | None"] = relationship(
         "User",
         back_populates="batches_supplied",
+    )
+    supplier: Mapped["Supplier | None"] = relationship(
+        "Supplier",
+        back_populates="batches",
     )
     farm: Mapped["Farm | None"] = relationship(
         "Farm",

@@ -8,6 +8,8 @@ will be registered here as each phase is implemented.
 from fastapi import APIRouter
 
 from app.api.v1.auth import router as auth_router
+from app.api.v1.bulk_orders import admin_router as bulk_orders_admin_router
+from app.api.v1.bulk_orders import customer_router as bulk_orders_customer_router
 from app.api.v1.cart import router as cart_router
 from app.api.v1.catalog import router as catalog_router
 from app.api.v1.fulfillments import router as fulfillments_router
@@ -16,6 +18,7 @@ from app.api.v1.orders import router as orders_router
 from app.api.v1.packaging import router as packaging_router
 from app.api.v1.payments import router as payments_router
 from app.api.v1.payments import webhook_router as payments_webhook_router
+from app.api.v1.suppliers import router as suppliers_router
 from app.schemas.base import PingResponse
 
 api_router = APIRouter()
@@ -50,6 +53,19 @@ api_router.include_router(
 # ADMIN, HUB_STAFF, OPERATIONS, DELIVERY_PARTNER)
 api_router.include_router(
     fulfillments_router, prefix="/fulfillments", tags=["fulfillments"]
+)
+
+# Supplier domain routes (internal staff only: ADMIN, HUB_STAFF, OPERATIONS;
+# performance evaluations ADMIN-only)
+api_router.include_router(suppliers_router, prefix="/suppliers", tags=["suppliers"])
+
+# Bulk & custom commerce routes (CUSTOMER-facing request/quote/accept +
+# ADMIN/OPERATIONS review/quote/convert)
+api_router.include_router(
+    bulk_orders_customer_router, prefix="/bulk-orders", tags=["bulk-orders"]
+)
+api_router.include_router(
+    bulk_orders_admin_router, prefix="/bulk-orders", tags=["bulk-orders"]
 )
 
 
