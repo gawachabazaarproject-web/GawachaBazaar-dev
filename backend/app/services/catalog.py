@@ -100,11 +100,17 @@ class CatalogService:
         )
 
     def list_public_products(
-        self, category_id: int | None, page: int, page_size: int
+        self, category_id: int | None, page: int, page_size: int, *, q: str | None = None
     ) -> ProductListResponse:
         query = self.db.query(Product).filter(Product.status == _ACTIVE)
         if category_id is not None:
             query = query.filter(Product.category_id == category_id)
+        if q is not None:
+            # Phase 20 addition: the smallest possible backend change to
+            # support the mobile search screen - no full-text search
+            # engine, just a case-insensitive name filter, consistent with
+            # the "do not invent a complex search engine" instruction.
+            query = query.filter(Product.name.ilike(f"%{q}%"))
 
         total = query.count()
         products = (

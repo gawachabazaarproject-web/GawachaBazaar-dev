@@ -67,15 +67,16 @@ def get_category(
 @router.get(
     "/products",
     response_model=ProductListResponse,
-    summary="List active products",
+    summary="List active products, optionally filtered by category and/or name search",
 )
 def list_products(
     category_id: int | None = Query(default=None),
+    q: str | None = Query(default=None, min_length=1, max_length=100, description="Case-insensitive name search"),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=MAX_PAGE_SIZE),
     db: Session = Depends(get_db),
 ) -> ProductListResponse:
-    return CatalogService(db).list_public_products(category_id, page, page_size)
+    return CatalogService(db).list_public_products(category_id, page, page_size, q=q)
 
 
 @router.get(
