@@ -7,6 +7,7 @@ will be registered here as each phase is implemented.
 
 from fastapi import APIRouter
 
+from app.api.v1.addresses import router as addresses_router
 from app.api.v1.auth import router as auth_router
 from app.api.v1.bulk_orders import admin_router as bulk_orders_admin_router
 from app.api.v1.bulk_orders import customer_router as bulk_orders_customer_router
@@ -27,6 +28,9 @@ api_router = APIRouter()
 
 # Authentication domain routes
 api_router.include_router(auth_router, prefix="/auth", tags=["auth"])
+
+# Address domain routes (CUSTOMER-only, user-scoped address book)
+api_router.include_router(addresses_router, prefix="/addresses", tags=["addresses"])
 
 # Catalog domain routes (public browsing + ADMIN-only management)
 api_router.include_router(catalog_router, prefix="/catalog", tags=["catalog"])

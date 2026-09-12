@@ -56,14 +56,19 @@ from app.models.inventory_lot import InventoryLot
 from app.models.inventory_reservation import InventoryReservation
 from app.models.inventory_reservation_item import InventoryReservationItem
 from app.models.order import Order
+from app.models.order_address import OrderAddress
+from app.models.order_item import OrderItem
+from app.models.payment import Payment
 from app.models.role import Role
 from app.models.user import User
 from app.models.user_role import UserRole
 from app.schemas.fulfillment import (
     CustomerFulfillmentResponse,
     FulfillmentListResponse,
+    FulfillmentOrderDetailResponse,
     FulfillmentResponse,
 )
+from app.schemas.order import OrderAddressResponse, OrderItemResponse
 from app.services.fulfillment_state import (
     FulfillmentStatus,
     IllegalFulfillmentTransitionError,
@@ -137,6 +142,52 @@ class FulfillmentService:
             # isn't assigned gets the identical 404 a nonexistent id would.
             raise NotFoundError("Fulfillment not found.")
         return FulfillmentResponse.model_validate(fulfillment)
+
+    def get_fulfillment_order_detail(
+        self, fulfillment_id: int, current_user: User
+    ) -> FulfillmentOrderDetailResponse:
+        """Phase 19: the staff/delivery-partner bridge to what to pick/pack
+        and where to deliver - see FulfillmentOrderDetailResponse. Same
+        ownership scoping as get_fulfillment_or_404.
+        """
+        fulfillment = (
+            self.db.query(Fulfillment).filter(Fulfillment.id == fulfillment_id).first()
+        )
+        if fulfillment is None:
+            raise NotFoundError("Fulfillment not found.")
+        if (
+            fulfillment.delivery_partner_user_id != current_user.id
+            and not self._is_privileged(current_user.id)
+        ):
+            raise NotFoundError("Fulfillment not found.")
+
+        order = self.db.query(Order).filter(Order.id == fulfillment.order_id).first()
+        if order is None:
+            raise NotFoundError("Order not found for this fulfillment.")
+        customer = self.db.query(User).filter(User.id == order.user_id).first()
+        payment = self.db.query(Payment).filter(Payment.order_id == order.id).first()
+        items = (
+            self.db.query(OrderItem)
+            .filter(OrderItem.order_id == order.id)
+            .order_by(OrderItem.id)
+            .all()
+        )
+        address = (
+            self.db.query(OrderAddress).filter(OrderAddress.order_id == order.id).first()
+        )
+
+        return FulfillmentOrderDetailResponse(
+            fulfillment_id=fulfillment.id,
+            order_id=order.id,
+            order_number=order.order_number,
+            customer_name=customer.name if customer else "",
+            total_amount=order.total_amount,
+            currency=order.currency,
+            payment_method=payment.payment_method if payment else None,
+            payment_status=payment.status if payment else None,
+            items=[OrderItemResponse.model_validate(i) for i in items],
+            address=OrderAddressResponse.model_validate(address) if address else None,
+        )
 
     def list_fulfillments(
         self,
