@@ -5,26 +5,29 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Stack, SplashScreen } from "expo-router";
 import { StatusBar } from "expo-status-bar";
+import { useFonts, NotoSerif_600SemiBold, NotoSerif_700Bold } from "@expo-google-fonts/noto-serif";
 import {
-  useFonts,
-  Inter_400Regular,
-  Inter_500Medium,
-  Inter_600SemiBold,
-  Inter_700Bold,
-} from "@expo-google-fonts/inter";
+  PlusJakartaSans_400Regular,
+  PlusJakartaSans_500Medium,
+  PlusJakartaSans_600SemiBold,
+  PlusJakartaSans_700Bold,
+} from "@expo-google-fonts/plus-jakarta-sans";
 import { queryClient } from "@/api/queryClient";
 import { useAuthStore } from "@/store/authStore";
 import { ToastHost } from "@/components/ToastHost";
-import { AppGate } from "./_appGate";
+import { CartBar } from "@/components/CartBar";
+import { AppGate } from "@/navigation/AppGate";
 
 SplashScreen.preventAutoHideAsync().catch(() => undefined);
 
 export default function RootLayout() {
   const [fontsLoaded] = useFonts({
-    Inter_400Regular,
-    Inter_500Medium,
-    Inter_600SemiBold,
-    Inter_700Bold,
+    NotoSerif_600SemiBold,
+    NotoSerif_700Bold,
+    PlusJakartaSans_400Regular,
+    PlusJakartaSans_500Medium,
+    PlusJakartaSans_600SemiBold,
+    PlusJakartaSans_700Bold,
   });
   const restoreSession = useAuthStore((s) => s.restoreSession);
   const authStatus = useAuthStore((s) => s.status);
@@ -68,6 +71,7 @@ export default function RootLayout() {
               <Stack.Screen name="account/support" options={{ presentation: "card" }} />
               <Stack.Screen name="account/settings" options={{ presentation: "card" }} />
             </Stack>
+            <CartBar />
             <ToastHost />
           </AppGate>
         </QueryClientProvider>

@@ -1,12 +1,9 @@
 /**
- * GawachaBazaar color tokens.
- *
- * Design intent: deep forest green (trust, freshness) as the restrained
- * primary - never a bright "grocery green" wash. A warm terracotta accent
- * carries CTAs and price emphasis, giving the palette an Indian warmth
- * without falling back on leaf/vegetable clichés. Background is a warm
- * off-white, not stark white or gray, so photography and product imagery
- * feel inviting rather than clinical.
+ * GawachaBazaar color tokens - "Refined Organic Commerce" design system
+ * (see DESIGN.md): deep forest green anchoring the brand, golden mustard
+ * as a high-conversion accent, warm harvest-cream canvas. Honors Nagpur's
+ * agricultural belts - deep forest cover, sun-dried pulse fields, and
+ * unbleached grain sacks - without generic "grocery green" cliché.
  *
  * Only this file may define raw color values - every screen/component
  * reads from `colors`, never a hex literal inline.
@@ -14,45 +11,45 @@
 
 export const colors = {
   // Brand
-  primary: "#1F6D4C",
-  primaryDark: "#154A34",
-  primaryLight: "#E7F1EC",
-  accent: "#E8622C",
-  accentDark: "#C64F1F",
-  accentLight: "#FBEAE1",
+  primary: "#0B2D20",
+  primaryDark: "#0F3B2B",
+  primaryLight: "#C6EBD7",
+  accent: "#D9A52A",
+  accentDark: "#7A5900",
+  accentLight: "#FFDEA2",
 
   // Surfaces
-  background: "#FAF9F6",
+  background: "#F7F4EB",
   surface: "#FFFFFF",
   surfaceElevated: "#FFFFFF",
-  overlay: "rgba(20, 20, 18, 0.5)",
+  overlay: "rgba(11, 45, 32, 0.4)",
 
   // Text
-  textPrimary: "#1A1A18",
-  textSecondary: "#6B6B63",
-  textMuted: "#9B9B92",
+  textPrimary: "#143326",
+  textSecondary: "#506155",
+  textMuted: "#8C9B90",
   textInverse: "#FFFFFF",
-  textOnAccent: "#FFFFFF",
+  textOnAccent: "#0B2D20",
 
   // Structure
-  border: "#E8E6DF",
-  borderStrong: "#D3D0C6",
-  divider: "#EFEDE6",
+  border: "#E2DDD0",
+  borderStrong: "#D5CEC2",
+  divider: "#EBE5D5",
 
   // Status
   success: "#1E8E5A",
   successLight: "#E5F4EC",
   warning: "#C9821A",
   warningLight: "#FBF0DE",
-  error: "#D6412F",
-  errorLight: "#FBEAE7",
+  error: "#BA1A1A",
+  errorLight: "#FFDAD6",
   info: "#2E6FBB",
   infoLight: "#E9F1FA",
 
   // Commerce-specific
-  price: "#1A1A18",
+  price: "#143326",
   discount: "#1E8E5A",
-  strikethrough: "#9B9B92",
+  strikethrough: "#8C9B90",
 
   // Fixed
   white: "#FFFFFF",

@@ -117,13 +117,33 @@ class CatalogService:
             query.order_by(Product.name)
             .offset((page - 1) * page_size)
             .limit(page_size)
-            .options(selectinload(Product.images))
+            .options(selectinload(Product.images), selectinload(Product.variants))
             .all()
+        )
+
+        # Phase 20 addition: browsing grids (Home/Category/Search) need a
+        # real price and a real addable variant, not just name/image - the
+        # smallest correct fix is resolving each product's lowest-id ACTIVE
+        # variant once and exposing both its current price and its id, so
+        # "Add to cart" works directly from a grid card without a second
+        # round trip to the full product-detail endpoint.
+        default_variant_by_product: dict[int, ProductVariant] = {}
+        for p in products:
+            active_variants = sorted(
+                (v for v in p.variants if v.status == _ACTIVE), key=lambda v: v.id
+            )
+            if active_variants:
+                default_variant_by_product[p.id] = active_variants[0]
+
+        current_prices = self._get_current_prices_for_variants(
+            [v.id for v in default_variant_by_product.values()]
         )
 
         items = []
         for p in products:
             primary = next((i for i in p.images if i.is_primary), None)
+            default_variant = default_variant_by_product.get(p.id)
+            price = current_prices.get(default_variant.id) if default_variant else None
             items.append(
                 ProductSummaryResponse(
                     id=p.id,
@@ -132,6 +152,10 @@ class CatalogService:
                     category_id=p.category_id,
                     status=p.status,
                     primary_image_url=primary.image_url if primary else None,
+                    starting_price=PriceResponse.model_validate(price) if price else None,
+                    default_variant_id=default_variant.id if default_variant else None,
+                    default_variant_unit=default_variant.unit if default_variant else None,
+                    default_variant_quantity=default_variant.quantity if default_variant else None,
                 )
             )
         return ProductListResponse(

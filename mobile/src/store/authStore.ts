@@ -27,7 +27,16 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   sessionExpired: false,
 
   restoreSession: async () => {
-    const restored = await hydrateAuthTokens();
+    let restored: boolean;
+    try {
+      restored = await hydrateAuthTokens();
+    } catch {
+      // A secure-storage read failure should never strand the user on the
+      // splash screen forever - fall back to "please log in" like any
+      // other missing/invalid session.
+      set({ status: "unauthenticated" });
+      return;
+    }
     if (!restored) {
       set({ status: "unauthenticated" });
       return;

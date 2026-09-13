@@ -6,7 +6,6 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { Text } from "@/components/Text";
-import { CartBar } from "@/components/CartBar";
 import { colors, spacing } from "@/theme";
 
 const ICONS: Record<string, keyof typeof Feather.glyphMap> = {
@@ -29,7 +28,6 @@ function CustomTabBar({ state, navigation }: BottomTabBarProps) {
   const insets = useSafeAreaInsets();
   return (
     <View style={[styles.wrapper, { paddingBottom: insets.bottom }]}>
-      <CartBar />
       <View style={styles.tabRow}>
         {state.routes.map((route: (typeof state.routes)[number], index: number) => {
           const focused = state.index === index;

@@ -8,15 +8,18 @@
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
-    "backgroundColor": "#FAF9F6",
+    "backgroundColor": "#000F08",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.gawachabazaar.customer"
+      "bundleIdentifier": "com.gawachabazaar.customer",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "GawachaBazaar uses your location to prefill your delivery address. You can always enter it manually instead."
+      }
     },
     "android": {
       "package": "com.gawachabazaar.customer",
       "adaptiveIcon": {
-        "backgroundColor": "#1F6D4C",
+        "backgroundColor": "#000F08",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
@@ -32,14 +35,20 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#FAF9F6",
+          "backgroundColor": "#000F08",
           "image": "./assets/splash-icon.png",
           "imageWidth": 140
         }
       ],
       "expo-image",
       "expo-secure-store",
-      "expo-font"
+      "expo-font",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "GawachaBazaar uses your location to prefill your delivery address. You can always enter it manually instead."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

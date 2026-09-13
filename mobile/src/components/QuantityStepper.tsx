@@ -20,6 +20,10 @@ export interface QuantityStepperProps {
   onDecrement: () => void;
   disabled?: boolean;
   compact?: boolean;
+  /** Stretches to the width of its container instead of sizing to
+   * content - used for the compact 2-column product card footer, where
+   * the control should span the card like the reference design. */
+  fullWidth?: boolean;
 }
 
 /**
@@ -36,6 +40,7 @@ export function QuantityStepper({
   onDecrement,
   disabled,
   compact = true,
+  fullWidth = false,
 }: QuantityStepperProps) {
   const scale = useSharedValue(1);
   const bump = () => {
@@ -49,7 +54,11 @@ export function QuantityStepper({
 
   if (quantity === null || quantity === undefined || quantity <= 0) {
     return (
-      <Animated.View entering={FadeIn.duration(150)} exiting={FadeOut.duration(120)}>
+      <Animated.View
+        entering={FadeIn.duration(150)}
+        exiting={FadeOut.duration(120)}
+        style={fullWidth && styles.fullWidth}
+      >
         <Pressable
           disabled={disabled}
           onPress={() => {
@@ -60,6 +69,7 @@ export function QuantityStepper({
           style={[
             styles.addButton,
             { height },
+            fullWidth && styles.fullWidth,
             disabled && styles.disabled,
           ]}
           accessibilityRole="button"
@@ -78,7 +88,7 @@ export function QuantityStepper({
   return (
     <Animated.View
       entering={FadeIn.duration(150)}
-      style={[styles.stepper, { height }]}
+      style={[styles.stepper, { height }, fullWidth && styles.fullWidth]}
     >
       <Pressable
         onPress={() => {
@@ -90,10 +100,10 @@ export function QuantityStepper({
         accessibilityLabel="Decrease quantity"
         hitSlop={8}
       >
-        <Feather name="minus" size={15} color={colors.primary} />
+        <Feather name="minus" size={15} color={colors.textInverse} />
       </Pressable>
-      <Animated.View style={[styles.quantityWrap, animatedStyle]}>
-        <Text variant="bodyMedium" color={colors.primary}>
+      <Animated.View style={[styles.quantityWrap, fullWidth && { flex: 1 }, animatedStyle]}>
+        <Text variant="bodyMedium" color={colors.textInverse}>
           {quantity}
         </Text>
       </Animated.View>
@@ -108,18 +118,19 @@ export function QuantityStepper({
         accessibilityLabel="Increase quantity"
         hitSlop={8}
       >
-        <Feather name="plus" size={15} color={colors.primary} />
+        <Feather name="plus" size={15} color={colors.textInverse} />
       </Pressable>
     </Animated.View>
   );
 }
 
 const styles = StyleSheet.create({
+  fullWidth: { width: "100%" },
   addButton: {
-    borderWidth: 1.5,
-    borderColor: colors.primary,
     borderRadius: radius.sm,
-    paddingHorizontal: 18,
+    borderWidth: 1,
+    borderColor: colors.primary,
+    paddingHorizontal: 20,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: colors.surface,
@@ -128,13 +139,11 @@ const styles = StyleSheet.create({
   stepper: {
     flexDirection: "row",
     alignItems: "center",
-    borderWidth: 1.5,
-    borderColor: colors.primary,
     borderRadius: radius.sm,
-    backgroundColor: colors.surface,
-    minWidth: 84,
+    backgroundColor: colors.primary,
+    minWidth: 88,
     justifyContent: "space-between",
   },
-  stepperButton: { paddingHorizontal: 8, height: "100%", alignItems: "center", justifyContent: "center" },
+  stepperButton: { paddingHorizontal: 10, height: "100%", alignItems: "center", justifyContent: "center" },
   quantityWrap: { alignItems: "center", justifyContent: "center", minWidth: 20 },
 });

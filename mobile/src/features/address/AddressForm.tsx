@@ -1,10 +1,13 @@
 import React, { useState } from "react";
-import { Pressable, StyleSheet, Switch, View } from "react-native";
+import { ActivityIndicator, Pressable, StyleSheet, Switch, View } from "react-native";
+import * as Location from "expo-location";
+import { Feather } from "@expo/vector-icons";
 import { Text } from "@/components/Text";
 import { TextField } from "@/components/TextField";
 import { Button } from "@/components/Button";
 import { colors, radius, spacing } from "@/theme";
 import { AddressResponse, CreateAddressPayload } from "@/types/api";
+import { validateRequired } from "@/utils/validation";
 
 const QUICK_LABELS = ["Home", "Work", "Other"];
 
@@ -17,6 +20,8 @@ export interface AddressFormValues {
   postal_code: string;
   is_default: boolean;
 }
+
+type FieldErrors = Partial<Record<"label" | "address_line_1" | "city" | "state" | "postal_code", string>>;
 
 export interface AddressFormProps {
   initial?: AddressResponse;
@@ -38,14 +43,64 @@ export function AddressForm({ initial, submitLabel, loading, allowDefaultToggle 
     postal_code: initial?.postal_code ?? "",
     is_default: initial?.is_default ?? false,
   });
+  const [coords, setCoords] = useState<{ latitude: number; longitude: number } | null>(
+    initial?.latitude && initial?.longitude
+      ? { latitude: Number.parseFloat(initial.latitude), longitude: Number.parseFloat(initial.longitude) }
+      : null,
+  );
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [error, setError] = useState<string | null>(null);
+  const [locating, setLocating] = useState(false);
 
-  const set = <K extends keyof AddressFormValues>(key: K, value: AddressFormValues[K]) =>
+  const set = <K extends keyof AddressFormValues>(key: K, value: AddressFormValues[K]) => {
     setValues((v) => ({ ...v, [key]: value }));
+    if (key in fieldErrors) setFieldErrors((e) => ({ ...e, [key]: undefined }));
+  };
+
+  const handleUseCurrentLocation = async () => {
+    setError(null);
+    setLocating(true);
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== "granted") {
+        setError("Location permission was denied. You can still enter your address manually.");
+        return;
+      }
+      const position = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+      const { latitude, longitude } = position.coords;
+      setCoords({ latitude, longitude });
+
+      const [place] = await Location.reverseGeocodeAsync({ latitude, longitude });
+      if (place) {
+        setValues((v) => ({
+          ...v,
+          address_line_1: [place.streetNumber, place.street].filter(Boolean).join(" ") || v.address_line_1,
+          city: place.city ?? v.city,
+          state: place.region ?? v.state,
+          postal_code: place.postalCode ?? v.postal_code,
+        }));
+        setFieldErrors({});
+      }
+    } catch {
+      setError("Couldn't detect your location. Please enter your address manually.");
+    } finally {
+      setLocating(false);
+    }
+  };
+
+  const validate = (): FieldErrors => ({
+    label: validateRequired(values.label, "Label") ?? undefined,
+    address_line_1: validateRequired(values.address_line_1, "Address line 1") ?? undefined,
+    city: validateRequired(values.city, "City") ?? undefined,
+    state: validateRequired(values.state, "State") ?? undefined,
+    postal_code: validateRequired(values.postal_code, "Postal code") ?? undefined,
+  });
 
   const handleSubmit = () => {
-    if (!values.label.trim() || !values.address_line_1.trim() || !values.city.trim() || !values.state.trim() || !values.postal_code.trim()) {
-      setError("Please fill in all required fields.");
+    const errors = validate();
+    setFieldErrors(errors);
+    if (Object.values(errors).some(Boolean)) {
+      setError(null);
       return;
     }
     setError(null);
@@ -56,12 +111,30 @@ export function AddressForm({ initial, submitLabel, loading, allowDefaultToggle 
       city: values.city.trim(),
       state: values.state.trim(),
       postal_code: values.postal_code.trim(),
+      latitude: coords?.latitude ?? null,
+      longitude: coords?.longitude ?? null,
       is_default: values.is_default,
     });
   };
 
   return (
     <View>
+      <Pressable style={styles.locationButton} onPress={handleUseCurrentLocation} disabled={locating}>
+        {locating ? (
+          <ActivityIndicator size="small" color={colors.primary} />
+        ) : (
+          <Feather name="map-pin" size={16} color={colors.primary} />
+        )}
+        <Text variant="bodyMedium" color={colors.primary} style={{ marginLeft: spacing.sm }}>
+          {locating ? "Detecting your location..." : "Use current location"}
+        </Text>
+      </Pressable>
+      {coords ? (
+        <Text variant="caption" color={colors.textMuted} style={styles.locationHint}>
+          Location detected. You can still edit any field below.
+        </Text>
+      ) : null}
+
       <Text variant="bodyMedium" style={styles.fieldLabel}>
         Label
       </Text>
@@ -79,7 +152,13 @@ export function AddressForm({ initial, submitLabel, loading, allowDefaultToggle 
         ))}
       </View>
       {!QUICK_LABELS.includes(values.label) ? (
-        <TextField value={values.label} onChangeText={(v) => set("label", v)} placeholder="Custom label" style={{ marginBottom: spacing.base }} />
+        <TextField
+          value={values.label}
+          onChangeText={(v) => set("label", v)}
+          placeholder="Custom label"
+          error={fieldErrors.label}
+          style={{ marginBottom: spacing.base }}
+        />
       ) : null}
 
       <TextField
@@ -87,6 +166,7 @@ export function AddressForm({ initial, submitLabel, loading, allowDefaultToggle 
         placeholder="House / flat / street"
         value={values.address_line_1}
         onChangeText={(v) => set("address_line_1", v)}
+        error={fieldErrors.address_line_1}
       />
       <View style={{ height: spacing.base }} />
       <TextField
@@ -98,10 +178,10 @@ export function AddressForm({ initial, submitLabel, loading, allowDefaultToggle 
       <View style={{ height: spacing.base }} />
       <View style={styles.row}>
         <View style={styles.half}>
-          <TextField label="City" value={values.city} onChangeText={(v) => set("city", v)} />
+          <TextField label="City" value={values.city} onChangeText={(v) => set("city", v)} error={fieldErrors.city} />
         </View>
         <View style={styles.half}>
-          <TextField label="State" value={values.state} onChangeText={(v) => set("state", v)} />
+          <TextField label="State" value={values.state} onChangeText={(v) => set("state", v)} error={fieldErrors.state} />
         </View>
       </View>
       <View style={{ height: spacing.base }} />
@@ -110,6 +190,7 @@ export function AddressForm({ initial, submitLabel, loading, allowDefaultToggle 
         keyboardType="number-pad"
         value={values.postal_code}
         onChangeText={(v) => set("postal_code", v)}
+        error={fieldErrors.postal_code}
       />
 
       {allowDefaultToggle ? (
@@ -136,6 +217,17 @@ export function AddressForm({ initial, submitLabel, loading, allowDefaultToggle 
 }
 
 const styles = StyleSheet.create({
+  locationButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1.5,
+    borderColor: colors.primary,
+    borderRadius: radius.md,
+    paddingVertical: spacing.md,
+    marginBottom: spacing.sm,
+  },
+  locationHint: { textAlign: "center", marginBottom: spacing.base },
   fieldLabel: { marginBottom: spacing.sm },
   chipRow: { flexDirection: "row", gap: spacing.sm, marginBottom: spacing.base },
   chip: {

@@ -42,3 +42,15 @@ export function useProducts(params: Omit<ListProductsParams, "page" | "pageSize"
     enabled: params.q === undefined || params.q.length > 0,
   });
 }
+
+/** Full catalog in one request (safe given this app's small product
+ * count) - used only for client-side illustrative grouping (Categories'
+ * department tiles, Search's "Pairs with X" rail), never for the main
+ * paginated product grid, which always goes through `useProducts`. */
+export function useAllProducts() {
+  return useQuery({
+    queryKey: ["products", "all"],
+    queryFn: () => catalogApi.listProducts({ page: 1, pageSize: 100 }),
+    staleTime: 60_000,
+  });
+}

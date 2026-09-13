@@ -9,6 +9,9 @@ import { Wordmark } from "@/components/Wordmark";
 import { useAuthStore } from "@/store/authStore";
 import { toApiError } from "@/api";
 import { colors, spacing } from "@/theme";
+import { validateEmail, validateName, validatePassword, validatePhone } from "@/utils/validation";
+
+type FieldErrors = { name?: string; email?: string; phone?: string; password?: string };
 
 export default function RegisterScreen() {
   const router = useRouter();
@@ -17,19 +20,28 @@ export default function RegisterScreen() {
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
+  const setField =
+    (key: keyof FieldErrors, setter: (v: string) => void) =>
+    (v: string) => {
+      setter(v);
+      if (fieldErrors[key]) setFieldErrors((e) => ({ ...e, [key]: undefined }));
+    };
+
   const handleRegister = async () => {
     setError(null);
-    if (!name.trim() || !email.trim() || !phone.trim() || !password) {
-      setError("Please fill in every field to create your account.");
-      return;
-    }
-    if (password.length < 8) {
-      setError("Password must be at least 8 characters.");
-      return;
-    }
+    const errors: FieldErrors = {
+      name: validateName(name) ?? undefined,
+      email: validateEmail(email) ?? undefined,
+      phone: validatePhone(phone) ?? undefined,
+      password: validatePassword(password) ?? undefined,
+    };
+    setFieldErrors(errors);
+    if (Object.values(errors).some(Boolean)) return;
+
     setLoading(true);
     try {
       await register({ name: name.trim(), email: email.trim(), phone: phone.trim(), password });
@@ -51,7 +63,14 @@ export default function RegisterScreen() {
             </Text>
           </View>
 
-          <TextField label="Full name" placeholder="Priya Sharma" value={name} onChangeText={setName} autoComplete="name" />
+          <TextField
+            label="Full name"
+            placeholder="Priya Sharma"
+            value={name}
+            onChangeText={setField("name", setName)}
+            autoComplete="name"
+            error={fieldErrors.name}
+          />
           <View style={{ height: spacing.base }} />
           <TextField
             label="Email"
@@ -60,7 +79,8 @@ export default function RegisterScreen() {
             keyboardType="email-address"
             autoComplete="email"
             value={email}
-            onChangeText={setEmail}
+            onChangeText={setField("email", setEmail)}
+            error={fieldErrors.email}
           />
           <View style={{ height: spacing.base }} />
           <TextField
@@ -69,7 +89,8 @@ export default function RegisterScreen() {
             keyboardType="phone-pad"
             autoComplete="tel"
             value={phone}
-            onChangeText={setPhone}
+            onChangeText={setField("phone", setPhone)}
+            error={fieldErrors.phone}
           />
           <View style={{ height: spacing.base }} />
           <TextField
@@ -78,8 +99,9 @@ export default function RegisterScreen() {
             secureTextEntry
             autoComplete="new-password"
             value={password}
-            onChangeText={setPassword}
+            onChangeText={setField("password", setPassword)}
             onSubmitEditing={handleRegister}
+            error={fieldErrors.password}
           />
 
           {error ? (

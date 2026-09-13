@@ -243,9 +243,13 @@ class CartService:
         price = get_current_prices_for_variants(self.db, [item.variant_id]).get(
             item.variant_id
         )
+        primary_image = next((i for i in product.images if i.is_primary), None)
         return CartItemResponse(
             id=item.id,
             variant_id=item.variant_id,
+            product_id=product.id,
+            product_slug=product.slug,
+            primary_image_url=primary_image.image_url if primary_image else None,
             product_name=product.name,
             variant_name=variant.name,
             sku=variant.sku,
@@ -291,10 +295,14 @@ class CartService:
                 total += line_total
                 if currency is None:
                     currency = price.currency
+            primary_image = next((i for i in product.images if i.is_primary), None)
             item_responses.append(
                 CartItemResponse(
                     id=item.id,
                     variant_id=item.variant_id,
+                    product_id=product.id,
+                    product_slug=product.slug,
+                    primary_image_url=primary_image.image_url if primary_image else None,
                     product_name=product.name,
                     variant_name=variant.name,
                     sku=variant.sku,

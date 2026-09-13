@@ -2,6 +2,7 @@ import React from "react";
 import { ActivityIndicator, FlatList, StyleSheet, View } from "react-native";
 import { ProductCard, ProductCardData } from "./ProductCard";
 import { ProductCardSkeleton } from "./Skeleton";
+import { CART_BAR_CLEARANCE } from "./CartBar";
 import { colors, spacing } from "@/theme";
 
 export interface ProductGridProps {
@@ -12,6 +13,7 @@ export interface ProductGridProps {
   onPressProduct: (id: number) => void;
   ListEmptyComponent?: React.ReactElement;
   ListHeaderComponent?: React.ReactElement;
+  ListFooterComponent?: React.ReactElement | null;
 }
 
 /** Two-column virtualized product grid shared by Category and Search
@@ -25,6 +27,7 @@ export function ProductGrid({
   onPressProduct,
   ListEmptyComponent,
   ListHeaderComponent,
+  ListFooterComponent,
 }: ProductGridProps) {
   if (isLoading) {
     return (
@@ -45,9 +48,9 @@ export function ProductGrid({
       numColumns={2}
       columnWrapperStyle={styles.row}
       contentContainerStyle={styles.content}
-      renderItem={({ item }) => (
+      renderItem={({ item, index }) => (
         <View style={styles.column}>
-          <ProductCard product={item} onPress={() => onPressProduct(item.id)} />
+          <ProductCard product={item} onPress={() => onPressProduct(item.id)} index={index % 8} />
         </View>
       )}
       onEndReachedThreshold={0.4}
@@ -55,11 +58,14 @@ export function ProductGrid({
       ListHeaderComponent={ListHeaderComponent}
       ListEmptyComponent={ListEmptyComponent}
       ListFooterComponent={
-        isFetchingNextPage ? (
-          <View style={styles.footer}>
-            <ActivityIndicator color={colors.primary} />
-          </View>
-        ) : null
+        <>
+          {ListFooterComponent ?? null}
+          {isFetchingNextPage ? (
+            <View style={styles.footer}>
+              <ActivityIndicator color={colors.primary} />
+            </View>
+          ) : null}
+        </>
       }
       showsVerticalScrollIndicator={false}
     />
@@ -67,7 +73,7 @@ export function ProductGrid({
 }
 
 const styles = StyleSheet.create({
-  content: { padding: spacing.base, flexGrow: 1 },
+  content: { padding: spacing.base, paddingBottom: spacing.base + CART_BAR_CLEARANCE, flexGrow: 1 },
   row: { gap: spacing.md },
   column: { flex: 1, marginBottom: spacing.md },
   skeletonGrid: { flexDirection: "row", flexWrap: "wrap", padding: spacing.base, gap: spacing.md },

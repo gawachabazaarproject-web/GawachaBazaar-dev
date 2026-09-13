@@ -13,6 +13,12 @@ import { addressApi } from "@/api";
  * customer has at least one saved address, this never sends them back to
  * onboarding, even if they later delete their only address (that's the
  * Address screen's own job to handle, not a global redirect loop).
+ *
+ * Lives under src/, not app/, on purpose: anything inside app/ is scanned
+ * by Expo Router as a potential route, and this is a plain component, not
+ * a route - keeping it out of app/ avoids the (harmless but noisy)
+ * "missing default export" warning that a `_`-prefixed file under app/
+ * still triggers.
  */
 export function AppGate({ children }: { children: React.ReactNode }) {
   const router = useRouter();

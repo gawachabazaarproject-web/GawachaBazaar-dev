@@ -143,6 +143,10 @@ export interface ProductSummaryResponse {
   category_id: number;
   status: string;
   primary_image_url: string | null;
+  starting_price: PriceResponse | null;
+  default_variant_id: number | null;
+  default_variant_unit: string | null;
+  default_variant_quantity: string | null;
 }
 
 export interface ProductResponse {
@@ -170,6 +174,9 @@ export interface ProductListResponse {
 export interface CartItemResponse {
   id: number;
   variant_id: number;
+  product_id: number;
+  product_slug: string;
+  primary_image_url: string | null;
   product_name: string;
   variant_name: string;
   sku: string;

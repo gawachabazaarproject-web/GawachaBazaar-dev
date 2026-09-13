@@ -10,11 +10,12 @@ export const cartQueryKey = ["cart"] as const;
  * local updates on mutation - while always reconciling back to whatever
  * the server actually returns, including on error (via invalidate).
  */
-export function useCart() {
+export function useCart(enabled: boolean = true) {
   return useQuery({
     queryKey: cartQueryKey,
     queryFn: cartApi.get,
     staleTime: 15_000,
+    enabled,
   });
 }
 

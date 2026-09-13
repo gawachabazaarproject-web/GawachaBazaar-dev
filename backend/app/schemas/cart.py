@@ -19,6 +19,9 @@ class UpdateCartItemRequest(BaseSchema):
 class CartItemResponse(BaseSchema):
     id: int
     variant_id: int
+    product_id: int
+    product_slug: str
+    primary_image_url: str | None = None
     product_name: str
     variant_name: str
     sku: str
