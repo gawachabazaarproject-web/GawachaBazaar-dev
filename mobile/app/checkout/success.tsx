@@ -91,7 +91,7 @@ const styles = StyleSheet.create({
   detailsCard: {
     width: "100%",
     backgroundColor: colors.surface,
-    borderRadius: radius.lg,
+    borderRadius: radius.none,
     borderWidth: 1,
     borderColor: colors.border,
     padding: spacing.base,

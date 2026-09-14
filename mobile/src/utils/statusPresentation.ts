@@ -1,5 +1,5 @@
 import { colors } from "@/theme";
-import { FulfillmentStatus, OrderStatus, PaymentStatus, RefundStatus } from "@/types/api";
+import { BulkOrderRequestStatus, FulfillmentStatus, OrderStatus, PaymentStatus, RefundStatus } from "@/types/api";
 
 /**
  * Presentation-only mapping from backend state to UI. This file makes NO
@@ -98,6 +98,29 @@ export function presentRefundStatus(status: RefundStatus | string): StatusPresen
   }
 }
 
+export function presentBulkRequestStatus(status: BulkOrderRequestStatus | string): StatusPresentation {
+  switch (status) {
+    case "REQUESTED":
+      return { label: "Request sent", color: colors.info, backgroundColor: colors.infoLight };
+    case "UNDER_REVIEW":
+      return { label: "Under review", color: colors.info, backgroundColor: colors.infoLight };
+    case "QUOTED":
+      return { label: "Quote ready", color: colors.warning, backgroundColor: colors.warningLight };
+    case "CUSTOMER_ACCEPTED":
+      return { label: "Quote accepted", color: colors.primary, backgroundColor: colors.primaryLight };
+    case "CONVERTED_TO_ORDER":
+      return { label: "Converted to order", color: colors.success, backgroundColor: colors.successLight };
+    case "REJECTED":
+      return { label: "Rejected", color: colors.error, backgroundColor: colors.errorLight };
+    case "CANCELLED":
+      return { label: "Cancelled", color: colors.textMuted, backgroundColor: colors.divider };
+    case "EXPIRED":
+      return { label: "Expired", color: colors.textMuted, backgroundColor: colors.divider };
+    default:
+      return NEUTRAL;
+  }
+}
+
 /** Orders considered "active" for the Orders screen's Active/Previous
  * split - purely a UI grouping, not a backend concept. */
 export function isActiveOrder(status: OrderStatus | string): boolean {
@@ -111,4 +134,10 @@ export function isActiveOrder(status: OrderStatus | string): boolean {
  * CONFIRMED, never from COMPLETED/EXPIRED/CANCELLED. */
 export function isOrderCancellable(status: OrderStatus | string): boolean {
   return status === "PENDING" || status === "CONFIRMED";
+}
+
+/** Mirrors bulk_order_state.py's TERMINAL_REQUEST_STATUSES - a request in
+ * any non-terminal state can move to CANCELLED. */
+export function isBulkRequestCancellable(status: BulkOrderRequestStatus | string): boolean {
+  return !["CONVERTED_TO_ORDER", "REJECTED", "CANCELLED", "EXPIRED"].includes(status);
 }

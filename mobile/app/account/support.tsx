@@ -4,7 +4,7 @@ import { Stack } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import { Screen } from "@/components/Screen";
 import { Text } from "@/components/Text";
-import { colors, radius, spacing } from "@/theme";
+import { colors, spacing } from "@/theme";
 
 /**
  * Static contact-based support (brief §35/§54: no in-app chat for MVP).
@@ -22,15 +22,17 @@ export default function SupportScreen() {
 
         <Pressable style={styles.card} onPress={() => Linking.openURL("mailto:support@gawachabazaar.example")}>
           <Feather name="mail" size={18} color={colors.primary} />
-          <Text variant="bodyMedium" style={{ marginLeft: spacing.md }}>
+          <Text variant="bodyMedium" style={{ marginLeft: spacing.md, flex: 1 }}>
             support@gawachabazaar.example
           </Text>
+          <Feather name="arrow-up-right" size={16} color={colors.textMuted} />
         </Pressable>
-        <Pressable style={styles.card} onPress={() => Linking.openURL("tel:+911234567890")}>
+        <Pressable style={[styles.card, styles.cardLast]} onPress={() => Linking.openURL("tel:+911234567890")}>
           <Feather name="phone" size={18} color={colors.primary} />
-          <Text variant="bodyMedium" style={{ marginLeft: spacing.md }}>
+          <Text variant="bodyMedium" style={{ marginLeft: spacing.md, flex: 1 }}>
             +91 12345 67890
           </Text>
+          <Feather name="arrow-up-right" size={16} color={colors.textMuted} />
         </Pressable>
       </View>
     </Screen>
@@ -43,11 +45,9 @@ const styles = StyleSheet.create({
   card: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.lg,
-    padding: spacing.base,
-    marginBottom: spacing.md,
+    paddingVertical: spacing.md,
+    borderBottomWidth: 1,
+    borderColor: colors.divider,
   },
+  cardLast: { borderBottomWidth: 0 },
 });

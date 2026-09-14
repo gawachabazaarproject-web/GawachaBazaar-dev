@@ -8,7 +8,7 @@ import { QuantityStepper } from "./QuantityStepper";
 import { useVariantStepper } from "@/features/cart/useCart";
 import { formatVariantSize } from "@/utils/money";
 import { getEmbellishment } from "@/utils/productEmbellishments";
-import { colors, radius, shadows, spacing } from "@/theme";
+import { colors, radius, spacing } from "@/theme";
 import { ProductCardData } from "./ProductCard";
 
 export interface HorizontalProductCardProps {
@@ -74,16 +74,13 @@ const styles = StyleSheet.create({
   card: {
     flexDirection: "row",
     backgroundColor: colors.surface,
-    borderRadius: radius.md,
-    borderWidth: 1,
+    borderBottomWidth: 1,
     borderColor: colors.divider,
-    padding: spacing.md,
+    paddingVertical: spacing.md,
     marginHorizontal: spacing.base,
-    marginBottom: spacing.md,
     gap: spacing.md,
-    ...shadows.card,
   },
-  image: { width: 84, height: 84, borderRadius: radius.sm, backgroundColor: colors.background },
+  image: { width: 88, height: 88, borderRadius: radius.none, backgroundColor: colors.background },
   info: { flex: 1, justifyContent: "center", gap: 2 },
   footer: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: spacing.sm },
 });

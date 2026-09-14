@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { Text } from "@/components/Text";
-import { colors, radius, shadows, spacing } from "@/theme";
+import { colors, radius, spacing } from "@/theme";
 
 type Instruction = "no_contact" | "ring_bell";
 
@@ -56,13 +56,10 @@ export function DeliveryInstructionCard() {
 const styles = StyleSheet.create({
   card: {
     marginHorizontal: spacing.base,
-    marginTop: spacing.base,
-    padding: spacing.base,
-    borderRadius: radius.md,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
+    marginTop: spacing.xl,
+    paddingTop: spacing.lg,
+    borderTopWidth: 1,
     borderColor: colors.divider,
-    ...shadows.card,
   },
   title: { marginBottom: spacing.md },
   row: { flexDirection: "row", gap: spacing.sm },
@@ -72,7 +69,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: spacing.sm,
     padding: spacing.md,
-    borderRadius: radius.sm,
+    borderRadius: radius.none,
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.background,

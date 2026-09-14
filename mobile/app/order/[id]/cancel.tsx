@@ -125,7 +125,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: spacing.md,
     padding: spacing.md,
-    borderRadius: radius.md,
+    borderRadius: radius.none,
     borderWidth: 1.5,
     borderColor: colors.border,
   },
