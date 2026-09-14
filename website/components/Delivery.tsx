@@ -2,8 +2,9 @@
 
 import { useEffect, useRef } from "react";
 import { ensureGsap } from "@/lib/gsap";
-import { IconCheck, IconArrowRight, IconBike } from "./icons";
-import RippleButton from "./RippleButton";
+import { IconCheck, IconBike } from "./icons";
+import EditorialLink from "./EditorialLink";
+import ChapterMark from "./ChapterMark";
 
 const POINTS = [
   "No multi-day cold storage holds",
@@ -45,9 +46,10 @@ export default function Delivery() {
       className="relative bg-primary-800 pb-24 pt-28 sm:pb-32 sm:pt-36"
       style={{ clipPath: "polygon(0 4vw, 100% 0, 100% 100%, 0 100%)" }}
     >
-      <div className="mx-auto grid max-w-7xl grid-cols-1 items-center gap-16 px-5 sm:px-8 lg:grid-cols-2">
+      <ChapterMark index={6} tone="light" className="absolute left-4 top-10 sm:left-8" />
+      <div className="relative mx-auto grid max-w-7xl grid-cols-1 items-center gap-16 px-5 sm:px-8 lg:grid-cols-2">
         <div className="deliver-copy">
-          <p className="eyebrow text-secondary-400">Direct Delivery Logistics</p>
+          <p className="eyebrow text-secondary-400">06 / 08 — Direct Delivery Logistics</p>
           <h2 className="mt-4 font-display text-3xl font-bold leading-tight text-neutral-100 sm:text-5xl">
             From our bazaar to your doorstep.
           </h2>
@@ -66,18 +68,12 @@ export default function Delivery() {
             ))}
           </div>
 
-          <RippleButton
-            as="a"
-            href="#delivery"
-            rippleColor="rgba(217,165,42,0.4)"
-            className="mt-10 inline-flex items-center gap-2 rounded-full border border-secondary-500/50 px-6 py-3 text-xs font-bold uppercase tracking-widest text-secondary-400 transition-colors hover:bg-secondary-500 hover:text-primary-900"
-          >
+          <EditorialLink as="a" href="#delivery" tone="light" className="mt-10">
             View Delivery Timelines
-            <IconArrowRight className="h-4 w-4" />
-          </RippleButton>
+          </EditorialLink>
         </div>
 
-        <div className="deliver-card relative rounded-3xl border border-secondary-500/20 bg-primary-700/50 p-10 text-center">
+        <div className="deliver-card relative rounded-none border border-secondary-500/20 bg-primary-700/50 p-10 text-center">
           <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-secondary-500/20">
             <IconBike className="h-10 w-10 text-secondary-400" />
           </div>

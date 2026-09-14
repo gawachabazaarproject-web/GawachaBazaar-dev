@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 import Image from "next/image";
 import { ensureGsap } from "@/lib/gsap";
 import { IconSprout, IconCheckBadge, IconLeaf } from "./icons";
+import ChapterMark from "./ChapterMark";
 
 const REASONS = [
   {
@@ -32,15 +33,15 @@ export default function VillageCulture() {
     const ctx = gsap.context(() => {
       gsap.fromTo(
         domeRef.current,
-        { clipPath: "ellipse(75% 0% at 50% 100%)" },
+        { clipPath: "ellipse(70% 0% at 50% 100%)" },
         {
-          clipPath: "ellipse(85% 140% at 50% 100%)",
+          clipPath: "ellipse(90% 150% at 50% 100%)",
           ease: "none",
           scrollTrigger: {
             trigger: domeRef.current,
             start: "top bottom",
-            end: "top 15%",
-            scrub: 0.6,
+            end: "bottom 55%",
+            scrub: 0.8,
           },
         }
       );
@@ -60,11 +61,11 @@ export default function VillageCulture() {
   }, []);
 
   return (
-    <section className="relative -mt-24 sm:-mt-32">
+    <section className="relative -mt-36 sm:-mt-56">
       <div
         ref={domeRef}
-        className="relative z-10 overflow-hidden bg-primary-800 pb-24 pt-28 sm:pb-32 sm:pt-40"
-        style={{ clipPath: "ellipse(75% 0% at 50% 100%)" }}
+        className="relative z-10 overflow-hidden bg-primary-800 pb-28 pt-44 sm:pb-40 sm:pt-64"
+        style={{ clipPath: "ellipse(70% 0% at 50% 100%)" }}
       >
         <div className="absolute inset-0">
           <Image
@@ -77,7 +78,8 @@ export default function VillageCulture() {
           <div className="absolute inset-0 bg-primary-900/90" />
         </div>
         <div ref={contentRef} className="relative mx-auto max-w-6xl px-5 sm:px-8">
-          <p className="eyebrow text-center text-secondary-400">Three Reasons To Choose Us</p>
+          <ChapterMark index={3} tone="light" className="absolute left-1/2 top-4 -translate-x-1/2" />
+          <p className="eyebrow relative text-center text-secondary-400">03 / 08 — Three Reasons To Choose Us</p>
           <h2 className="mx-auto mt-4 max-w-4xl text-center font-display text-4xl font-bold uppercase leading-[1.05] text-neutral-100 sm:text-6xl">
             Modern convenience, rooted in village culture.
           </h2>

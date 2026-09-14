@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import { ensureGsap } from "@/lib/gsap";
 import RippleButton from "./RippleButton";
+import EditorialLink from "./EditorialLink";
 
 const HOTSPOTS = [
   { top: "34%", left: "62%", label: "Harvested at dawn, daily" },
@@ -100,7 +101,7 @@ export default function Hero() {
 
         {/* content */}
         <div className="relative z-10 mx-auto flex h-full max-w-7xl flex-col justify-center px-5 sm:px-8">
-          <p className="eyebrow mb-4 text-secondary-400 sm:mb-6">Local Nagpur Connection</p>
+          <p className="eyebrow mb-4 text-secondary-400 sm:mb-6">01 / 08 — Local Nagpur Connection</p>
           <div ref={headlineRef} className="pb-2">
             <h1 className="font-display text-[13vw] font-bold leading-[1.15] text-neutral-100 sm:text-[9vw] lg:text-[7.5rem]">
               Proudly
@@ -114,21 +115,20 @@ export default function Hero() {
               Gawacha Bazaar is Nagpur&apos;s very own — a local team cutting out the
               middleman between family farms across Maharashtra and your kitchen.
             </p>
-            <div className="mt-8 flex flex-wrap items-center gap-4">
+            <div className="mt-9 flex flex-wrap items-center gap-8">
               <RippleButton
                 as="a"
                 href="#app"
-                rippleColor="rgba(11,45,32,0.35)"
-                className="rounded-full bg-secondary-500 px-7 py-3.5 text-xs font-bold uppercase tracking-widest text-primary-900 transition-transform hover:scale-105"
+                fillColor="#05130D"
+                textColor="#0B2D20"
+                hoverTextColor="#F7F4EB"
+                className="rounded-none bg-secondary-500 px-8 py-4 text-xs font-bold uppercase tracking-widest2 transition-transform hover:scale-[1.03]"
               >
-                Get the App
+                Get The App
               </RippleButton>
-              <a
-                href="#story"
-                className="eyebrow text-neutral-100/70 underline decoration-secondary-500/60 underline-offset-4 hover:text-neutral-100"
-              >
+              <EditorialLink as="a" href="#story" tone="light">
                 Our Story
-              </a>
+              </EditorialLink>
             </div>
           </div>
         </div>

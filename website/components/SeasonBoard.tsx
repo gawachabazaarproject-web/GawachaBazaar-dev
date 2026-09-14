@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react";
 import Image from "next/image";
 import { ensureGsap } from "@/lib/gsap";
+import ChapterMark from "./ChapterMark";
 
 const SEASONS = [
   {
@@ -46,11 +47,12 @@ export default function SeasonBoard() {
   }, []);
 
   return (
-    <section ref={ref} className="bg-primary-800 py-24 sm:py-32">
-      <div className="mx-auto max-w-7xl px-5 sm:px-8">
+    <section ref={ref} className="relative overflow-hidden bg-primary-800 py-24 sm:py-32">
+      <ChapterMark index={5} tone="light" className="absolute left-0 top-2 sm:top-4" />
+      <div className="relative mx-auto max-w-7xl px-5 sm:px-8">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <p className="eyebrow text-secondary-400">A Village Calendar</p>
+            <p className="eyebrow text-secondary-400">05 / 08 — A Village Calendar</p>
             <h2 className="mt-3 max-w-xl font-display text-3xl font-bold text-neutral-100 sm:text-5xl">
               What&apos;s good, right now.
             </h2>
@@ -63,7 +65,7 @@ export default function SeasonBoard() {
 
         <div className="mt-14 grid grid-cols-1 gap-6 sm:grid-cols-3">
           {SEASONS.map((s) => (
-            <div key={s.tag} className="season-card group relative aspect-[3/4] overflow-hidden rounded-3xl">
+            <div key={s.tag} className="season-card group relative aspect-[3/4] overflow-hidden rounded-none">
               <Image
                 src={s.img}
                 alt={s.items}

@@ -125,10 +125,10 @@ export default function Traceability() {
         <div className="h-full w-full bg-[radial-gradient(circle_at_20%_20%,_white_1px,_transparent_1px)] bg-[length:28px_28px]" />
       </div>
 
-      <div className="relative z-10 mx-auto flex h-full max-w-[1600px] flex-col justify-center px-5 py-24 sm:px-8">
-        <div className="mb-6 shrink-0 sm:mb-8">
+      <div className="relative z-10 mx-auto flex h-full max-w-[1600px] flex-col justify-start gap-6 px-5 py-16 sm:justify-center sm:gap-8 sm:px-8 sm:py-24">
+        <div className="shrink-0">
           <p className="eyebrow text-secondary-400">Farm-to-Home Traceability</p>
-          <h2 className="mt-3 max-w-2xl font-display text-2xl font-semibold text-neutral-100 sm:text-4xl lg:text-5xl">
+          <h2 className="mt-3 max-w-2xl font-display text-xl font-semibold leading-snug text-neutral-100 sm:text-4xl lg:text-5xl">
             Every step is connected. Every story is stored.
           </h2>
           <div className="mt-5 h-px w-full max-w-xl bg-neutral-100/20">
@@ -145,7 +145,7 @@ export default function Traceability() {
             {STEPS.map((step, i) => (
               <div
                 key={step.title}
-                className={`relative flex h-[62vh] max-h-[440px] w-[240px] shrink-0 flex-col overflow-hidden rounded-[1.75rem] border transition-all duration-500 sm:w-[300px] lg:w-[340px] ${
+                className={`relative flex h-[46vh] max-h-[440px] w-[240px] shrink-0 flex-col overflow-hidden rounded-none border transition-all duration-500 sm:h-[62vh] sm:w-[300px] lg:w-[340px] ${
                   i === active
                     ? "scale-100 border-secondary-500/70 opacity-100"
                     : "scale-[0.94] border-neutral-100/10 opacity-60"
