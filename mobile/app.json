@@ -1,0 +1,57 @@
+{
+  "expo": {
+    "name": "GawachaBazaar",
+    "slug": "gawachabazaar",
+    "scheme": "gawachabazaar",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "backgroundColor": "#000F08",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.gawachabazaar.customer",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "GawachaBazaar uses your location to prefill your delivery address. You can always enter it manually instead."
+      }
+    },
+    "android": {
+      "package": "com.gawachabazaar.customer",
+      "adaptiveIcon": {
+        "backgroundColor": "#000F08",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "favicon": "./assets/favicon.png",
+      "bundler": "metro"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#000F08",
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 140
+        }
+      ],
+      "expo-image",
+      "expo-secure-store",
+      "expo-font",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "GawachaBazaar uses your location to prefill your delivery address. You can always enter it manually instead."
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}

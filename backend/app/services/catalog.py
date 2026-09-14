@@ -100,24 +100,50 @@ class CatalogService:
         )
 
     def list_public_products(
-        self, category_id: int | None, page: int, page_size: int
+        self, category_id: int | None, page: int, page_size: int, *, q: str | None = None
     ) -> ProductListResponse:
         query = self.db.query(Product).filter(Product.status == _ACTIVE)
         if category_id is not None:
             query = query.filter(Product.category_id == category_id)
+        if q is not None:
+            # Phase 20 addition: the smallest possible backend change to
+            # support the mobile search screen - no full-text search
+            # engine, just a case-insensitive name filter, consistent with
+            # the "do not invent a complex search engine" instruction.
+            query = query.filter(Product.name.ilike(f"%{q}%"))
 
         total = query.count()
         products = (
             query.order_by(Product.name)
             .offset((page - 1) * page_size)
             .limit(page_size)
-            .options(selectinload(Product.images))
+            .options(selectinload(Product.images), selectinload(Product.variants))
             .all()
+        )
+
+        # Phase 20 addition: browsing grids (Home/Category/Search) need a
+        # real price and a real addable variant, not just name/image - the
+        # smallest correct fix is resolving each product's lowest-id ACTIVE
+        # variant once and exposing both its current price and its id, so
+        # "Add to cart" works directly from a grid card without a second
+        # round trip to the full product-detail endpoint.
+        default_variant_by_product: dict[int, ProductVariant] = {}
+        for p in products:
+            active_variants = sorted(
+                (v for v in p.variants if v.status == _ACTIVE), key=lambda v: v.id
+            )
+            if active_variants:
+                default_variant_by_product[p.id] = active_variants[0]
+
+        current_prices = self._get_current_prices_for_variants(
+            [v.id for v in default_variant_by_product.values()]
         )
 
         items = []
         for p in products:
             primary = next((i for i in p.images if i.is_primary), None)
+            default_variant = default_variant_by_product.get(p.id)
+            price = current_prices.get(default_variant.id) if default_variant else None
             items.append(
                 ProductSummaryResponse(
                     id=p.id,
@@ -126,6 +152,10 @@ class CatalogService:
                     category_id=p.category_id,
                     status=p.status,
                     primary_image_url=primary.image_url if primary else None,
+                    starting_price=PriceResponse.model_validate(price) if price else None,
+                    default_variant_id=default_variant.id if default_variant else None,
+                    default_variant_unit=default_variant.unit if default_variant else None,
+                    default_variant_quantity=default_variant.quantity if default_variant else None,
                 )
             )
         return ProductListResponse(
