@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react";
 import { ensureGsap } from "@/lib/gsap";
 import { IconVillage, IconWarehouse, IconMapPin, IconHome } from "./icons";
+import ChapterMark from "./ChapterMark";
 
 const STEPS = [
   {
@@ -84,9 +85,10 @@ export default function RouteFlow() {
   }, []);
 
   return (
-    <section id="story" ref={sectionRef} className="relative bg-neutral-100 py-24 sm:py-32">
-      <div className="mx-auto max-w-7xl px-5 sm:px-8">
-        <p className="eyebrow text-primary-600">The Direct Route</p>
+    <section id="story" ref={sectionRef} className="relative overflow-hidden bg-neutral-100 py-24 sm:py-32">
+      <ChapterMark index={2} className="absolute left-0 top-2 sm:top-4" />
+      <div className="relative mx-auto max-w-7xl px-5 sm:px-8">
+        <p className="eyebrow text-primary-600">02 / 08 — The Direct Route</p>
         <h2 className="mt-3 max-w-2xl font-display text-3xl font-semibold leading-tight text-primary-800 sm:text-5xl">
           From rural block to your gate — four honest steps.
         </h2>
@@ -94,7 +96,7 @@ export default function RouteFlow() {
         <div className="mt-16 grid grid-cols-1 gap-8 sm:grid-cols-2 lg:grid-cols-4">
           {STEPS.map((step, i) => (
             <div key={step.title} className="flow-card relative">
-              <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-primary-800 text-secondary-400">
+              <div className="flex h-16 w-16 items-center justify-center rounded-none bg-primary-800 text-secondary-400">
                 <step.icon className="h-8 w-8" />
               </div>
               <span className="absolute right-0 top-0 flex h-6 w-6 items-center justify-center rounded-full bg-secondary-500 text-[11px] font-bold text-primary-900">
@@ -109,7 +111,7 @@ export default function RouteFlow() {
         </div>
 
         {/* schematic route */}
-        <div className="relative mt-20 rounded-3xl border border-primary-800/10 bg-white/60 px-6 py-14 sm:px-14">
+        <div className="relative mt-20 rounded-none border border-primary-800/10 bg-white/60 px-6 py-14 sm:px-14">
           <svg viewBox="0 0 800 120" className="w-full overflow-visible" preserveAspectRatio="none">
             <path
               ref={pathRef}

@@ -3,7 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import { ensureGsap } from "@/lib/gsap";
-import RippleButton from "./RippleButton";
+import EditorialLink from "./EditorialLink";
+import ChapterMark from "./ChapterMark";
 
 const HUBS = [
   {
@@ -18,9 +19,12 @@ const HUBS = [
   },
 ];
 
+const AUTO_MS = 4000;
+
 export default function HubSpec() {
   const sectionRef = useRef<HTMLDivElement>(null);
   const [active, setActive] = useState(0);
+  const [cycle, setCycle] = useState(0);
 
   useEffect(() => {
     const { gsap } = ensureGsap();
@@ -37,6 +41,19 @@ export default function HubSpec() {
     return () => ctx.revert();
   }, []);
 
+  useEffect(() => {
+    const id = setInterval(() => {
+      setActive((i) => (i + 1) % HUBS.length);
+      setCycle((c) => c + 1);
+    }, AUTO_MS);
+    return () => clearInterval(id);
+  }, [cycle]);
+
+  const selectHub = (i: number) => {
+    setActive(i);
+    setCycle((c) => c + 1);
+  };
+
   return (
     <section ref={sectionRef} className="relative overflow-hidden bg-primary-900 py-24 sm:py-32">
       <div className="absolute inset-0">
@@ -50,9 +67,11 @@ export default function HubSpec() {
         <div className="absolute inset-0 bg-gradient-to-r from-primary-900 via-primary-900/90 to-primary-900/50" />
       </div>
 
+      <ChapterMark index={4} tone="light" className="absolute left-0 top-2 sm:top-4" />
+
       <div className="relative mx-auto grid max-w-7xl grid-cols-1 items-center gap-16 px-5 sm:px-8 lg:grid-cols-2">
         <div className="hub-copy">
-          <p className="eyebrow text-secondary-400">Inside The Network</p>
+          <p className="eyebrow text-secondary-400">04 / 08 — Inside The Network</p>
           <h2 className="mt-4 font-display text-3xl font-bold text-neutral-100 sm:text-5xl">
             Built for a
             <br />
@@ -62,17 +81,12 @@ export default function HubSpec() {
             No sprawling cold-storage warehouses — just small, fast nodes positioned exactly
             where the produce already is, and exactly where your kitchen needs it.
           </p>
-          <RippleButton
-            as="a"
-            href="#journey"
-            rippleColor="rgba(217,165,42,0.4)"
-            className="mt-8 inline-flex items-center gap-2 rounded-full bg-secondary-500 px-6 py-3 text-xs font-bold uppercase tracking-widest text-primary-900 transition-transform hover:scale-105"
-          >
+          <EditorialLink as="a" href="#journey" tone="light" className="mt-9">
             See The Full Journey
-          </RippleButton>
+          </EditorialLink>
         </div>
 
-        <div className="rounded-3xl border border-neutral-100/10 bg-primary-800/60 p-8 backdrop-blur-sm sm:p-10">
+        <div className="rounded-none border border-neutral-100/10 bg-primary-800/60 p-8 backdrop-blur-sm sm:p-10">
           <p className="eyebrow text-neutral-100/40">Facility Type</p>
           <p className="mt-2 font-display text-2xl font-semibold text-neutral-100 sm:text-3xl">
             {HUBS[active].name}
@@ -91,12 +105,20 @@ export default function HubSpec() {
             {HUBS.map((hub, i) => (
               <button
                 key={hub.name}
-                onClick={() => setActive(i)}
+                onClick={() => selectHub(i)}
                 aria-label={`Show ${hub.name}`}
-                className={`h-2 rounded-full transition-all ${
-                  i === active ? "w-8 bg-secondary-500" : "w-2 bg-neutral-100/25"
+                className={`relative h-1.5 overflow-hidden rounded-full bg-neutral-100/20 transition-all ${
+                  i === active ? "w-10" : "w-2.5"
                 }`}
-              />
+              >
+                {i === active && (
+                  <span
+                    key={cycle}
+                    className="absolute inset-y-0 left-0 block w-full origin-left bg-secondary-500"
+                    style={{ animation: `hub-progress ${AUTO_MS}ms linear forwards` }}
+                  />
+                )}
+              </button>
             ))}
             <span className="ml-auto eyebrow text-neutral-100/30">
               {active + 1} / {HUBS.length}

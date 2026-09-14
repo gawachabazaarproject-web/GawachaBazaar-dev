@@ -85,7 +85,7 @@ export default function WhyChooseUs() {
           </div>
         </div>
 
-        <div className="relative hidden aspect-[4/5] w-full max-w-md overflow-hidden rounded-[2.5rem] bg-primary-800 shadow-2xl shadow-primary-800/20 sm:mx-auto lg:block">
+        <div className="relative hidden aspect-[4/5] w-full max-w-md overflow-hidden rounded-none bg-primary-800 sm:mx-auto lg:block">
           {ITEMS.map((item, i) => (
             <div
               key={item.title}
@@ -97,7 +97,7 @@ export default function WhyChooseUs() {
             </div>
           ))}
 
-          <div className="absolute inset-6 rounded-[2rem] border border-secondary-500/25" />
+          <div className="absolute inset-6 rounded-none border border-secondary-500/25" />
 
           <div className="absolute bottom-8 left-8 right-8 flex items-end justify-between">
             <div>

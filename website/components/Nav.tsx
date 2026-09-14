@@ -1,98 +1,90 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import RippleButton from "./RippleButton";
 
 const LINKS = [
-  { label: "Home", href: "#hero" },
   { label: "Our Story", href: "#story" },
-  { label: "Journey", href: "#journey" },
-  { label: "Products", href: "#products" },
-  { label: "Delivery", href: "#delivery" },
+  { label: "The Journey", href: "#journey" },
+  { label: "Shop", href: "#products" },
   { label: "Contact", href: "#contact" },
 ];
 
 export default function Nav() {
-  const [scrolled, setScrolled] = useState(false);
   const [open, setOpen] = useState(false);
 
-  useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 40);
-    onScroll();
-    window.addEventListener("scroll", onScroll, { passive: true });
-    return () => window.removeEventListener("scroll", onScroll);
-  }, []);
-
   return (
-    <header
-      className={`fixed inset-x-0 top-0 z-50 transition-colors duration-500 ${
-        scrolled ? "bg-primary-800/90 backdrop-blur-md shadow-lg shadow-primary-900/20" : "bg-transparent"
-      }`}
-    >
-      <div className="mx-auto flex max-w-7xl items-center justify-between px-5 py-3 sm:px-8">
-        <a href="#hero" className="flex items-center gap-3">
-          <Image
-            src="/images/logo.jpeg"
-            alt="Gawacha Bazaar"
-            width={44}
-            height={44}
-            className="h-10 w-10 rounded-full object-cover ring-1 ring-secondary-400/60 sm:h-11 sm:w-11"
-            priority
-          />
-          <span className="hidden flex-col leading-none sm:flex">
-            <span className="font-deva text-base font-bold text-secondary-400">गावाचा बाजार</span>
-            <span className="mt-0.5 text-[10px] font-semibold uppercase tracking-[0.3em] text-neutral-100/80">
-              Gawacha Bazaar
+    <>
+      <header className="pointer-events-none fixed inset-x-0 top-0 z-50">
+        <div className="mx-auto flex max-w-[1800px] items-start justify-between px-5 py-5 sm:px-8 sm:py-7">
+          <a href="#hero" className="pointer-events-auto flex items-center gap-3">
+            <Image
+              src="/images/logo.jpeg"
+              alt="Gawacha Bazaar"
+              width={40}
+              height={40}
+              className="h-9 w-9 rounded-full object-cover ring-1 ring-neutral-100/30 sm:h-10 sm:w-10"
+              priority
+            />
+            <span className="mix-blend-difference hidden flex-col leading-none text-neutral-100 sm:flex">
+              <span className="font-deva text-sm font-bold">गावाचा बाजार</span>
+              <span className="mt-1 text-[9px] font-semibold uppercase tracking-widest2">
+                Est. Nagpur
+              </span>
             </span>
-          </span>
-        </a>
+          </a>
 
-        <nav className="hidden items-center gap-5 xl:flex">
-          {LINKS.map((link) => (
-            <a
-              key={link.href}
-              href={link.href}
-              className="eyebrow relative whitespace-nowrap text-neutral-100/80 transition-colors hover:text-secondary-400"
+          <div className="pointer-events-auto flex items-center gap-8">
+            <nav className="mix-blend-difference hidden items-center gap-7 text-neutral-100 lg:flex">
+              {LINKS.map((link) => (
+                <a
+                  key={link.href}
+                  href={link.href}
+                  className="text-[11px] font-semibold uppercase tracking-widest2 opacity-80 transition-opacity hover:opacity-100"
+                >
+                  {link.label}
+                </a>
+              ))}
+            </nav>
+
+            <RippleButton
+              as="a"
+              href="#app"
+              fillColor="#D9A52A"
+              textColor="#B98624"
+              hoverTextColor="#0B2D20"
+              className="hidden whitespace-nowrap border border-secondary-500 px-5 py-2.5 text-[11px] font-bold uppercase tracking-widest2 sm:inline-flex"
             >
-              {link.label}
-            </a>
-          ))}
-        </nav>
+              Get The App
+            </RippleButton>
 
-        <div className="flex items-center gap-4">
-          <RippleButton
-            as="a"
-            href="#app"
-            rippleColor="rgba(11,45,32,0.35)"
-            className="hidden whitespace-nowrap rounded-full bg-secondary-500 px-5 py-2.5 text-xs font-bold uppercase tracking-widest text-primary-900 transition-transform hover:scale-105 sm:inline-block"
-          >
-            Get the App
-          </RippleButton>
-          <button
-            aria-label="Toggle menu"
-            onClick={() => setOpen((v) => !v)}
-            className="flex h-10 w-10 flex-col items-center justify-center gap-1.5 xl:hidden"
-          >
-            <span
-              className={`h-px w-6 bg-neutral-100 transition-transform ${open ? "translate-y-2 rotate-45" : ""}`}
-            />
-            <span className={`h-px w-6 bg-neutral-100 transition-opacity ${open ? "opacity-0" : ""}`} />
-            <span
-              className={`h-px w-6 bg-neutral-100 transition-transform ${open ? "-translate-y-2 -rotate-45" : ""}`}
-            />
-          </button>
+            <button
+              aria-label="Toggle menu"
+              onClick={() => setOpen((v) => !v)}
+              className="mix-blend-difference flex h-9 w-9 flex-col items-center justify-center gap-1.5 text-neutral-100 lg:hidden"
+            >
+              <span className={`h-px w-6 bg-current transition-transform ${open ? "translate-y-2 rotate-45" : ""}`} />
+              <span className={`h-px w-6 bg-current transition-opacity ${open ? "opacity-0" : ""}`} />
+              <span className={`h-px w-6 bg-current transition-transform ${open ? "-translate-y-2 -rotate-45" : ""}`} />
+            </button>
+          </div>
         </div>
-      </div>
+      </header>
 
-      {open && (
-        <div className="absolute inset-x-0 top-full flex flex-col gap-1 bg-primary-800 px-6 py-6 xl:hidden">
-          {LINKS.map((link) => (
+      <div
+        className={`fixed inset-0 z-40 bg-primary-900 transition-transform duration-700 ease-editorial lg:hidden ${
+          open ? "translate-y-0" : "-translate-y-full"
+        }`}
+      >
+        <div className="flex h-full flex-col items-start justify-center gap-2 px-8">
+          {LINKS.map((link, i) => (
             <a
               key={link.href}
               href={link.href}
               onClick={() => setOpen(false)}
-              className="border-b border-neutral-100/10 py-3 text-sm font-semibold uppercase tracking-widest text-neutral-100/90"
+              className="font-display text-4xl italic text-neutral-100/90 transition-colors hover:text-secondary-400"
+              style={{ transitionDelay: `${i * 40}ms` }}
             >
               {link.label}
             </a>
@@ -100,14 +92,16 @@ export default function Nav() {
           <RippleButton
             as="a"
             href="#app"
-            rippleColor="rgba(11,45,32,0.35)"
+            fillColor="#D9A52A"
+            textColor="#E4BA55"
+            hoverTextColor="#0B2D20"
             onClick={() => setOpen(false)}
-            className="mt-4 rounded-full bg-secondary-500 px-5 py-3 text-center text-xs font-bold uppercase tracking-widest text-primary-900"
+            className="mt-10 border border-secondary-500 px-6 py-3 text-xs font-bold uppercase tracking-widest2"
           >
-            Get the App
+            Get The App
           </RippleButton>
         </div>
-      )}
-    </header>
+      </div>
+    </>
   );
 }
