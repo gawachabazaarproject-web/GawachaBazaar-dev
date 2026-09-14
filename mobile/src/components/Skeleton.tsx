@@ -42,7 +42,7 @@ export function SkeletonCircle({ size = 40 }: { size?: number }) {
 export function ProductCardSkeleton() {
   return (
     <View style={styles.card}>
-      <Skeleton height={110} borderRadius={radius.md} />
+      <Skeleton height={110} borderRadius={radius.none} />
       <View style={{ height: 8 }} />
       <Skeleton height={13} width="90%" />
       <View style={{ height: 6 }} />

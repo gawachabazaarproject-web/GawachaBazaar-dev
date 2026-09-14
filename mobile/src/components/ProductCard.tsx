@@ -10,7 +10,7 @@ import { PressableScale } from "./PressableScale";
 import { useVariantStepper } from "@/features/cart/useCart";
 import { formatVariantSize } from "@/utils/money";
 import { getEmbellishment } from "@/utils/productEmbellishments";
-import { colors, radius, shadows, spacing } from "@/theme";
+import { colors, radius, spacing } from "@/theme";
 import { PriceResponse, ProductSummaryResponse, ProductVariantResponse } from "@/types/api";
 
 export interface ProductCardData {
@@ -91,58 +91,60 @@ export function ProductCard({ product, onPress, index = 0 }: ProductCardProps) {
           ) : null}
         </View>
 
-        <View style={styles.info}>
-          {origin || eta ? (
-            <View style={styles.metaRow}>
-              {origin ? (
-                <Text variant="label" color={colors.accentDark} numberOfLines={1} style={styles.origin}>
-                  {origin.toUpperCase()}
-                </Text>
-              ) : null}
-              {eta ? (
-                <View style={styles.etaFlag}>
-                  <Feather name="zap" size={9} color={colors.primaryDark} />
-                  <Text variant="label" color={colors.primaryDark}>
-                    {eta}
+        <View style={styles.body}>
+          <View style={styles.info}>
+            {origin || eta ? (
+              <View style={styles.metaRow}>
+                {origin ? (
+                  <Text variant="eyebrow" color={colors.accentDark} numberOfLines={1} style={styles.origin}>
+                    {origin.toUpperCase()}
                   </Text>
-                </View>
-              ) : null}
-            </View>
-          ) : null}
-          <Text variant="titleSmall" numberOfLines={1} style={styles.name}>
-            {product.name}
-            {marathiName ? <Text variant="caption" color={colors.textSecondary}> ({marathiName})</Text> : null}
-          </Text>
-          {product.variant ? (
-            <Text variant="caption" color={colors.textSecondary}>
-              {formatVariantSize(product.variant.quantity, product.variant.unit)}
+                ) : null}
+                {eta ? (
+                  <View style={styles.etaFlag}>
+                    <Feather name="zap" size={9} color={colors.primaryDark} />
+                    <Text variant="label" color={colors.primaryDark}>
+                      {eta}
+                    </Text>
+                  </View>
+                ) : null}
+              </View>
+            ) : null}
+            <Text variant="titleSmall" numberOfLines={1} style={styles.name}>
+              {product.name}
+              {marathiName ? <Text variant="caption" color={colors.textSecondary}> ({marathiName})</Text> : null}
             </Text>
-          ) : product.defaultVariantUnit && product.defaultVariantQuantity ? (
-            <Text variant="caption" color={colors.textSecondary}>
-              {formatVariantSize(product.defaultVariantQuantity, product.defaultVariantUnit)}
-            </Text>
-          ) : null}
-        </View>
+            {product.variant ? (
+              <Text variant="caption" color={colors.textSecondary}>
+                {formatVariantSize(product.variant.quantity, product.variant.unit)}
+              </Text>
+            ) : product.defaultVariantUnit && product.defaultVariantQuantity ? (
+              <Text variant="caption" color={colors.textSecondary}>
+                {formatVariantSize(product.defaultVariantQuantity, product.defaultVariantUnit)}
+              </Text>
+            ) : null}
+          </View>
 
-        <View style={styles.priceRow}>
-          {price ? (
-            <PriceTag amount={price.price} currency={price.currency} mrp={mrp} />
-          ) : (
-            <Text variant="bodySmall" color={colors.textMuted}>
-              Price unavailable
-            </Text>
-          )}
+          <View style={styles.priceRow}>
+            {price ? (
+              <PriceTag amount={price.price} currency={price.currency} mrp={mrp} />
+            ) : (
+              <Text variant="bodySmall" color={colors.textMuted}>
+                Price unavailable
+              </Text>
+            )}
+          </View>
+          {isAvailable ? (
+            <QuantityStepper
+              quantity={stepper.quantity}
+              onAdd={stepper.add}
+              onIncrement={stepper.increment}
+              onDecrement={stepper.decrement}
+              disabled={stepper.isMutating}
+              fullWidth
+            />
+          ) : null}
         </View>
-        {isAvailable ? (
-          <QuantityStepper
-            quantity={stepper.quantity}
-            onAdd={stepper.add}
-            onIncrement={stepper.increment}
-            onDecrement={stepper.decrement}
-            disabled={stepper.isMutating}
-            fullWidth
-          />
-        ) : null}
       </PressableScale>
     </Animated.View>
   );
@@ -169,16 +171,11 @@ const styles = StyleSheet.create({
   card: {
     flex: 1,
     backgroundColor: colors.surface,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.divider,
-    padding: spacing.md,
-    ...shadows.card,
   },
   imageWrap: {
     width: "100%",
-    aspectRatio: 1,
-    borderRadius: radius.sm,
+    aspectRatio: 0.82,
+    borderRadius: radius.none,
     overflow: "hidden",
     backgroundColor: colors.background,
   },
@@ -188,7 +185,7 @@ const styles = StyleSheet.create({
     top: spacing.sm,
     left: spacing.sm,
     backgroundColor: colors.accent,
-    borderRadius: radius.xs,
+    borderRadius: radius.none,
     paddingHorizontal: spacing.sm,
     paddingVertical: 4,
   },
@@ -202,13 +199,14 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  info: { marginTop: spacing.md, minHeight: 58 },
-  metaRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: spacing.xs },
+  body: { paddingHorizontal: spacing.sm, paddingBottom: spacing.sm },
+  info: { marginTop: spacing.base, minHeight: 58 },
+  metaRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: spacing.sm },
   origin: { flexShrink: 1 },
   etaFlag: { flexDirection: "row", alignItems: "center", gap: 2 },
-  name: { marginBottom: 4 },
+  name: { marginBottom: spacing.xs },
   priceRow: {
-    marginTop: spacing.sm,
+    marginTop: spacing.md,
     marginBottom: spacing.md,
   },
 });

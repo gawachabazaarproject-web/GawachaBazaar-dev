@@ -37,6 +37,12 @@ export const TextField = forwardRef<TextInput, TextFieldProps>(
             ]}
             placeholderTextColor={colors.textMuted}
             secureTextEntry={isPasswordField && !revealed}
+            // A keyboard silently auto-capitalizing/autocorrecting the
+            // first character of a password is invisible behind the dots
+            // and corrupts the value actually submitted - never do that
+            // for a password field, regardless of what the caller passes.
+            autoCapitalize={isPasswordField ? "none" : undefined}
+            autoCorrect={isPasswordField ? false : undefined}
             onFocus={(e) => {
               setFocused(true);
               onFocus?.(e);
@@ -84,7 +90,7 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
     borderWidth: 1.5,
     borderColor: colors.border,
-    borderRadius: radius.sm,
+    borderRadius: radius.none,
     paddingHorizontal: spacing.base,
     paddingVertical: spacing.md,
     backgroundColor: colors.surface,

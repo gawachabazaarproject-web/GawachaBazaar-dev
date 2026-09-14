@@ -146,7 +146,7 @@ export default function CheckoutScreen() {
 
       <ScrollView contentContainerStyle={styles.content}>
         {/* 1. Delivery address - real */}
-        <CheckoutSection number={1} title="Delivery Address (पत्ता)">
+        <CheckoutSection number={1} label="Address" title="Delivery Address (पत्ता)">
           {(addresses ?? []).map((address) => (
             <Pressable key={address.id} style={styles.addressOption} onPress={() => setSelectedAddressId(address.id)}>
               <View style={[styles.radio, selectedAddressId === address.id && styles.radioActive]}>
@@ -178,12 +178,12 @@ export default function CheckoutScreen() {
         </CheckoutSection>
 
         {/* 2. Harvest slot - illustrative, interactive local state (see component) */}
-        <CheckoutSection number={2} title="Select Farm Harvest Slot" badge="FRESH TIMINGS">
+        <CheckoutSection number={2} label="Delivery" title="Select Farm Harvest Slot" badge="FRESH TIMINGS">
           <HarvestSlotSelector />
         </CheckoutSection>
 
         {/* 3. Payment method - real (COD/UPI only, matching Phase 14) */}
-        <CheckoutSection number={3} title="Payment Options (पेमेंट)" badge="BANK GRADE SSL">
+        <CheckoutSection number={3} label="Payment" title="Payment Options (पेमेंट)" badge="BANK GRADE SSL">
           <PaymentOption
             label="UPI"
             description="Google Pay, PhonePe, Paytm & more"
@@ -200,12 +200,14 @@ export default function CheckoutScreen() {
           />
         </CheckoutSection>
 
-        <BasketSummaryCard items={cart.items} totalAmount={cart.total_amount} currency={cart.currency} />
-        <ImpactCard />
-
-        <Text variant="caption" color={colors.textSecondary} align="center" style={styles.sustainabilityNote}>
-          Zero single-use plastics. Delivered in sanitised returnable jute crates.
-        </Text>
+        {/* 4. Order summary - real cart data */}
+        <CheckoutSection number={4} label="Order Summary" title="Review your order">
+          <BasketSummaryCard items={cart.items} totalAmount={cart.total_amount} currency={cart.currency} />
+          <ImpactCard />
+          <Text variant="caption" color={colors.textSecondary} align="center" style={styles.sustainabilityNote}>
+            Zero single-use plastics. Delivered in sanitised returnable jute crates.
+          </Text>
+        </CheckoutSection>
       </ScrollView>
 
       <View style={styles.footer}>
@@ -283,7 +285,7 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.xs,
   },
   headerRight: { flexDirection: "row", alignItems: "center", gap: spacing.md },
-  headerLogo: { width: 24, height: 24 * (1149 / 1369), borderRadius: 3 },
+  headerLogo: { width: 24, height: 24 * (1149 / 1369), borderRadius: 0 },
   trustStrip: {
     flexDirection: "row",
     alignItems: "center",
@@ -292,14 +294,14 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.sm,
   },
   trustItem: { flexDirection: "row", alignItems: "center", gap: spacing.xs },
-  trustPill: { backgroundColor: colors.accentLight, borderRadius: radius.xs, paddingHorizontal: spacing.xs, paddingVertical: 3 },
+  trustPill: { backgroundColor: colors.accentLight, borderRadius: radius.none, paddingHorizontal: spacing.xs, paddingVertical: 3 },
   content: { padding: spacing.base, paddingBottom: spacing["3xl"] },
   centered: { flex: 1, alignItems: "center", justifyContent: "center", padding: spacing.xl },
   errorTitle: { marginTop: spacing.lg },
   errorMessage: { marginTop: spacing.sm },
   addressOption: { flexDirection: "row", alignItems: "flex-start", gap: spacing.sm, marginBottom: spacing.md },
   addressTitleRow: { flexDirection: "row", alignItems: "center", gap: spacing.xs },
-  primaryBadge: { backgroundColor: colors.primaryLight, borderRadius: radius.xs, paddingHorizontal: 4, paddingVertical: 1 },
+  primaryBadge: { backgroundColor: colors.primaryLight, borderRadius: radius.none, paddingHorizontal: 4, paddingVertical: 1 },
   addAddressLink: { flexDirection: "row", alignItems: "center", marginTop: spacing.xs },
   radio: {
     width: 20,
@@ -318,7 +320,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: spacing.md,
     padding: spacing.md,
-    borderRadius: radius.sm,
+    borderRadius: radius.none,
     borderWidth: 1.5,
     borderColor: colors.border,
     marginBottom: spacing.sm,
@@ -333,7 +335,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     backgroundColor: colors.primary,
-    borderRadius: radius.md,
+    borderRadius: radius.none,
     paddingHorizontal: spacing.base,
     height: 56,
   },
@@ -342,9 +344,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: spacing.xs,
     backgroundColor: colors.accent,
-    borderRadius: radius.sm,
-    paddingHorizontal: spacing.md,
-    height: 38,
+    borderRadius: radius.none,
+    paddingHorizontal: spacing.lg,
+    height: 44,
   },
   placeOrderButtonDisabled: { opacity: 0.5 },
 });

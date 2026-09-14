@@ -5,7 +5,7 @@ import { Feather } from "@expo/vector-icons";
 import { Screen } from "@/components/Screen";
 import { Text } from "@/components/Text";
 import { useAuthStore } from "@/store/authStore";
-import { colors, radius, spacing } from "@/theme";
+import { colors, spacing } from "@/theme";
 
 interface MenuItem {
   icon: keyof typeof Feather.glyphMap;
@@ -26,36 +26,49 @@ export default function AccountScreen() {
     ]);
   };
 
-  const sections: { title?: string; items: MenuItem[] }[] = [
+  const sections: { label: string; items: MenuItem[] }[] = [
     {
+      label: "SHOPPING",
       items: [
         { icon: "user", label: "Profile", onPress: () => router.push("/account/profile") },
         { icon: "map-pin", label: "Saved addresses", onPress: () => router.push("/address") },
         { icon: "package", label: "Orders", onPress: () => router.push("/(tabs)/orders") },
+        { icon: "briefcase", label: "Bulk requests", onPress: () => router.push("/bulk/requests") },
       ],
     },
     {
+      label: "SUPPORT",
       items: [
         { icon: "help-circle", label: "Support", onPress: () => router.push("/account/support") },
         { icon: "settings", label: "Settings", onPress: () => router.push("/account/settings") },
       ],
     },
     {
+      label: "",
       items: [{ icon: "log-out", label: "Log out", onPress: handleLogout, destructive: true }],
     },
   ];
 
   return (
     <Screen edges={["top"]}>
-      <ScrollView showsVerticalScrollIndicator={false}>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
+        <View style={styles.heroText}>
+          <Text variant="eyebrow" color={colors.accentDark}>
+            MY GAWACHA BAZAAR
+          </Text>
+          <Text variant="displayM" style={{ marginTop: spacing.xs }}>
+            Account
+          </Text>
+        </View>
+
         <View style={styles.header}>
           <View style={styles.avatar}>
-            <Text variant="h1" color={colors.primary}>
+            <Text variant="displayM" color={colors.primary}>
               {user?.name?.charAt(0).toUpperCase() ?? "?"}
             </Text>
           </View>
           <View style={{ marginLeft: spacing.base, flex: 1 }}>
-            <Text variant="h2" numberOfLines={1}>
+            <Text variant="h3" numberOfLines={1}>
               {user?.name ?? "Guest"}
             </Text>
             <Text variant="bodySmall" color={colors.textSecondary} numberOfLines={1}>
@@ -66,6 +79,11 @@ export default function AccountScreen() {
 
         {sections.map((section, sIdx) => (
           <View key={sIdx} style={styles.section}>
+            {section.label ? (
+              <Text variant="eyebrow" color={colors.textMuted} style={styles.sectionLabel}>
+                {section.label}
+              </Text>
+            ) : null}
             {section.items.map((item, iIdx) => (
               <Pressable
                 key={item.label}
@@ -76,7 +94,7 @@ export default function AccountScreen() {
                 <Text variant="bodyLarge" color={item.destructive ? colors.error : colors.textPrimary} style={styles.rowLabel}>
                   {item.label}
                 </Text>
-                {!item.destructive ? <Feather name="chevron-right" size={18} color={colors.textMuted} /> : null}
+                {!item.destructive ? <Feather name="arrow-up-right" size={16} color={colors.textMuted} /> : null}
               </Pressable>
             ))}
           </View>
@@ -91,30 +109,25 @@ export default function AccountScreen() {
 }
 
 const styles = StyleSheet.create({
-  header: { flexDirection: "row", alignItems: "center", padding: spacing.base, paddingTop: spacing.lg },
+  scroll: { paddingBottom: spacing.xl },
+  heroText: { paddingHorizontal: spacing.base, marginTop: spacing.lg },
+  header: { flexDirection: "row", alignItems: "center", paddingHorizontal: spacing.base, marginTop: spacing.xl, paddingBottom: spacing.xl, borderBottomWidth: 1, borderColor: colors.divider },
   avatar: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+    width: 64,
+    height: 64,
+    borderRadius: 32,
     backgroundColor: colors.primaryLight,
     alignItems: "center",
     justifyContent: "center",
   },
-  section: {
-    backgroundColor: colors.surface,
-    marginHorizontal: spacing.base,
-    marginTop: spacing.lg,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    overflow: "hidden",
-  },
+  section: { marginTop: spacing.xl, paddingHorizontal: spacing.base },
+  sectionLabel: { marginBottom: spacing.sm },
   row: {
     flexDirection: "row",
     alignItems: "center",
-    padding: spacing.base,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.border,
+    paddingVertical: spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.divider,
   },
   rowLast: { borderBottomWidth: 0 },
   rowLabel: { flex: 1, marginLeft: spacing.md },

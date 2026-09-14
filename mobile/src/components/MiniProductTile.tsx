@@ -73,7 +73,7 @@ export function MiniProductTile({ product, onPress }: MiniProductTileProps) {
 
 const styles = StyleSheet.create({
   tile: { width: TILE_WIDTH },
-  image: { width: TILE_WIDTH, height: TILE_WIDTH, borderRadius: radius.sm, backgroundColor: colors.background },
+  image: { width: TILE_WIDTH, height: TILE_WIDTH, borderRadius: radius.none, backgroundColor: colors.background },
   name: { marginTop: spacing.sm },
   footer: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: spacing.xs },
   addButton: {

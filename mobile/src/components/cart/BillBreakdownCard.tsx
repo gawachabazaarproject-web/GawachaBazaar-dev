@@ -3,7 +3,7 @@ import { StyleSheet, View } from "react-native";
 import { Text } from "@/components/Text";
 import { formatMoney } from "@/utils/money";
 import { getEmbellishment } from "@/utils/productEmbellishments";
-import { colors, radius, shadows, spacing } from "@/theme";
+import { colors, spacing } from "@/theme";
 import { CartItemResponse } from "@/types/api";
 
 export interface BillBreakdownCardProps {
@@ -70,13 +70,10 @@ function Row({ label, value, valueColor }: { label: string; value: string; value
 const styles = StyleSheet.create({
   card: {
     marginHorizontal: spacing.base,
-    marginTop: spacing.base,
-    padding: spacing.base,
-    borderRadius: radius.md,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
+    marginTop: spacing.xl,
+    paddingTop: spacing.lg,
+    borderTopWidth: 1,
     borderColor: colors.divider,
-    ...shadows.card,
   },
   title: { marginBottom: spacing.md },
   row: { flexDirection: "row", justifyContent: "space-between", marginBottom: spacing.sm },

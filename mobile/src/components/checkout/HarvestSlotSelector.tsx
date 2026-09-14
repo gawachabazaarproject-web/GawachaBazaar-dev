@@ -114,7 +114,7 @@ const styles = StyleSheet.create({
   dayCard: {
     flex: 1,
     padding: spacing.sm,
-    borderRadius: radius.sm,
+    borderRadius: radius.none,
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.background,
@@ -124,7 +124,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: spacing.sm,
     padding: spacing.sm,
-    borderRadius: radius.sm,
+    borderRadius: radius.none,
     borderWidth: 1,
     borderColor: colors.border,
     marginBottom: spacing.sm,
@@ -143,6 +143,6 @@ const styles = StyleSheet.create({
   radioActive: { borderColor: colors.primary },
   radioDot: { width: 9, height: 9, borderRadius: 5, backgroundColor: colors.primary },
   slotTitleRow: { flexDirection: "row", alignItems: "center", gap: spacing.xs, flexWrap: "wrap" },
-  coldChainBadge: { backgroundColor: colors.successLight, borderRadius: radius.xs, paddingHorizontal: 4, paddingVertical: 1 },
+  coldChainBadge: { backgroundColor: colors.successLight, borderRadius: radius.none, paddingHorizontal: 4, paddingVertical: 1 },
   slotDescRow: { flexDirection: "row", alignItems: "flex-start", gap: 4, marginTop: 2 },
 });

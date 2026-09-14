@@ -7,3 +7,4 @@ export type { ListProductsParams } from "./catalogApi";
 export { cartApi } from "./cartApi";
 export { orderApi } from "./orderApi";
 export { paymentApi } from "./paymentApi";
+export { bulkOrderApi } from "./bulkOrderApi";
