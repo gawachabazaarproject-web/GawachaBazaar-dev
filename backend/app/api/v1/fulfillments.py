@@ -32,6 +32,7 @@ from app.schemas.fulfillment import (
     MAX_PAGE_SIZE,
     AssignDeliveryPartnerRequest,
     FulfillmentListResponse,
+    FulfillmentOrderDetailResponse,
     FulfillmentResponse,
     UpdateFulfillmentStatusRequest,
 )
@@ -77,6 +78,23 @@ def get_fulfillment(
     db: Session = Depends(get_db),
 ) -> FulfillmentResponse:
     return FulfillmentService(db).get_fulfillment_or_404(fulfillment_id, current_user)
+
+
+@router.get(
+    "/{fulfillment_id}/order",
+    response_model=FulfillmentOrderDetailResponse,
+    summary=(
+        "Get what to pick/pack and where to deliver for a fulfillment "
+        "(order items, address, customer name, payment method/amount) - "
+        "a delivery partner may only view their own assignment"
+    ),
+)
+def get_fulfillment_order_detail(
+    fulfillment_id: int,
+    current_user: User = Depends(require_roles(*_ANY_FULFILLMENT_ROLE)),
+    db: Session = Depends(get_db),
+) -> FulfillmentOrderDetailResponse:
+    return FulfillmentService(db).get_fulfillment_order_detail(fulfillment_id, current_user)
 
 
 @router.post(

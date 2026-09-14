@@ -1,0 +1,70 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html {
+  background: #0b2d20;
+}
+
+body {
+  overflow-x: hidden;
+}
+
+::selection {
+  background: #d9a52a;
+  color: #0b2d20;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+}
+::-webkit-scrollbar-track {
+  background: #f7f4eb;
+}
+::-webkit-scrollbar-thumb {
+  background: #0b2d20;
+  border-radius: 999px;
+}
+
+.eyebrow {
+  @apply font-sans text-xs sm:text-sm font-semibold uppercase tracking-[0.25em];
+}
+
+.reveal-line {
+  overflow: hidden;
+}
+
+.leaf-divider {
+  color: #d9a52a;
+}
+
+@layer utilities {
+  .text-stroke-gold {
+    -webkit-text-stroke: 1px #d9a52a;
+  }
+  .clip-dome {
+    clip-path: ellipse(75% 100% at 50% 100%);
+  }
+}
+
+.ripple-host {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.ripple-effect {
+  position: absolute;
+  border-radius: 9999px;
+  transform: scale(0);
+  opacity: 0.9;
+  animation: ripple-expand 650ms ease-out forwards;
+  pointer-events: none;
+}
+
+@keyframes ripple-expand {
+  to {
+    transform: scale(1);
+    opacity: 0;
+  }
+}

@@ -39,13 +39,26 @@ from app.schemas.auth import (
 
 @contextmanager
 def _transaction(db: Session):
-    """Context manager executing block in transaction or nested savepoint if transaction already active."""
-    if db.in_transaction():
-        with db.begin_nested():
-            yield
-    else:
-        with db.begin():
-            yield
+    """Run the block, then commit; rollback on any exception.
+
+    Deliberately does not branch on `db.in_transaction()`. SQLAlchemy
+    autobegins a transaction on a session's first query - a plain read
+    before this context manager (e.g. `authenticate()`'s credential
+    lookup) makes that check true even though nothing has actually opened
+    a transaction this method's caller owns. Branching on it previously
+    caused every such call to take a nested-savepoint path that released
+    cleanly but was never committed - `get_db()` only closes the session,
+    it never commits - so the write silently rolled back on session
+    close. `db.commit()` is correct regardless of how the transaction was
+    opened (explicit or autobegin), which is why a plain commit/rollback
+    replaces the nested/non-nested branch entirely.
+    """
+    try:
+        yield
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
 
 
 class AuthService:

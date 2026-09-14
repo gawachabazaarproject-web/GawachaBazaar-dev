@@ -178,6 +178,10 @@ class ProductSummaryResponse(BaseSchema):
     category_id: int
     status: str
     primary_image_url: str | None = None
+    starting_price: PriceResponse | None = None
+    default_variant_id: int | None = None
+    default_variant_unit: str | None = None
+    default_variant_quantity: Decimal | None = None
 
 
 class ProductResponse(BaseSchema):
