@@ -155,13 +155,13 @@ const styles = StyleSheet.create({
   headerRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: spacing.lg },
   card: {
     backgroundColor: colors.surface,
-    borderRadius: radius.lg,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: colors.divider,
+    borderRadius: radius.none,
     padding: spacing.base,
     marginBottom: spacing.base,
   },
   cardTitle: { marginBottom: spacing.md },
-  itemRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: spacing.sm },
+  itemRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingVertical: spacing.xs, marginBottom: spacing.xs },
   divider: { height: 1, backgroundColor: colors.divider, marginVertical: spacing.sm },
 });

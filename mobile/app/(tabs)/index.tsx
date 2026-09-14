@@ -3,23 +3,27 @@ import { Pressable, RefreshControl, ScrollView, StyleSheet, View } from "react-n
 import { useRouter } from "expo-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { Feather } from "@expo/vector-icons";
-import Animated, { FadeInDown, FadeInRight, FadeInUp } from "react-native-reanimated";
+import Animated, { FadeInDown, FadeInRight } from "react-native-reanimated";
 import { Screen } from "@/components/Screen";
 import { Text } from "@/components/Text";
-import { ProductCard, ProductCardData, productSummaryToCardData } from "@/components/ProductCard";
+import { ProductCardData, productSummaryToCardData } from "@/components/ProductCard";
 import { ProductCardSkeleton, Skeleton } from "@/components/Skeleton";
-import { CategoryTile } from "@/components/CategoryTile";
-import { PressableScale } from "@/components/PressableScale";
 import { CART_BAR_CLEARANCE } from "@/components/CartBar";
 import { ShopHeader } from "@/components/ShopHeader";
 import { HorizontalProductCard } from "@/components/HorizontalProductCard";
-import { ExclusiveBanner } from "@/components/home/ExclusiveBanner";
-import { TrustFeatureStrip } from "@/components/home/TrustFeatureStrip";
-import { FreshnessSectionHeader } from "@/components/home/FreshnessSectionHeader";
-import { BrandPromiseCard } from "@/components/home/BrandPromiseCard";
+import { PromoCarousel } from "@/components/home/PromoCarousel";
+import { BrandStatement } from "@/components/home/BrandStatement";
+import { CategoryPanel } from "@/components/home/CategoryPanel";
+import { SectionHeading } from "@/components/home/SectionHeading";
+import { ProductRail } from "@/components/home/ProductRail";
+import { VillageStory } from "@/components/home/VillageStory";
+import { ClosingCTA } from "@/components/home/ClosingCTA";
+import { WholesaleToggle } from "@/components/home/WholesaleToggle";
+import { WholesaleProductCard } from "@/components/home/WholesaleProductCard";
 import { useCategories, useProducts } from "@/features/catalog/useCatalog";
 import { useAddresses } from "@/features/address/useAddresses";
-import { colors, radius, shadows, spacing } from "@/theme";
+import { useWholesaleStore } from "@/store/wholesaleStore";
+import { colors, radius, spacing } from "@/theme";
 
 const HARVEST_SLUGS = ["ripe-tomatoes", "fresh-fenugreek", "green-peas", "chillies-coriander"];
 const SPECIALTY_SLUGS = ["fresh-oranges", "toned-milk", "toor-dal"];
@@ -31,6 +35,8 @@ export default function HomeScreen() {
   const { data: categories, isLoading: categoriesLoading } = useCategories();
   const { data: productsPages, isLoading: productsLoading } = useProducts({});
   const { data: addresses } = useAddresses();
+  const mode = useWholesaleStore((s) => s.mode);
+  const setMode = useWholesaleStore((s) => s.setMode);
 
   const handleRefresh = async () => {
     setRefreshing(true);
@@ -55,6 +61,8 @@ export default function HomeScreen() {
     return { harvestProducts: harvest, specialtyProducts: specialty, restProducts: rest };
   }, [allProducts]);
 
+  const goToProduct = (product: ProductCardData) => router.push(`/product/${product.id}`);
+
   return (
     <Screen edges={["top"]}>
       <ScrollView
@@ -66,6 +74,7 @@ export default function HomeScreen() {
           locationLabel={defaultAddress ? `${defaultAddress.label} - ${defaultAddress.city} (${defaultAddress.postal_code})` : "Add an address"}
           onLocationPress={() => router.push("/address")}
           onAccountPress={() => router.push("/(tabs)/account")}
+          onCartPress={() => router.push("/cart")}
         />
 
         <Pressable style={styles.searchBar} onPress={() => router.push("/(tabs)/search")}>
@@ -75,112 +84,137 @@ export default function HomeScreen() {
           </Text>
         </Pressable>
 
-        <Animated.View entering={FadeInUp.duration(300)}>
-          <ExclusiveBanner />
-        </Animated.View>
+        <View style={styles.carouselWrap}>
+          <PromoCarousel onSlidePress={() => router.push("/(tabs)/categories")} />
+        </View>
 
-        <TrustFeatureStrip />
+        <WholesaleToggle mode={mode} onChange={setMode} />
+        {mode === "wholesale" ? (
+          <View style={styles.wholesaleIntro}>
+            <Text variant="eyebrow" color={colors.accentDark}>
+              WHOLESALE
+            </Text>
+            <Text variant="h1" style={{ marginTop: spacing.sm }}>
+              Bulk pricing
+              <Text variant="script" color={colors.primary}>
+                {" "}
+                made simple.
+              </Text>
+            </Text>
+            <Text variant="body" color={colors.textSecondary} style={{ marginTop: spacing.md }}>
+              Pick a quantity for anything below and add it to a request - our team quotes it
+              directly, nothing is charged until you accept.
+            </Text>
+            <Pressable onPress={() => router.push("/bulk/requests")} style={styles.wholesaleLink}>
+              <Feather name="clock" size={14} color={colors.primary} />
+              <Text variant="bodyMedium" color={colors.primary} style={{ marginLeft: spacing.xs }}>
+                View your past requests
+              </Text>
+            </Pressable>
+          </View>
+        ) : null}
 
-        {/* Categories */}
-        <SectionHeader title="Shop by category" subtitle="Assorted by freshness zones" onSeeAll={() => router.push("/(tabs)/categories")} />
+        {mode === "regular" ? <BrandStatement /> : null}
+
+        {/* Shop by category */}
+        <SectionHeading index="01 / 05" eyebrow="EXPLORE" title="Shop by" scriptSuffix="category." onSeeAll={() => router.push("/(tabs)/categories")} />
         {categoriesLoading ? (
           <View style={styles.categoryRow}>
-            {[1, 2, 3, 4].map((i) => (
-              <Skeleton key={i} width={56} height={56} borderRadius={28} />
+            {[1, 2, 3].map((i) => (
+              <Skeleton key={i} width={168} height={226} borderRadius={0} />
             ))}
           </View>
         ) : (
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.categoryRow}>
             {(categories ?? []).map((category, index) => (
               <Animated.View key={category.id} entering={FadeInRight.delay(index * 50).duration(280)}>
-                <PressableScale style={styles.categoryItem} onPress={() => router.push(`/category/${category.id}`)}>
-                  <CategoryTile slug={category.slug} size={56} />
-                  <Text variant="caption" numberOfLines={1} style={styles.categoryLabel}>
-                    {category.name}
-                  </Text>
-                </PressableScale>
+                <CategoryPanel
+                  id={category.id}
+                  slug={category.slug}
+                  name={category.name}
+                  index={index}
+                  onPress={() => router.push(`/category/${category.id}`)}
+                />
               </Animated.View>
             ))}
           </ScrollView>
         )}
 
-        {/* Today's Morning Harvest */}
+        {/* Today's Market */}
         {productsLoading ? (
-          <>
-            <FreshnessSectionHeader />
-            <View style={styles.grid}>
-              {[1, 2, 3, 4].map((i) => (
-                <View key={i} style={styles.gridItem}>
-                  <ProductCardSkeleton />
-                </View>
-              ))}
-            </View>
-          </>
-        ) : harvestProducts.length > 0 ? (
-          <>
-            <FreshnessSectionHeader />
-            <View style={styles.grid}>
-              {harvestProducts.map((product, index) => (
-                <View key={product.id} style={styles.gridItem}>
-                  <ProductCard product={product} onPress={() => router.push(`/product/${product.id}`)} index={index} />
-                </View>
-              ))}
-            </View>
-          </>
-        ) : null}
+          <View style={styles.skeletonRail}>
+            {[1, 2, 3].map((i) => (
+              <View key={i} style={{ width: 158 }}>
+                <ProductCardSkeleton />
+              </View>
+            ))}
+          </View>
+        ) : (
+          <ProductRail
+            index="02 / 05"
+            eyebrow="TODAY'S MARKET"
+            title="Morning"
+            scriptSuffix="harvest."
+            description="Picked at 4 AM, direct from Saoner mandis - here before it wilts."
+            products={harvestProducts}
+            onProductPress={goToProduct}
+            onSeeAll={() => router.push("/(tabs)/categories")}
+            cardWidth={mode === "wholesale" ? 190 : undefined}
+            renderCard={
+              mode === "wholesale"
+                ? (product) => <WholesaleProductCard product={product} onPress={() => goToProduct(product)} />
+                : undefined
+            }
+          />
+        )}
 
-        {/* Rest of the catalog */}
-        {restProducts.length > 0 ? (
-          <>
-            <SectionHeader title="Shop groceries" />
-            <View style={styles.grid}>
-              {restProducts.map((product, index) => (
-                <View key={product.id} style={styles.gridItem}>
-                  <ProductCard product={product} onPress={() => router.push(`/product/${product.id}`)} index={index} />
-                </View>
-              ))}
-            </View>
-          </>
-        ) : null}
+        {mode === "regular" ? <VillageStory onPress={() => router.push("/(tabs)/categories")} /> : null}
+
+        {/* Best sellers */}
+        <ProductRail
+          index="04 / 05"
+          eyebrow="BEST SELLERS"
+          title="Everyday"
+          scriptSuffix="essentials."
+          description="The staples Nagpur households reorder every week."
+          products={restProducts}
+          onProductPress={goToProduct}
+          onSeeAll={() => router.push("/(tabs)/categories")}
+          cardWidth={mode === "wholesale" ? 190 : undefined}
+          renderCard={
+            mode === "wholesale"
+              ? (product) => <WholesaleProductCard product={product} onPress={() => goToProduct(product)} />
+              : undefined
+          }
+        />
 
         {/* Vidarbha Regional Specialties */}
         {specialtyProducts.length > 0 ? (
-          <>
-            <SectionHeader title="Vidarbha Regional Specialties" subtitle="GI-tagged & origin authenticated" />
+          <View style={styles.specialties}>
+            <SectionHeading
+              index="05 / 05"
+              eyebrow="VILLAGE SPECIALS"
+              title="Vidarbha"
+              scriptSuffix="specialties."
+              description="GI-tagged and origin-authenticated, sourced straight from the growing belt."
+            />
             {specialtyProducts.map((product, index) => (
               <Animated.View key={product.id} entering={FadeInDown.delay(index * 60).duration(280)}>
-                <HorizontalProductCard product={product} onPress={() => router.push(`/product/${product.id}`)} />
+                {mode === "wholesale" ? (
+                  <View style={styles.wholesaleSpecialtyItem}>
+                    <WholesaleProductCard product={product} onPress={() => goToProduct(product)} />
+                  </View>
+                ) : (
+                  <HorizontalProductCard product={product} onPress={() => goToProduct(product)} />
+                )}
               </Animated.View>
             ))}
-          </>
+          </View>
         ) : null}
 
-        <BrandPromiseCard />
+        <ClosingCTA onPress={() => router.push("/(tabs)/categories")} />
       </ScrollView>
     </Screen>
-  );
-}
-
-function SectionHeader({ title, subtitle, onSeeAll }: { title: string; subtitle?: string; onSeeAll?: () => void }) {
-  return (
-    <View style={styles.sectionHeader}>
-      <View style={{ flex: 1 }}>
-        <Text variant="h2">{title}</Text>
-        {subtitle ? (
-          <Text variant="caption" color={colors.textSecondary} style={{ marginTop: 2 }}>
-            {subtitle}
-          </Text>
-        ) : null}
-      </View>
-      {onSeeAll ? (
-        <Pressable onPress={onSeeAll} style={styles.seeAll}>
-          <Text variant="bodySmall" color={colors.primary}>
-            View All
-          </Text>
-          <Feather name="arrow-right" size={12} color={colors.primary} />
-        </Pressable>
-      ) : null}
-    </View>
   );
 }
 
@@ -194,23 +228,15 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.divider,
-    borderRadius: radius.md,
+    borderRadius: radius.none,
     paddingHorizontal: spacing.md,
     height: 48,
-    ...shadows.card,
   },
-  sectionHeader: {
-    flexDirection: "row",
-    alignItems: "flex-end",
-    justifyContent: "space-between",
-    paddingHorizontal: spacing.base,
-    marginTop: spacing.lg,
-    marginBottom: spacing.sm,
-  },
-  seeAll: { flexDirection: "row", alignItems: "center", gap: 4 },
-  categoryRow: { paddingHorizontal: spacing.base, gap: spacing.lg, flexDirection: "row" },
-  categoryItem: { alignItems: "center", width: 64 },
-  categoryLabel: { textAlign: "center", marginTop: spacing.sm },
-  grid: { flexDirection: "row", flexWrap: "wrap", paddingHorizontal: spacing.base, gap: spacing.sm },
-  gridItem: { width: "47%" },
+  carouselWrap: { marginTop: spacing.lg },
+  categoryRow: { paddingHorizontal: spacing.base, gap: spacing.sm, flexDirection: "row" },
+  skeletonRail: { flexDirection: "row", gap: spacing.md, paddingHorizontal: spacing.base, marginTop: spacing.xl },
+  specialties: { marginTop: spacing.xl },
+  wholesaleIntro: { paddingHorizontal: spacing.base, marginTop: spacing["2xl"], marginBottom: spacing["2xl"] },
+  wholesaleLink: { flexDirection: "row", alignItems: "center", marginTop: spacing.xl },
+  wholesaleSpecialtyItem: { paddingHorizontal: spacing.base, marginBottom: spacing.base, maxWidth: 220 },
 });

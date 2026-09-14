@@ -7,6 +7,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Text } from "./Text";
 import { useCart } from "@/features/cart/useCart";
 import { useAuthStore } from "@/store/authStore";
+import { useWholesaleStore } from "@/store/wholesaleStore";
 import { formatMoney } from "@/utils/money";
 import { colors, radius, shadows, spacing } from "@/theme";
 
@@ -30,6 +31,7 @@ export function CartBar() {
   const segments = useSegments();
   const insets = useSafeAreaInsets();
   const authStatus = useAuthStore((s) => s.status);
+  const wholesaleMode = useWholesaleStore((s) => s.mode);
   const { data: cart } = useCart(authStatus === "authenticated");
 
   const inTabs = segments[0] === "(tabs)";
@@ -41,7 +43,7 @@ export function CartBar() {
   const hiddenOnScreen = rootSegment === "cart" || rootSegment === "checkout" || rootSegment === "product";
 
   const itemCount = cart?.items.reduce((sum, i) => sum + Math.round(Number.parseFloat(i.quantity)), 0) ?? 0;
-  if (!cart || itemCount === 0 || hiddenOnScreen) return null;
+  if (!cart || itemCount === 0 || hiddenOnScreen || wholesaleMode === "wholesale") return null;
 
   const bottomOffset = inTabs ? TAB_BAR_CONTENT_HEIGHT + insets.bottom : insets.bottom + spacing.base;
 
@@ -79,7 +81,7 @@ const styles = StyleSheet.create({
   bar: {
     height: 56,
     backgroundColor: colors.primary,
-    borderRadius: radius.md,
+    borderRadius: radius.none,
     borderWidth: 1,
     borderColor: colors.primaryDark,
     paddingHorizontal: spacing.base,

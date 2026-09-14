@@ -75,6 +75,8 @@ export default function LoginScreen() {
               label="Password"
               placeholder="Your password"
               secureTextEntry
+              autoCapitalize="none"
+              autoCorrect={false}
               autoComplete="current-password"
               value={password}
               onChangeText={(v) => {
@@ -116,8 +118,8 @@ export default function LoginScreen() {
 
 const styles = StyleSheet.create({
   content: { flexGrow: 1, padding: spacing.xl, justifyContent: "center" },
-  header: { marginBottom: spacing["3xl"], alignItems: "flex-start" },
-  subtitle: { marginTop: spacing.sm },
+  header: { marginBottom: spacing["3xl"], alignItems: "center" },
+  subtitle: { marginTop: spacing.sm, textAlign: "center" },
   form: {},
   forgotLink: { alignSelf: "flex-end", marginTop: spacing.sm },
   error: { marginTop: spacing.md },

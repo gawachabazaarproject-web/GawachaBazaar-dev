@@ -3,7 +3,7 @@ import { Pressable, StyleSheet, View } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { Text } from "@/components/Text";
 import { formatMoney } from "@/utils/money";
-import { colors, radius, shadows, spacing } from "@/theme";
+import { colors, spacing } from "@/theme";
 import { CartItemResponse } from "@/types/api";
 
 export interface BasketSummaryCardProps {
@@ -20,8 +20,8 @@ export function BasketSummaryCard({ items, totalAmount, currency }: BasketSummar
   return (
     <View style={styles.card}>
       <Pressable style={styles.header} onPress={() => setExpanded((v) => !v)}>
-        <Text variant="h3" style={{ flex: 1 }}>
-          Fresh Basket Summary ({items.length} {items.length === 1 ? "Item" : "Items"})
+        <Text variant="bodyMedium" style={{ flex: 1 }}>
+          {items.length} {items.length === 1 ? "item" : "items"} in this order
         </Text>
         <Text variant="bodyMedium">{formatMoney(totalAmount ?? "0", currency ?? "INR")}</Text>
         <Feather name={expanded ? "chevron-up" : "chevron-down"} size={16} color={colors.textSecondary} style={{ marginLeft: spacing.xs }} />
@@ -59,15 +59,7 @@ export function BasketSummaryCard({ items, totalAmount, currency }: BasketSummar
 }
 
 const styles = StyleSheet.create({
-  card: {
-    backgroundColor: colors.surface,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.divider,
-    padding: spacing.base,
-    marginBottom: spacing.base,
-    ...shadows.card,
-  },
+  card: { backgroundColor: colors.surface },
   header: { flexDirection: "row", alignItems: "center" },
   divider: { height: 1, backgroundColor: colors.divider, marginVertical: spacing.sm },
   row: { flexDirection: "row", justifyContent: "space-between", marginBottom: spacing.sm },

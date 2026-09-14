@@ -24,6 +24,22 @@ export default function SmoothScroll({ children }: { children: React.ReactNode }
     });
     gsap.ticker.lagSmoothing(0);
 
+    const handleAnchorClick = (e: MouseEvent) => {
+      const anchor = (e.target as HTMLElement)?.closest('a[href^="#"]');
+      if (!anchor) return;
+      const href = anchor.getAttribute("href");
+      if (!href || href === "#") return;
+      const el = document.querySelector(href);
+      if (!el) return;
+      e.preventDefault();
+      lenis.scrollTo(el as HTMLElement, {
+        duration: 1.6,
+        easing: (t: number) => 1 - Math.pow(1 - t, 4),
+        offset: 0,
+      });
+    };
+    document.addEventListener("click", handleAnchorClick);
+
     const progress = ScrollTrigger.create({
       trigger: document.documentElement,
       start: "top top",
@@ -42,13 +58,14 @@ export default function SmoothScroll({ children }: { children: React.ReactNode }
     return () => {
       progress.kill();
       lenis.destroy();
+      document.removeEventListener("click", handleAnchorClick);
     };
   }, []);
 
   return (
     <>
-      <div className="pointer-events-none fixed left-4 sm:left-6 top-0 z-40 hidden h-screen flex-col items-center justify-between py-6 md:flex">
-        <div className="h-24 w-px bg-neutral-100/30" />
+      <div className="pointer-events-none fixed left-4 sm:left-6 top-0 z-40 hidden h-screen flex-col items-center justify-between pb-8 pt-28 md:flex">
+        <div className="mix-blend-difference h-16 w-px bg-neutral-100/40" />
         <div className="flex flex-col items-center gap-3">
           <span
             ref={counterRef}

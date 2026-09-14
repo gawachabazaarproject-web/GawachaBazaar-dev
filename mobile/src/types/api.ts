@@ -340,6 +340,141 @@ export interface InventoryReservationResponse {
 }
 
 // ---------------------------------------------------------------------------
+// Bulk / wholesale orders
+// ---------------------------------------------------------------------------
+
+/** Exact backend bulk_order.py BusinessType values. */
+export type BusinessType =
+  | "RESTAURANT"
+  | "HOTEL"
+  | "CATERER"
+  | "RETAILER"
+  | "OFFICE"
+  | "INSTITUTION"
+  | "EVENT"
+  | "OTHER";
+
+/** Exact backend bulk_order.py RequestUnit values - deliberately separate
+ * from ProductVariant's own `unit` field, since a bulk request can name a
+ * unit the catalog variant doesn't use (e.g. requesting "5 CRATE" of a
+ * product sold retail by the KG). */
+export type RequestUnit = "KG" | "G" | "L" | "ML" | "UNIT" | "DOZEN" | "BOX" | "CRATE";
+
+/** Exact backend bulk_order_state.py values. */
+export type BulkOrderRequestStatus =
+  | "REQUESTED"
+  | "UNDER_REVIEW"
+  | "QUOTED"
+  | "CUSTOMER_ACCEPTED"
+  | "CONVERTED_TO_ORDER"
+  | "REJECTED"
+  | "CANCELLED"
+  | "EXPIRED";
+
+/** Exact backend quote_state.py QuoteVersionStatus values. */
+export type QuoteVersionStatus = "DRAFT" | "SENT" | "ACCEPTED" | "REJECTED" | "SUPERSEDED" | "EXPIRED";
+
+export interface BulkCustomerProfileResponse {
+  id: number;
+  user_id: number;
+  business_name: string;
+  business_type: BusinessType;
+  contact_person: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface UpsertBulkCustomerProfilePayload {
+  business_name: string;
+  business_type: BusinessType;
+  contact_person?: string | null;
+}
+
+export interface CreateBulkOrderRequestItemPayload {
+  /** Exactly one of product_id / custom_item_name, matching the
+   * backend's model_validator. */
+  product_id?: number | null;
+  custom_item_name?: string | null;
+  requested_quantity: string;
+  unit: RequestUnit;
+  customer_notes?: string | null;
+}
+
+export interface CreateBulkOrderRequestPayload {
+  address_id?: number | null;
+  requested_delivery_date?: string | null;
+  customer_notes?: string | null;
+  items: CreateBulkOrderRequestItemPayload[];
+}
+
+export interface BulkOrderRequestItemResponse {
+  id: number;
+  product_id: number | null;
+  product_name: string | null;
+  custom_item_name: string | null;
+  requested_quantity: string;
+  unit: RequestUnit;
+  customer_notes: string | null;
+  created_at: string;
+}
+
+export interface BulkOrderRequestAddressResponse {
+  address_line_1: string;
+  address_line_2: string | null;
+  city: string;
+  state: string;
+  postal_code: string;
+}
+
+export interface BulkOrderRequestResponse {
+  id: number;
+  status: BulkOrderRequestStatus;
+  requested_delivery_date: string | null;
+  customer_notes: string | null;
+  address: BulkOrderRequestAddressResponse | null;
+  items: BulkOrderRequestItemResponse[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface BulkOrderRequestListResponse {
+  items: BulkOrderRequestResponse[];
+  page: number;
+  page_size: number;
+  total: number;
+}
+
+export interface QuoteItemResponse {
+  id: number;
+  request_item_id: number;
+  variant_id: number;
+  variant_name: string;
+  sku: string;
+  quantity: string;
+  unit_price: string;
+  total_price: string;
+}
+
+export interface QuoteVersionResponse {
+  id: number;
+  version_number: number;
+  status: QuoteVersionStatus;
+  currency: string;
+  valid_until: string | null;
+  admin_notes: string | null;
+  items: QuoteItemResponse[];
+  created_at: string;
+}
+
+export interface QuoteResponse {
+  id: number;
+  request_id: number;
+  versions: QuoteVersionResponse[];
+  created_at: string;
+  updated_at: string;
+}
+
+// ---------------------------------------------------------------------------
 // Errors (uniform backend contract)
 // ---------------------------------------------------------------------------
 

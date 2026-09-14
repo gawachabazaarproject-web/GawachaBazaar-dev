@@ -97,6 +97,8 @@ export default function RegisterScreen() {
             label="Password"
             placeholder="At least 8 characters"
             secureTextEntry
+            autoCapitalize="none"
+            autoCorrect={false}
             autoComplete="new-password"
             value={password}
             onChangeText={setField("password", setPassword)}

@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from "react";
-import { Pressable, StyleSheet, TextInput, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, TextInput, View } from "react-native";
 import { useRouter } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import { Screen } from "@/components/Screen";
@@ -12,12 +12,12 @@ import { FreshnessStoryCard } from "@/components/FreshnessStoryCard";
 import { RecommendationRail } from "@/components/RecommendationRail";
 import { MiniProductTile } from "@/components/MiniProductTile";
 import { productSummaryToCardData } from "@/components/ProductCard";
-import { useAllProducts, useProducts } from "@/features/catalog/useCatalog";
+import { useAllProducts, useCategories, useProducts } from "@/features/catalog/useCatalog";
 import { useAddresses } from "@/features/address/useAddresses";
 import { useRecentSearches } from "@/features/catalog/useRecentSearches";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { RELATED_PRODUCTS, DEFAULT_QUICK_SEARCH_TERMS } from "@/utils/relatedProducts";
-import { colors, radius, shadows, spacing, typography } from "@/theme";
+import { colors, radius, spacing, typography } from "@/theme";
 
 export default function SearchScreen() {
   const router = useRouter();
@@ -25,6 +25,7 @@ export default function SearchScreen() {
   const debouncedQuery = useDebouncedValue(query.trim(), 350);
   const { recent, addRecent, clearRecent } = useRecentSearches();
   const { data: addresses } = useAddresses();
+  const { data: categories } = useCategories();
 
   const searchEnabled = debouncedQuery.length > 0;
   const { data, isLoading, isFetchingNextPage, fetchNextPage, hasNextPage } = useProducts(
@@ -65,10 +66,25 @@ export default function SearchScreen() {
         locationLabel={defaultAddress ? `${defaultAddress.label} - ${defaultAddress.city}` : "Add an address"}
         onLocationPress={() => router.push("/address")}
         onAccountPress={() => router.push("/(tabs)/account")}
+        onCartPress={() => router.push("/cart")}
       />
 
-      <View style={styles.searchRow}>
-        <View style={styles.searchField}>
+      {!searchEnabled ? (
+        <View style={styles.heroWrap}>
+          <Text variant="eyebrow" color={colors.accentDark}>
+            SEARCH
+          </Text>
+          <Text variant="displayL" style={styles.heroTitle}>
+            What are you{"\n"}
+            <Text variant="script" color={colors.primary}>
+              looking for?
+            </Text>
+          </Text>
+        </View>
+      ) : null}
+
+      <View style={[styles.searchRow, !searchEnabled && styles.searchRowHero]}>
+        <View style={[styles.searchField, !searchEnabled && styles.searchFieldHero]}>
           <Feather name="search" size={16} color={colors.textMuted} />
           <TextInput
             style={styles.searchInput}
@@ -82,53 +98,82 @@ export default function SearchScreen() {
             autoFocus
           />
           {query.length > 0 ? (
-            <Pressable onPress={() => setQuery("")} hitSlop={8}>
+            <Pressable onPress={() => setQuery("")} hitSlop={8} accessibilityRole="button" accessibilityLabel="Clear search">
               <Feather name="x" size={16} color={colors.textMuted} />
             </Pressable>
           ) : null}
         </View>
       </View>
 
-      {searchEnabled ? (
-        <View style={styles.chipRow}>
-          {DEFAULT_QUICK_SEARCH_TERMS.map((term) => (
-            <FilterChip key={term} label={term} selected={term.toLowerCase() === debouncedQuery.toLowerCase()} onPress={() => handleQuickTerm(term)} />
-          ))}
-        </View>
-      ) : null}
-
       {!searchEnabled ? (
-        recent.length > 0 ? (
-          <View style={styles.recentSection}>
-            <View style={styles.recentHeader}>
-              <Text variant="h3">Recent searches</Text>
-              <Pressable onPress={clearRecent}>
-                <Text variant="bodySmall" color={colors.primary}>
-                  Clear
-                </Text>
-              </Pressable>
-            </View>
-            <View style={styles.recentList}>
-              {recent.map((term) => (
-                <Pressable key={term} style={styles.recentChip} onPress={() => setQuery(term)}>
-                  <Feather name="clock" size={13} color={colors.textSecondary} />
-                  <Text variant="bodySmall" style={{ marginLeft: spacing.xs }}>
-                    {term}
-                  </Text>
-                </Pressable>
+        <ScrollView showsVerticalScrollIndicator={false}>
+          <View style={styles.section}>
+            <Text variant="eyebrow" color={colors.accentDark}>
+              POPULAR SEARCHES
+            </Text>
+            <View style={styles.chipRow}>
+              {DEFAULT_QUICK_SEARCH_TERMS.map((term) => (
+                <FilterChip key={term} label={term} selected={false} onPress={() => handleQuickTerm(term)} />
               ))}
             </View>
           </View>
-        ) : (
-          <EmptyState icon="search" title="Search GawachaBazaar" message="Find groceries by name - try 'rice' or 'milk'." />
-        )
+
+          {recent.length > 0 ? (
+            <View style={styles.section}>
+              <View style={styles.recentHeader}>
+                <Text variant="eyebrow" color={colors.accentDark}>
+                  RECENT
+                </Text>
+                <Pressable onPress={clearRecent} accessibilityRole="button" accessibilityLabel="Clear recent searches">
+                  <Text variant="bodySmall" color={colors.primary}>
+                    Clear
+                  </Text>
+                </Pressable>
+              </View>
+              {recent.map((term, i) => (
+                <Pressable
+                  key={term}
+                  style={[styles.recentRow, i === recent.length - 1 && styles.recentRowLast]}
+                  onPress={() => setQuery(term)}
+                >
+                  <Feather name="clock" size={14} color={colors.textSecondary} />
+                  <Text variant="body" style={{ marginLeft: spacing.sm }}>
+                    {term}
+                  </Text>
+                  <Feather name="arrow-up-right" size={14} color={colors.textMuted} style={{ marginLeft: "auto" }} />
+                </Pressable>
+              ))}
+            </View>
+          ) : null}
+
+          {categories && categories.length > 0 ? (
+            <View style={styles.section}>
+              <Text variant="eyebrow" color={colors.accentDark}>
+                BROWSE BY CATEGORY
+              </Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.categoryRow}>
+                {categories.map((category) => (
+                  <Pressable key={category.id} style={styles.categoryChip} onPress={() => router.push(`/category/${category.id}`)}>
+                    <Text variant="bodySmall">{category.name}</Text>
+                    <Feather name="arrow-up-right" size={12} color={colors.textSecondary} />
+                  </Pressable>
+                ))}
+              </ScrollView>
+            </View>
+          ) : null}
+        </ScrollView>
       ) : (
         <>
           {!isLoading ? (
-            <View style={styles.statusRow}>
-              <View style={styles.statusDot} />
-              <Text variant="bodySmall" color={colors.textSecondary} style={{ flex: 1 }}>
-                Showing {products.length} farm fresh {products.length === 1 ? "pick" : "picks"} in Nagpur
+            <View style={styles.resultsHeader}>
+              <Text variant="eyebrow" color={colors.textMuted}>
+                SEARCH RESULTS
+              </Text>
+              <Text variant="h2" style={styles.resultsTitle}>
+                &quot;{debouncedQuery}&quot;
+              </Text>
+              <Text variant="caption" color={colors.textSecondary} style={styles.resultsMeta}>
+                {products.length} {products.length === 1 ? "pick" : "picks"} found
               </Text>
             </View>
           ) : null}
@@ -163,7 +208,10 @@ export default function SearchScreen() {
 }
 
 const styles = StyleSheet.create({
+  heroWrap: { paddingHorizontal: spacing.base, marginTop: spacing.xl },
+  heroTitle: { marginTop: spacing.sm },
   searchRow: { paddingHorizontal: spacing.base, marginTop: spacing.sm },
+  searchRowHero: { marginTop: spacing.xl },
   searchField: {
     flexDirection: "row",
     alignItems: "center",
@@ -171,37 +219,35 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.divider,
-    borderRadius: radius.md,
+    borderRadius: radius.none,
     paddingHorizontal: spacing.md,
-    ...shadows.card,
   },
+  searchFieldHero: { height: 56, borderColor: colors.textPrimary },
   searchInput: { flex: 1, marginLeft: spacing.sm, ...typography.body, color: colors.textPrimary, padding: 0 },
-  chipRow: {
+  section: { paddingHorizontal: spacing.base, marginTop: spacing["2xl"] },
+  chipRow: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm, marginTop: spacing.base },
+  recentHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  recentRow: {
     flexDirection: "row",
-    flexWrap: "wrap",
-    gap: spacing.sm,
-    paddingHorizontal: spacing.base,
+    alignItems: "center",
+    paddingVertical: spacing.md,
+    borderBottomWidth: 1,
+    borderColor: colors.divider,
     marginTop: spacing.sm,
   },
-  statusRow: {
+  recentRowLast: { borderBottomWidth: 0 },
+  categoryRow: { gap: spacing.sm, marginTop: spacing.base },
+  categoryChip: {
     flexDirection: "row",
     alignItems: "center",
     gap: spacing.xs,
-    paddingHorizontal: spacing.base,
-    marginTop: spacing.sm,
-  },
-  statusDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.accent },
-  recentSection: { paddingHorizontal: spacing.base, marginTop: spacing.base },
-  recentHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: spacing.md },
-  recentList: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
-  recentChip: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.divider,
-    borderRadius: 999,
+    borderRadius: radius.none,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm + 2,
   },
+  resultsHeader: { paddingHorizontal: spacing.base, marginTop: spacing.lg, marginBottom: spacing.sm },
+  resultsTitle: { marginTop: spacing.xs },
+  resultsMeta: { marginTop: spacing.xs },
 });

@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react";
 import { ensureGsap } from "@/lib/gsap";
 import RippleButton from "./RippleButton";
+import EditorialLink from "./EditorialLink";
 
 export default function AppCTA() {
   const badgeRef = useRef<HTMLDivElement>(null);
@@ -47,19 +48,16 @@ export default function AppCTA() {
             <RippleButton
               as="a"
               href="#contact"
-              rippleColor="rgba(11,45,32,0.35)"
-              className="rounded-full bg-secondary-500 px-8 py-4 text-xs font-bold uppercase tracking-widest text-primary-900 transition-transform hover:scale-105"
+              fillColor="#05130D"
+              textColor="#0B2D20"
+              hoverTextColor="#F7F4EB"
+              className="rounded-none bg-secondary-500 px-8 py-4 text-xs font-bold uppercase tracking-widest2 transition-transform hover:scale-[1.03]"
             >
-              Download for Android
+              Download For Android
             </RippleButton>
-            <RippleButton
-              as="a"
-              href="#contact"
-              rippleColor="rgba(217,165,42,0.4)"
-              className="rounded-full border border-neutral-100/30 px-8 py-4 text-xs font-bold uppercase tracking-widest text-neutral-100 transition-colors hover:border-secondary-500 hover:text-secondary-400"
-            >
-              Download for iOS
-            </RippleButton>
+            <EditorialLink as="a" href="#contact" tone="light">
+              Download For iOS
+            </EditorialLink>
           </div>
         </div>
 

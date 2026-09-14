@@ -3,7 +3,8 @@
 import { useEffect, useRef } from "react";
 import Image from "next/image";
 import { ensureGsap } from "@/lib/gsap";
-import RippleButton from "./RippleButton";
+import EditorialLink from "./EditorialLink";
+import ChapterMark from "./ChapterMark";
 
 export default function OurGrowers() {
   const sectionRef = useRef<HTMLDivElement>(null);
@@ -33,10 +34,11 @@ export default function OurGrowers() {
   }, []);
 
   return (
-    <section ref={sectionRef} className="relative bg-neutral-100 py-24 sm:py-32">
-      <div className="mx-auto grid max-w-7xl grid-cols-1 items-center gap-14 px-5 sm:px-8 lg:grid-cols-2">
+    <section ref={sectionRef} className="relative overflow-hidden bg-neutral-100 py-24 sm:py-32">
+      <ChapterMark index={7} className="absolute left-0 top-2 sm:top-4" />
+      <div className="relative mx-auto grid max-w-7xl grid-cols-1 items-center gap-14 px-5 sm:px-8 lg:grid-cols-2">
         <div className="grower-copy order-2 lg:order-1">
-          <p className="eyebrow text-primary-600">Grown By Real People</p>
+          <p className="eyebrow text-primary-600">07 / 08 — Grown By Real People</p>
           <h2 className="mt-4 font-display text-3xl font-bold leading-tight text-primary-800 sm:text-5xl">
             Every crate has a name behind it.
           </h2>
@@ -53,17 +55,12 @@ export default function OurGrowers() {
               to get paid.&rdquo;
             </p>
           </div>
-          <RippleButton
-            as="a"
-            href="#contact"
-            rippleColor="rgba(11,45,32,0.35)"
-            className="mt-8 inline-flex items-center gap-2 rounded-full border border-primary-800/20 px-6 py-3 text-xs font-bold uppercase tracking-widest text-primary-800 transition-colors hover:border-secondary-500 hover:text-secondary-600"
-          >
+          <EditorialLink as="a" href="#contact" tone="dark" className="mt-9">
             Meet Our Growers
-          </RippleButton>
+          </EditorialLink>
         </div>
 
-        <div className="order-1 aspect-[4/5] overflow-hidden rounded-[2rem] lg:order-2">
+        <div className="order-1 aspect-[4/5] overflow-hidden rounded-none lg:order-2">
           <div className="grower-photo relative h-full w-full">
             <Image
               src="/images/people/grower.jpg"

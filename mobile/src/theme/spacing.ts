@@ -15,6 +15,10 @@ export const spacing = {
 export type SpacingToken = keyof typeof spacing;
 
 export const radius = {
+  // De-roundified, editorial default - matches the website's `rounded-none`
+  // philosophy. Prefer this on new cards/images/panels; the larger values
+  // below remain only for genuinely circular controls (avatars, dots).
+  none: 0,
   xs: 4,
   sm: 8,
   md: 12,

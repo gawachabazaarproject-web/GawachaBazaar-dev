@@ -2,7 +2,7 @@ import React from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { Text } from "@/components/Text";
-import { colors, radius, shadows, spacing } from "@/theme";
+import { colors, radius, spacing } from "@/theme";
 
 export interface DeliverySummaryCardProps {
   addressLabel: string;
@@ -46,17 +46,14 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     marginHorizontal: spacing.base,
     marginTop: spacing.sm,
-    padding: spacing.base,
-    borderRadius: radius.md,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
+    paddingVertical: spacing.base,
+    borderBottomWidth: 1,
     borderColor: colors.divider,
-    ...shadows.card,
   },
   iconWrap: {
     width: 32,
     height: 32,
-    borderRadius: radius.pill,
+    borderRadius: radius.none,
     backgroundColor: colors.primaryLight,
     alignItems: "center",
     justifyContent: "center",

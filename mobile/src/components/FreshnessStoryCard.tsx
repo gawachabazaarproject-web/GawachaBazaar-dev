@@ -2,7 +2,7 @@ import React from "react";
 import { StyleSheet, View } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { Text } from "./Text";
-import { colors, radius, shadows, spacing } from "@/theme";
+import { colors, radius, spacing } from "@/theme";
 
 /** Compact dark-green farm-provenance card shown after a product grid -
  * illustrative copy (explicitly authorized), reinforcing the farm-direct
@@ -38,16 +38,15 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: spacing.sm,
     marginHorizontal: spacing.base,
-    marginTop: spacing.sm,
+    marginTop: spacing.lg,
     padding: spacing.base,
-    borderRadius: radius.md,
+    borderRadius: radius.none,
     backgroundColor: colors.primary,
-    ...shadows.card,
   },
   iconWrap: {
     width: 32,
     height: 32,
-    borderRadius: radius.pill,
+    borderRadius: radius.none,
     backgroundColor: colors.primaryDark,
     alignItems: "center",
     justifyContent: "center",

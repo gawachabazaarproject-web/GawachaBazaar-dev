@@ -3,8 +3,7 @@
 import { useEffect, useRef } from "react";
 import Image from "next/image";
 import { ensureGsap } from "@/lib/gsap";
-import { IconMapPin } from "./icons";
-import RippleButton from "./RippleButton";
+import EditorialLink from "./EditorialLink";
 
 const ZONES = [
   { name: "Katol Road Belt", dist: "35 KM" },
@@ -53,7 +52,7 @@ export default function AerialLocation() {
   }, []);
 
   return (
-    <section ref={sectionRef} className="relative h-[90vh] min-h-[600px] overflow-hidden bg-primary-900">
+    <section ref={sectionRef} className="relative min-h-[90vh] overflow-hidden bg-primary-900 sm:min-h-[640px]">
       <div ref={imgRef} className="absolute inset-0">
         <Image
           src="/images/bg/aerial.jpg"
@@ -66,7 +65,7 @@ export default function AerialLocation() {
       <div className="absolute inset-0 bg-gradient-to-t from-primary-900 via-primary-900/40 to-primary-900/10" />
       <div className="absolute inset-0 bg-gradient-to-r from-primary-900/90 via-primary-900/10 to-transparent" />
 
-      <div className="relative z-10 mx-auto flex h-full max-w-7xl flex-col justify-between px-5 py-16 sm:px-8 sm:py-20">
+      <div className="relative z-10 mx-auto flex min-h-full max-w-7xl flex-col justify-between gap-16 px-5 py-16 sm:px-8 sm:py-20">
         <div className="aerial-copy max-w-xl">
           <p className="eyebrow text-secondary-400">Maharashtra&apos;s Fresh Belt</p>
           <h2 className="mt-4 font-display text-4xl font-bold uppercase leading-[0.95] text-neutral-100 sm:text-6xl">
@@ -78,15 +77,9 @@ export default function AerialLocation() {
             Every village node sits within a couple of hours of Nagpur — close enough that
             what&apos;s picked at dawn reaches your kitchen the same evening.
           </p>
-          <RippleButton
-            as="a"
-            href="#delivery"
-            rippleColor="rgba(217,165,42,0.4)"
-            className="mt-8 inline-flex items-center gap-2 rounded-full border border-neutral-100/40 px-6 py-3 text-xs font-bold uppercase tracking-widest text-neutral-100 transition-colors hover:border-secondary-500 hover:text-secondary-400"
-          >
-            <IconMapPin className="h-4 w-4" />
+          <EditorialLink as="a" href="#delivery" tone="light" className="mt-9">
             View Delivery Zones
-          </RippleButton>
+          </EditorialLink>
         </div>
 
         <div className="flex flex-wrap gap-x-10 gap-y-4">

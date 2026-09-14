@@ -1,6 +1,7 @@
 import React, { useMemo } from "react";
 import { Image } from "expo-image";
 import { Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Stack, useRouter } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import { Screen } from "@/components/Screen";
@@ -33,6 +34,7 @@ const ADDON_SLUGS = ["fresh-lemons", "curry-leaves", "fresh-coriander", "green-c
 
 export default function CartScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { data: cart, isLoading } = useCart();
   const updateItem = useUpdateCartItemQuantity();
   const removeItem = useRemoveCartItem();
@@ -96,8 +98,13 @@ export default function CartScreen() {
 
             <View style={styles.basketHeader}>
               <View>
-                <Text variant="h1">Your Harvest Basket</Text>
-                <Text variant="caption" color={colors.textSecondary}>
+                <Text variant="eyebrow" color={colors.accentDark}>
+                  YOUR MARKET
+                </Text>
+                <Text variant="h1" style={{ marginTop: spacing.xs }}>
+                  Your Harvest Basket
+                </Text>
+                <Text variant="caption" color={colors.textSecondary} style={{ marginTop: spacing.xs }}>
                   {items.length} Farm SKUs
                 </Text>
               </View>
@@ -144,7 +151,7 @@ export default function CartScreen() {
       </ScrollView>
 
       {!isLoading && items.length > 0 ? (
-        <View style={styles.stickyBar}>
+        <View style={[styles.stickyBar, { paddingBottom: insets.bottom, height: 68 + insets.bottom }]}>
           <View>
             <View style={styles.stickyTotalRow}>
               <Text variant="price" color={colors.textInverse}>
@@ -237,7 +244,7 @@ function CartItemCard({
 }
 
 const styles = StyleSheet.create({
-  scrollContent: { paddingBottom: 140 },
+  scrollContent: { paddingBottom: 130 },
   closeRow: { alignItems: "flex-end", paddingHorizontal: spacing.base },
   closeButton: { width: 32, height: 32, alignItems: "center", justifyContent: "center" },
   basketHeader: {
@@ -248,27 +255,25 @@ const styles = StyleSheet.create({
     marginTop: spacing.lg,
     marginBottom: spacing.sm,
   },
-  list: { paddingHorizontal: spacing.base, gap: spacing.sm },
+  list: { paddingHorizontal: spacing.base, marginTop: spacing.base },
   card: {
     flexDirection: "row",
     alignItems: "center",
-    gap: spacing.sm,
+    gap: spacing.md,
     backgroundColor: colors.surface,
-    borderRadius: radius.sm,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: spacing.sm,
+    borderBottomWidth: 1,
+    borderColor: colors.divider,
+    paddingVertical: spacing.md,
   },
-  imageWrap: { width: 64, height: 64 },
-  image: { width: 64, height: 64, borderRadius: radius.xs, backgroundColor: colors.background },
+  imageWrap: { width: 88, height: 88 },
+  image: { width: 88, height: 88, borderRadius: radius.none, backgroundColor: colors.background },
   cartBadge: {
     position: "absolute",
-    top: 2,
-    left: 2,
+    top: 0,
+    left: 0,
     backgroundColor: colors.accent,
-    borderRadius: 3,
-    paddingHorizontal: 3,
-    paddingVertical: 1,
+    paddingHorizontal: 4,
+    paddingVertical: 2,
   },
   cardInfo: { flex: 1 },
   priceRow: { flexDirection: "row", alignItems: "baseline", gap: spacing.xs, marginTop: 2 },
@@ -276,11 +281,10 @@ const styles = StyleSheet.create({
   impactNote: { marginHorizontal: spacing.base, marginTop: spacing.base, textAlign: "center" },
   stickyBar: {
     position: "absolute",
-    left: spacing.md,
-    right: spacing.md,
-    bottom: spacing.base,
-    height: 56,
-    borderRadius: radius.md,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: 68,
     backgroundColor: colors.primary,
     flexDirection: "row",
     alignItems: "center",
@@ -288,14 +292,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.base,
   },
   stickyTotalRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
-  itemCountBadge: { backgroundColor: colors.primaryDark, borderRadius: radius.xs, paddingHorizontal: spacing.xs, paddingVertical: 2 },
+  itemCountBadge: { backgroundColor: colors.primaryDark, borderRadius: radius.none, paddingHorizontal: spacing.xs, paddingVertical: 2 },
   checkoutButton: {
     flexDirection: "row",
     alignItems: "center",
     gap: spacing.xs,
     backgroundColor: colors.accent,
-    borderRadius: radius.sm,
-    paddingHorizontal: spacing.md,
-    height: 38,
+    borderRadius: radius.none,
+    paddingHorizontal: spacing.lg,
+    height: 44,
   },
 });

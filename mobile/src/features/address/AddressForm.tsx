@@ -11,6 +11,15 @@ import { validateRequired } from "@/utils/validation";
 
 const QUICK_LABELS = ["Home", "Work", "Other"];
 
+/** Device GPS returns full float precision (e.g. 21.14663341962727),
+ * which overflows the backend's `Decimal(max_digits=9, decimal_places=6)`
+ * column and gets rejected with a 422. Round to 6 decimal places (~11cm
+ * precision - far more than needed for delivery) before it ever leaves
+ * the device. */
+function roundCoord(value: number): number {
+  return Math.round(value * 1e6) / 1e6;
+}
+
 export interface AddressFormValues {
   label: string;
   address_line_1: string;
@@ -67,7 +76,8 @@ export function AddressForm({ initial, submitLabel, loading, allowDefaultToggle 
         return;
       }
       const position = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-      const { latitude, longitude } = position.coords;
+      const latitude = roundCoord(position.coords.latitude);
+      const longitude = roundCoord(position.coords.longitude);
       setCoords({ latitude, longitude });
 
       const [place] = await Location.reverseGeocodeAsync({ latitude, longitude });
@@ -111,8 +121,8 @@ export function AddressForm({ initial, submitLabel, loading, allowDefaultToggle 
       city: values.city.trim(),
       state: values.state.trim(),
       postal_code: values.postal_code.trim(),
-      latitude: coords?.latitude ?? null,
-      longitude: coords?.longitude ?? null,
+      latitude: coords ? roundCoord(coords.latitude) : null,
+      longitude: coords ? roundCoord(coords.longitude) : null,
       is_default: values.is_default,
     });
   };
@@ -223,7 +233,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     borderWidth: 1.5,
     borderColor: colors.primary,
-    borderRadius: radius.md,
+    borderRadius: radius.none,
     paddingVertical: spacing.md,
     marginBottom: spacing.sm,
   },
@@ -233,7 +243,7 @@ const styles = StyleSheet.create({
   chip: {
     paddingHorizontal: spacing.base,
     paddingVertical: spacing.sm,
-    borderRadius: radius.pill,
+    borderRadius: radius.none,
     borderWidth: 1.5,
     borderColor: colors.border,
   },
