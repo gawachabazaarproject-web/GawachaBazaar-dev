@@ -1,16 +1,19 @@
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
-from fastapi import Depends, FastAPI, status
+from fastapi import Depends, FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from slowapi.errors import RateLimitExceeded
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.api.v1.router import api_router
 from app.core.config import settings
 from app.core.logging import logger
+from app.core.rate_limit import limiter
 from app.core.request_id import RequestIDMiddleware
+from app.core.security_headers import SecurityHeadersMiddleware
 from app.dependencies.database import get_db
 from app.exceptions.handlers import register_exception_handlers
 from app.schemas.base import DatabaseHealthResponse, HealthResponse
@@ -44,6 +47,10 @@ def create_application() -> FastAPI:
     # Request correlation & structured execution timing (outer ASGI middleware)
     app.add_middleware(RequestIDMiddleware)
 
+    # Baseline security response headers (HSTS, X-Content-Type-Options,
+    # etc.) - see app/core/security_headers.py for what's set and why.
+    app.add_middleware(SecurityHeadersMiddleware)
+
     # Configure CORS
     if settings.ALLOWED_ORIGINS:
         app.add_middleware(
@@ -52,6 +59,30 @@ def create_application() -> FastAPI:
             allow_credentials=True,
             allow_methods=["*"],
             allow_headers=["*"],
+        )
+
+    # Rate limiting for sensitive auth flows (login/register/refresh) -
+    # see app/core/rate_limit.py.
+    app.state.limiter = limiter
+
+    @app.exception_handler(RateLimitExceeded)
+    async def rate_limit_exceeded_handler(
+        request: Request, exc: RateLimitExceeded
+    ) -> JSONResponse:
+        logger.warning(
+            "RATE_LIMIT_EXCEEDED: %s %s from %s (%s)",
+            request.method,
+            request.url.path,
+            request.client.host if request.client else "unknown",
+            exc.detail,
+        )
+        return JSONResponse(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            content={
+                "code": "RATE_LIMIT_EXCEEDED",
+                "message": "Too many requests. Please try again later.",
+                "details": None,
+            },
         )
 
     # Register centralized exception handlers

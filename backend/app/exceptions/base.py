@@ -99,3 +99,20 @@ class BusinessValidationError(AppException):
             code="BUSINESS_VALIDATION_ERROR",
             details=details,
         )
+
+
+class RateLimitError(AppException):
+    """Raised when a client exceeds a sensitive-endpoint rate limit
+    (see app/core/rate_limit.py). Kept in the same uniform error contract
+    as every other AppException rather than slowapi's own default response
+    shape, so a client never has to special-case this error type."""
+
+    def __init__(
+        self, message: str = "Too many requests. Please try again later.", details: Any = None
+    ) -> None:
+        super().__init__(
+            message=message,
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            code="RATE_LIMIT_EXCEEDED",
+            details=details,
+        )

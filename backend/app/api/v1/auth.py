@@ -3,6 +3,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, Request, status
 from sqlalchemy.orm import Session
 
+from app.core.rate_limit import limiter
 from app.dependencies.auth import get_current_user
 from app.dependencies.database import get_db
 from app.models.user import User
@@ -36,6 +37,7 @@ def _extract_client_meta(request: Request) -> dict[str, Any]:
     summary="Register Customer Account",
     description="Registers a new customer account, assigns the default CUSTOMER role, and returns an authenticated session.",
 )
+@limiter.limit("5/minute")
 def register(
     payload: RegisterRequest,
     request: Request,
@@ -53,6 +55,7 @@ def register(
     summary="User Login",
     description="Authenticates by email or phone with Argon2id and enumeration protection, returning a new session.",
 )
+@limiter.limit("5/minute")
 def login(
     payload: LoginRequest,
     request: Request,
@@ -70,6 +73,7 @@ def login(
     summary="Rotate Refresh Token",
     description="Rotates opaque refresh token and issues a new access token under row-level database lock.",
 )
+@limiter.limit("20/minute")
 def refresh(
     payload: RefreshTokenRequest,
     request: Request,
