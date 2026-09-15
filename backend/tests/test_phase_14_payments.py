@@ -203,8 +203,8 @@ def _create_order(
     order = Order(
         user_id=user.id, cart_id=None,
         order_number=f"ORD-{secrets.token_hex(6).upper()}",
-        status=status, total_amount=total_amount, currency=currency,
-        placed_at=datetime.now(UTC),
+        status=status, total_amount=total_amount, subtotal_amount=total_amount,
+        currency=currency, placed_at=datetime.now(UTC),
     )
     db_session.add(order)
     db_session.flush()

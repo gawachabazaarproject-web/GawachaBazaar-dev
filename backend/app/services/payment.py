@@ -41,6 +41,7 @@ import secrets
 from collections.abc import Mapping
 from datetime import UTC, datetime
 
+from sqlalchemy import or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -55,11 +56,20 @@ from app.models.order import Order
 from app.models.payment import Payment
 from app.models.payment_transaction import PaymentTransaction
 from app.models.payment_webhook_event import PaymentWebhookEvent
+from app.models.refund import Refund
+from app.models.user import User
+from app.schemas.admin_payment import (
+    AdminPaymentDetailResponse,
+    AdminPaymentListItemResponse,
+    AdminPaymentListResponse,
+    PaymentTransactionResponse,
+)
 from app.schemas.payment import (
     CreatePaymentRequest,
     PaymentInitiationResponse,
     PaymentResponse,
 )
+from app.schemas.refund import AdminRefundResponse
 from app.services.inventory_reservation import InventoryReservationService
 from app.services.payment_gateway import (
     GatewayConnectionError,
@@ -93,7 +103,13 @@ _GATEWAY_TO_PAYMENT_STATUS: dict[TransactionStatus, PaymentStatus] = {
 
 
 class PaymentService:
-    def __init__(self, db: Session, gateway: PaymentGateway) -> None:
+    def __init__(self, db: Session, gateway: PaymentGateway | None = None) -> None:
+        """`gateway` is optional (mirrors RefundService's identical
+        precedent) only because the admin read methods below
+        (admin_list_payments/admin_get_payment_detail) never call the
+        gateway - every customer-facing/webhook method still requires a
+        real gateway and would fail immediately if called without one.
+        """
         self.db = db
         self.gateway = gateway
 
@@ -244,6 +260,123 @@ class PaymentService:
 
         self.db.refresh(payment)
         return PaymentResponse.model_validate(payment)
+
+    # ------------------------------------------------------------------
+    # Admin reads (Phase 19) - unscoped by owner, gated by
+    # `require_roles(ADMIN)` at the route level (see api/v1/payments.py's
+    # admin_router, already ADMIN-only for refund review/approval - a raw
+    # Payment record, including gateway references, is at least as
+    # sensitive). Every field is read straight off Payment/
+    # PaymentTransaction/Refund - nothing here is recomputed.
+    # ------------------------------------------------------------------
+
+    def admin_list_payments(
+        self,
+        page: int,
+        page_size: int,
+        status: str | None = None,
+        payment_method: str | None = None,
+        order_id: int | None = None,
+        date_from: datetime | None = None,
+        date_to: datetime | None = None,
+        q: str | None = None,
+    ) -> AdminPaymentListResponse:
+        query = (
+            self.db.query(Payment)
+            .join(Order, Payment.order_id == Order.id)
+            .join(User, Order.user_id == User.id)
+        )
+
+        if status:
+            query = query.filter(Payment.status == status)
+        if payment_method:
+            query = query.filter(Payment.payment_method == payment_method)
+        if order_id is not None:
+            query = query.filter(Payment.order_id == order_id)
+        if date_from:
+            query = query.filter(Payment.created_at >= date_from)
+        if date_to:
+            query = query.filter(Payment.created_at <= date_to)
+        if q:
+            like = f"%{q}%"
+            query = query.filter(
+                or_(
+                    Order.order_number.ilike(like),
+                    User.name.ilike(like),
+                    User.email.ilike(like),
+                    Payment.gateway_order_id.ilike(like),
+                )
+            )
+
+        total = query.count()
+        payments = (
+            query.order_by(Payment.created_at.desc(), Payment.id.desc())
+            .offset((page - 1) * page_size)
+            .limit(page_size)
+            .all()
+        )
+
+        if not payments:
+            return AdminPaymentListResponse(items=[], page=page, page_size=page_size, total=total)
+
+        order_ids = [p.order_id for p in payments]
+        orders = {o.id: o for o in self.db.query(Order).filter(Order.id.in_(order_ids))}
+        customers = {
+            u.id: u
+            for u in self.db.query(User).filter(
+                User.id.in_({o.user_id for o in orders.values()})
+            )
+        }
+
+        items = [
+            self._to_admin_list_item(payment, orders[payment.order_id], customers[orders[payment.order_id].user_id])
+            for payment in payments
+        ]
+        return AdminPaymentListResponse(items=items, page=page, page_size=page_size, total=total)
+
+    def admin_get_payment_detail(self, payment_id: int) -> AdminPaymentDetailResponse:
+        payment = self.db.query(Payment).filter(Payment.id == payment_id).first()
+        if not payment:
+            raise NotFoundError("Payment not found.")
+
+        order = self.db.query(Order).filter(Order.id == payment.order_id).first()
+        customer = self.db.query(User).filter(User.id == order.user_id).first()
+        transactions = (
+            self.db.query(PaymentTransaction)
+            .filter(PaymentTransaction.payment_id == payment.id)
+            .order_by(PaymentTransaction.id.asc())
+            .all()
+        )
+        refund = self.db.query(Refund).filter(Refund.payment_id == payment.id).first()
+
+        item = self._to_admin_list_item(payment, order, customer)
+        return AdminPaymentDetailResponse(
+            **item.model_dump(),
+            transactions=[PaymentTransactionResponse.model_validate(t) for t in transactions],
+            refund=AdminRefundResponse.model_validate(refund) if refund else None,
+        )
+
+    @staticmethod
+    def _to_admin_list_item(
+        payment: Payment, order: Order, customer: User
+    ) -> AdminPaymentListItemResponse:
+        return AdminPaymentListItemResponse(
+            id=payment.id,
+            order_id=order.id,
+            order_number=order.order_number,
+            customer_id=customer.id,
+            customer_name=customer.name,
+            customer_email=customer.email,
+            payment_method=payment.payment_method,
+            status=payment.status,
+            amount=payment.amount,
+            currency=payment.currency,
+            gateway_name=payment.gateway_name,
+            gateway_order_id=payment.gateway_order_id,
+            paid_at=payment.paid_at,
+            created_at=payment.created_at,
+            updated_at=payment.updated_at,
+        )
 
     # ------------------------------------------------------------------
     # Webhook processing

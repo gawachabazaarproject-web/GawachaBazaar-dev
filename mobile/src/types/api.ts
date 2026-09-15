@@ -27,6 +27,24 @@ export interface TokenResponse {
   user: UserResponse;
 }
 
+/** Returned from POST /auth/login instead of TokenResponse for every
+ * CUSTOMER/WHOLESALER account (staff/Admin-panel logins are unaffected -
+ * see backend/app/core/roles.py STAFF_ROLES). No session exists yet; call
+ * authApi.verifyLoginOtp with `challenge_token` and the 6-digit code
+ * emailed to `masked_email`. */
+export interface OtpChallengeResponse {
+  otp_required: true;
+  challenge_token: string;
+  masked_email: string;
+  expires_in_seconds: number;
+}
+
+export type LoginResult = TokenResponse | OtpChallengeResponse;
+
+export function isOtpChallenge(result: LoginResult): result is OtpChallengeResponse {
+  return "otp_required" in result;
+}
+
 export interface RefreshTokenResponse {
   access_token: string;
   refresh_token: string;

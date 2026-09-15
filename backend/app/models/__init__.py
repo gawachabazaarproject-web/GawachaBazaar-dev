@@ -28,6 +28,7 @@ from app.models.inventory_location import InventoryLocation
 from app.models.inventory_lot import InventoryLot
 from app.models.inventory_reservation import InventoryReservation
 from app.models.inventory_reservation_item import InventoryReservationItem
+from app.models.login_otp_challenge import LoginOtpChallenge
 from app.models.order import Order
 from app.models.order_address import OrderAddress
 from app.models.order_item import OrderItem
@@ -77,6 +78,7 @@ __all__ = [
     "InventoryLot",
     "InventoryReservation",
     "InventoryReservationItem",
+    "LoginOtpChallenge",
     "Order",
     "OrderAddress",
     "OrderItem",

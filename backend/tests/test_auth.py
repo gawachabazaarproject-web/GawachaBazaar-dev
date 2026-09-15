@@ -14,13 +14,49 @@ from app.core.security import (
     decode_access_token,
     hash_password,
     hash_refresh_token,
+    hash_verification_code,
     normalize_email,
     normalize_phone,
 )
 from app.models.auth_session import AuthSession
+from app.models.login_otp_challenge import LoginOtpChallenge
 from app.models.role import Role
 from app.models.user import User
 from app.models.user_role import UserRole
+
+
+def _login_and_verify_otp(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, identifier: str, password: str
+) -> dict:
+    """Log in (email/phone identifier) and complete the resulting login-OTP
+    challenge, returning the final TokenResponse body.
+
+    Every CUSTOMER/WHOLESALER login now returns an OtpChallengeResponse,
+    not tokens directly (see AuthService.authenticate / STAFF_ROLES). Only
+    the code's SHA-256 hash is ever persisted (hash_verification_code is
+    intentionally one-way), so a test can't recover it from the database
+    the way it can inspect any other test fixture row - it has to know the
+    code in advance instead, exactly the way ConsoleNotificationGateway's
+    real recipient (the user's email inbox) would. `monkeypatch` pins
+    `generate_verification_code` to a fixed value for the duration of the
+    call so the test can supply that same value back to verify-otp,
+    without ever touching `code_hash` directly.
+    """
+    monkeypatch.setattr("app.services.auth.generate_verification_code", lambda: "654321")
+
+    login_resp = client.post(
+        "/api/v1/auth/login", json={"identifier": identifier, "password": password}
+    )
+    assert login_resp.status_code == 200, login_resp.text
+    body = login_resp.json()
+    assert body["otp_required"] is True
+
+    verify_resp = client.post(
+        "/api/v1/auth/login/verify-otp",
+        json={"challenge_token": body["challenge_token"], "code": "654321"},
+    )
+    assert verify_resp.status_code == 200, verify_resp.text
+    return verify_resp.json()
 
 
 @pytest.fixture(autouse=True)
@@ -51,7 +87,7 @@ def test_registration_flow_and_default_customer_role(
     assert "access_token" in data
     assert "refresh_token" in data
     assert data["token_type"] == "bearer"
-    assert data["expires_in"] == 900
+    assert data["expires_in"] == settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60
     user_data = data["user"]
     assert user_data["name"] == "Arjun Sharma"
     assert user_data["email"] == "arjun.sharma@example.com"
@@ -136,8 +172,9 @@ def test_phone_and_email_normalization_utilities() -> None:
         normalize_phone("+invalid")
 
 
-def test_login_by_email_and_by_phone(client: TestClient) -> None:
-    """Verify user can authenticate using either normalized email or phone."""
+def test_login_by_email_and_by_phone(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify user can authenticate (email-OTP challenge, then verify) using
+    either normalized email or phone as the login identifier."""
     reg = client.post(
         "/api/v1/auth/register",
         json={
@@ -150,28 +187,192 @@ def test_login_by_email_and_by_phone(client: TestClient) -> None:
     assert reg.status_code == 201
 
     # Login by email
-    l_email = client.post(
-        "/api/v1/auth/login",
-        json={
-            "identifier": " MEERA@example.com ",
-            "password": "MeeraSecretPass1!",
-        },
+    tokens_email = _login_and_verify_otp(
+        client, monkeypatch, " MEERA@example.com ", "MeeraSecretPass1!"
     )
-    assert l_email.status_code == 200
-    assert "access_token" in l_email.json()
-    assert l_email.json()["user"]["email"] == "meera@example.com"
+    assert "access_token" in tokens_email
+    assert tokens_email["user"]["email"] == "meera@example.com"
 
     # Login by phone
-    l_phone = client.post(
+    tokens_phone = _login_and_verify_otp(
+        client, monkeypatch, "+91-98765-43220", "MeeraSecretPass1!"
+    )
+    assert "access_token" in tokens_phone
+    assert tokens_phone["user"]["phone"] == "+919876543220"
+
+
+def test_staff_login_bypasses_otp(client: TestClient, db_session: Session) -> None:
+    """ADMIN (and every other STAFF_ROLES role) must get a session
+    immediately on correct credentials - the Admin panel's login is
+    unaffected by the customer-facing email-OTP second factor."""
+    admin_role = db_session.query(Role).filter_by(name="ADMIN").first()
+    if not admin_role:
+        admin_role = Role(name="ADMIN", description="Administrator")
+        db_session.add(admin_role)
+        db_session.commit()
+
+    user = User(
+        name="Staff User",
+        email="staff@example.com",
+        phone="+919876543299",
+        password_hash=hash_password("StaffPass123!"),
+        status="ACTIVE",
+    )
+    db_session.add(user)
+    db_session.flush()
+    db_session.add(UserRole(user_id=user.id, role_id=admin_role.id, is_primary=True))
+    db_session.commit()
+
+    resp = client.post(
         "/api/v1/auth/login",
+        json={"identifier": "staff@example.com", "password": "StaffPass123!"},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert "otp_required" not in body
+    assert "access_token" in body
+    assert body["user"]["roles"] == ["ADMIN"]
+
+
+def test_login_otp_wrong_code_then_correct_code(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A wrong code decrements the attempt budget without invalidating the
+    challenge; the correct code afterward still succeeds."""
+    client.post(
+        "/api/v1/auth/register",
         json={
-            "identifier": "+91-98765-43220",
-            "password": "MeeraSecretPass1!",
+            "name": "Otp User",
+            "email": "otpuser@example.com",
+            "phone": "9876543202",
+            "password": "OtpUserPass1!",
         },
     )
-    assert l_phone.status_code == 200
-    assert "access_token" in l_phone.json()
-    assert l_phone.json()["user"]["phone"] == "+919876543220"
+    monkeypatch.setattr("app.services.auth.generate_verification_code", lambda: "111222")
+
+    login_resp = client.post(
+        "/api/v1/auth/login",
+        json={"identifier": "otpuser@example.com", "password": "OtpUserPass1!"},
+    )
+    assert login_resp.status_code == 200
+    challenge_token = login_resp.json()["challenge_token"]
+
+    wrong = client.post(
+        "/api/v1/auth/login/verify-otp",
+        json={"challenge_token": challenge_token, "code": "000000"},
+    )
+    assert wrong.status_code == 422
+    assert "4 attempt" in wrong.json()["message"]
+
+    right = client.post(
+        "/api/v1/auth/login/verify-otp",
+        json={"challenge_token": challenge_token, "code": "111222"},
+    )
+    assert right.status_code == 200
+    assert "access_token" in right.json()
+
+
+def test_login_otp_lockout_after_max_attempts(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """After LOGIN_OTP_MAX_ATTEMPTS wrong guesses, the challenge is
+    permanently expired - even the correct code is then rejected, forcing
+    a fresh login rather than an unbounded guessing window."""
+    from app.services.auth import LOGIN_OTP_MAX_ATTEMPTS
+
+    client.post(
+        "/api/v1/auth/register",
+        json={
+            "name": "Lockout User",
+            "email": "lockout@example.com",
+            "phone": "9876543203",
+            "password": "LockoutPass1!",
+        },
+    )
+    monkeypatch.setattr("app.services.auth.generate_verification_code", lambda: "999888")
+
+    login_resp = client.post(
+        "/api/v1/auth/login",
+        json={"identifier": "lockout@example.com", "password": "LockoutPass1!"},
+    )
+    challenge_token = login_resp.json()["challenge_token"]
+
+    for _ in range(LOGIN_OTP_MAX_ATTEMPTS):
+        resp = client.post(
+            "/api/v1/auth/login/verify-otp",
+            json={"challenge_token": challenge_token, "code": "000000"},
+        )
+        assert resp.status_code == 422
+
+    locked = client.post(
+        "/api/v1/auth/login/verify-otp",
+        json={"challenge_token": challenge_token, "code": "999888"},
+    )
+    assert locked.status_code == 401
+    assert "too many" in locked.json()["message"].lower()
+
+
+def test_login_otp_expired_challenge_rejected(
+    client: TestClient, db_session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An expired challenge is rejected even with the correct code."""
+    client.post(
+        "/api/v1/auth/register",
+        json={
+            "name": "Expired User",
+            "email": "expired@example.com",
+            "phone": "9876543204",
+            "password": "ExpiredPass1!",
+        },
+    )
+    monkeypatch.setattr("app.services.auth.generate_verification_code", lambda: "444555")
+
+    login_resp = client.post(
+        "/api/v1/auth/login",
+        json={"identifier": "expired@example.com", "password": "ExpiredPass1!"},
+    )
+    challenge_token = login_resp.json()["challenge_token"]
+
+    challenge = (
+        db_session.query(LoginOtpChallenge)
+        .filter(LoginOtpChallenge.challenge_token == challenge_token)
+        .first()
+    )
+    challenge.expires_at = datetime.now(UTC) - timedelta(minutes=1)
+    db_session.commit()
+
+    resp = client.post(
+        "/api/v1/auth/login/verify-otp",
+        json={"challenge_token": challenge_token, "code": "444555"},
+    )
+    assert resp.status_code == 401
+    assert "expired" in resp.json()["message"].lower()
+
+
+def test_login_otp_challenge_never_exposes_raw_code(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The OtpChallengeResponse must never leak the raw code or the full
+    email address - only a masked hint and an opaque reference token."""
+    client.post(
+        "/api/v1/auth/register",
+        json={
+            "name": "Privacy User",
+            "email": "privacy@example.com",
+            "phone": "9876543205",
+            "password": "PrivacyPass1!",
+        },
+    )
+    monkeypatch.setattr("app.services.auth.generate_verification_code", lambda: "777333")
+
+    resp = client.post(
+        "/api/v1/auth/login",
+        json={"identifier": "privacy@example.com", "password": "PrivacyPass1!"},
+    )
+    assert resp.status_code == 200
+    assert "777333" not in resp.text
+    assert "privacy@example.com" not in resp.text
+    assert resp.json()["masked_email"] == "pr***@example.com"
 
 
 def test_login_enumeration_protection_generic_error(client: TestClient) -> None:

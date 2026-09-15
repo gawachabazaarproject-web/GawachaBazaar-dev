@@ -41,6 +41,7 @@ from app.schemas.refund import (
     AdminRefundResponse,
     RefundResponse,
 )
+from app.services.admin_audit import AdminAuditService
 from app.services.payment_gateway import (
     GatewayConnectionError,
     GatewayError,
@@ -169,6 +170,14 @@ class RefundService:
         self._apply_transition(refund, RefundStatus.APPROVED)
         refund.approved_by_user_id = admin_user_id
         refund.approved_at = datetime.now(UTC)
+        AdminAuditService(self.db).record(
+            admin_user_id=admin_user_id,
+            action="refund.approve",
+            resource_type="refund",
+            resource_id=refund.id,
+            previous_state=RefundStatus.PENDING_APPROVAL.value,
+            new_state=RefundStatus.APPROVED.value,
+        )
         self.db.commit()
         self.db.refresh(refund)
         logger.info(
@@ -188,6 +197,15 @@ class RefundService:
         refund.approved_by_user_id = admin_user_id
         refund.approved_at = datetime.now(UTC)
         refund.rejection_reason = reason
+        AdminAuditService(self.db).record(
+            admin_user_id=admin_user_id,
+            action="refund.reject",
+            resource_type="refund",
+            resource_id=refund.id,
+            previous_state=RefundStatus.PENDING_APPROVAL.value,
+            new_state=RefundStatus.REJECTED.value,
+            reason=reason,
+        )
         self.db.commit()
         self.db.refresh(refund)
         logger.info(
@@ -215,7 +233,16 @@ class RefundService:
                 "This refund is still being processed by the gateway. "
                 "Wait for the current attempt to resolve before retrying."
             )
+        previous_status = RefundStatus(refund.status)
         self._apply_transition(refund, RefundStatus.PROCESSING)
+        AdminAuditService(self.db).record(
+            admin_user_id=admin_user_id,
+            action="refund.process",
+            resource_type="refund",
+            resource_id=refund.id,
+            previous_state=previous_status.value,
+            new_state=RefundStatus.PROCESSING.value,
+        )
 
         payment = self.db.query(Payment).filter(Payment.id == refund.payment_id).first()
         if payment is None:
