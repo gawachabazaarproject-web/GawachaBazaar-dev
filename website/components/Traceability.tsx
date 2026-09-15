@@ -120,7 +120,7 @@ export default function Traceability() {
   }, []);
 
   return (
-    <section id="journey" ref={wrapperRef} className="relative h-screen overflow-hidden bg-tertiary-800">
+    <section id="journey" ref={wrapperRef} data-nav-theme="dark" className="relative h-screen overflow-hidden bg-tertiary-800">
       <div className="pointer-events-none absolute inset-0 opacity-[0.06]">
         <div className="h-full w-full bg-[radial-gradient(circle_at_20%_20%,_white_1px,_transparent_1px)] bg-[length:28px_28px]" />
       </div>

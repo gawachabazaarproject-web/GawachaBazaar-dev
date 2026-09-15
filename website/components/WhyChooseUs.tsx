@@ -57,7 +57,7 @@ export default function WhyChooseUs() {
   }, []);
 
   return (
-    <section ref={wrapperRef} className="relative h-screen overflow-hidden bg-neutral-100">
+    <section ref={wrapperRef} data-nav-theme="light" className="relative h-screen overflow-hidden bg-neutral-100">
       <div className="mx-auto grid h-full max-w-7xl grid-cols-1 items-center gap-10 px-5 sm:px-8 lg:grid-cols-2">
         <div>
           <p className="eyebrow text-primary-600">Why Nagpur Trusts Us</p>

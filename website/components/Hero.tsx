@@ -57,7 +57,7 @@ export default function Hero() {
   }, []);
 
   return (
-    <section id="hero" ref={wrapRef} className="relative h-[180vh] bg-primary-900">
+    <section id="hero" ref={wrapRef} data-nav-theme="dark" className="relative h-[180vh] bg-primary-900">
       <div className="sticky top-0 h-screen overflow-hidden">
         {/* full-bleed photo background */}
         <div ref={imgRef} className="absolute inset-0 scale-110">

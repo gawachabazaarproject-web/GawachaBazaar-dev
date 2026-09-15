@@ -46,7 +46,7 @@ export default function CompanyInfo() {
   }, []);
 
   return (
-    <section ref={sectionRef} className="bg-neutral-100 py-24 sm:py-32">
+    <section ref={sectionRef} data-nav-theme="light" className="bg-neutral-100 py-24 sm:py-32">
       <div className="mx-auto max-w-5xl px-5 text-center sm:px-8">
         <p className="eyebrow text-primary-600">A Place To Trust — Year After Year</p>
 

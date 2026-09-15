@@ -86,7 +86,7 @@ export default function InfiniteLoopPanels() {
   }, []);
 
   return (
-    <section ref={wrapperRef} className="relative h-screen overflow-hidden bg-primary-900">
+    <section ref={wrapperRef} data-nav-theme="dark" className="relative h-screen overflow-hidden bg-primary-900">
       <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-center justify-between px-5 pt-8 sm:px-8">
         <p className="eyebrow text-secondary-400">The Short Version</p>
         <p className="eyebrow text-neutral-100/40">

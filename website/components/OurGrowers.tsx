@@ -34,7 +34,7 @@ export default function OurGrowers() {
   }, []);
 
   return (
-    <section ref={sectionRef} className="relative overflow-hidden bg-neutral-100 py-24 sm:py-32">
+    <section ref={sectionRef} data-nav-theme="light" className="relative overflow-hidden bg-neutral-100 py-24 sm:py-32">
       <ChapterMark index={7} className="absolute left-0 top-2 sm:top-4" />
       <div className="relative mx-auto grid max-w-7xl grid-cols-1 items-center gap-14 px-5 sm:px-8 lg:grid-cols-2">
         <div className="grower-copy order-2 lg:order-1">

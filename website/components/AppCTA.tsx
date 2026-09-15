@@ -26,7 +26,7 @@ export default function AppCTA() {
   }, []);
 
   return (
-    <section id="app" ref={sectionRef} className="relative overflow-hidden bg-primary-800 py-28 sm:py-36">
+    <section id="app" ref={sectionRef} data-nav-theme="dark" className="relative overflow-hidden bg-primary-800 py-28 sm:py-36">
       <span
         aria-hidden
         className="pointer-events-none absolute -bottom-10 left-1/2 -translate-x-1/2 select-none font-display text-[26vw] font-bold text-neutral-100/[0.03] sm:text-[18vw]"
