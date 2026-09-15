@@ -33,7 +33,7 @@ export default function Products() {
   }, []);
 
   return (
-    <section id="products" ref={ref} className="relative overflow-hidden bg-neutral-100 py-24 sm:py-32">
+    <section id="products" ref={ref} data-nav-theme="light" className="relative overflow-hidden bg-neutral-100 py-24 sm:py-32">
       <ChapterMark index={8} className="absolute left-0 top-2 sm:top-4" />
       <div className="relative mx-auto max-w-7xl px-5 sm:px-8">
         <div className="flex flex-col items-start justify-between gap-6 sm:flex-row sm:items-end">

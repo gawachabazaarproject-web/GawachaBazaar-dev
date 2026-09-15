@@ -52,7 +52,7 @@ export default function AerialLocation() {
   }, []);
 
   return (
-    <section ref={sectionRef} className="relative min-h-[90vh] overflow-hidden bg-primary-900 sm:min-h-[640px]">
+    <section ref={sectionRef} data-nav-theme="dark" className="relative min-h-[90vh] overflow-hidden bg-primary-900 sm:min-h-[640px]">
       <div ref={imgRef} className="absolute inset-0">
         <Image
           src="/images/bg/aerial.jpg"

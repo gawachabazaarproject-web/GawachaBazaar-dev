@@ -12,10 +12,14 @@ MAX_PAGE_SIZE = 100
 
 class CheckoutRequest(BaseSchema):
     """No price/total/currency/user_id/order_number/status accepted - all
-    are computed or authenticated server-side.
+    are computed or authenticated server-side. `promo_code` is the one
+    piece of promotion input a client may ever supply - the discount
+    amount itself is always computed server-side (see
+    app/services/promotion.py), never accepted from the client.
     """
 
     address_id: int = Field(..., gt=0)
+    promo_code: str | None = Field(default=None, max_length=50)
 
 
 class CancelOrderRequest(BaseSchema):
@@ -53,7 +57,10 @@ class OrderResponse(BaseSchema):
     id: int
     order_number: str
     status: str
+    subtotal_amount: Decimal
+    discount_amount: Decimal
     total_amount: Decimal
+    applied_promo_code: str | None
     currency: str
     placed_at: datetime
     created_at: datetime

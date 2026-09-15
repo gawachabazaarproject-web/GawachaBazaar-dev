@@ -43,6 +43,7 @@ export default function Delivery() {
     <section
       id="delivery"
       ref={sectionRef}
+      data-nav-theme="dark"
       className="relative bg-primary-800 pb-24 pt-28 sm:pb-32 sm:pt-36"
       style={{ clipPath: "polygon(0 4vw, 100% 0, 100% 100%, 0 100%)" }}
     >

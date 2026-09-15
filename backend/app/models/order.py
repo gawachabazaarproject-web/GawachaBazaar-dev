@@ -25,6 +25,7 @@ if TYPE_CHECKING:
     from app.models.order_address import OrderAddress
     from app.models.order_item import OrderItem
     from app.models.payment import Payment
+    from app.models.promotion import Promotion
     from app.models.refund import Refund
     from app.models.user import User
 
@@ -82,6 +83,31 @@ class Order(Base):
     currency: Mapped[str] = mapped_column(
         String(3),
         nullable=False,
+    )
+    # Promotions module (Admin Panel) additions - `total_amount` above is
+    # unchanged as a column but its MEANING became "what the customer
+    # actually pays" (subtotal minus discount) the moment this was added;
+    # PaymentService/FulfillmentService already read it that way (see
+    # their own docstrings). `subtotal_amount` is what `total_amount` used
+    # to mean before any discount existed - the sum of order items,
+    # backfilled 1:1 from `total_amount` for every historical row.
+    subtotal_amount: Mapped[Decimal] = mapped_column(
+        Numeric(12, 2),
+        nullable=False,
+    )
+    discount_amount: Mapped[Decimal] = mapped_column(
+        Numeric(12, 2),
+        server_default="0",
+        nullable=False,
+    )
+    promotion_id: Mapped[int | None] = mapped_column(
+        BigInteger,
+        ForeignKey("promotions.id", ondelete="RESTRICT"),
+        nullable=True,
+    )
+    applied_promo_code: Mapped[str | None] = mapped_column(
+        String(50),
+        nullable=True,
     )
     placed_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -153,4 +179,8 @@ class Order(Base):
         "Refund",
         back_populates="order",
         uselist=False,
+    )
+    promotion: Mapped["Promotion | None"] = relationship(
+        "Promotion",
+        back_populates="orders",
     )

@@ -96,10 +96,7 @@ export default function HomeScreen() {
             </Text>
             <Text variant="h1" style={{ marginTop: spacing.sm }}>
               Bulk pricing
-              <Text variant="script" color={colors.primary}>
-                {" "}
-                made simple.
-              </Text>
+              <Text variant="script"> made simple.</Text>
             </Text>
             <Text variant="body" color={colors.textSecondary} style={{ marginTop: spacing.md }}>
               Pick a quantity for anything below and add it to a request - our team quotes it

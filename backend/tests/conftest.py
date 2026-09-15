@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from starlette.testclient import TestClient
 
 from app.core.config import settings
+from app.core.rate_limit import limiter
 from app.dependencies.database import get_db
 from app.main import app
 
@@ -24,6 +25,21 @@ def test_engine():
     engine = create_engine(TEST_DATABASE_URL, pool_pre_ping=True)
     yield engine
     engine.dispose()
+
+
+@pytest.fixture(autouse=True)
+def reset_rate_limiter() -> None:
+    """`limiter` (app/core/rate_limit.py) is a module-level singleton shared
+    by every request the test app handles, in-process, for the lifetime of
+    the pytest run - unlike the database, nothing resets its in-memory
+    counters between tests. Without this, tests that legitimately call a
+    rate-limited endpoint (register/login/refresh) more than a handful of
+    times across a single test *file* run start tripping 429s that have
+    nothing to do with what each individual test is actually verifying.
+    TestClient's fixed "testclient" remote address makes this worse than
+    it would be against real distinct client IPs.
+    """
+    limiter.reset()
 
 
 @pytest.fixture

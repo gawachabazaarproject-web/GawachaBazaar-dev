@@ -80,7 +80,7 @@ const styles = StyleSheet.create({
     marginHorizontal: spacing.base,
     gap: spacing.md,
   },
-  image: { width: 88, height: 88, borderRadius: radius.none, backgroundColor: colors.background },
+  image: { width: 88, height: 88, borderRadius: radius.xs, backgroundColor: colors.background },
   info: { flex: 1, justifyContent: "center", gap: 2 },
   footer: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: spacing.sm },
 });

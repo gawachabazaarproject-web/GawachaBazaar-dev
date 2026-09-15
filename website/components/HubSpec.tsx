@@ -55,7 +55,7 @@ export default function HubSpec() {
   };
 
   return (
-    <section ref={sectionRef} className="relative overflow-hidden bg-primary-900 py-24 sm:py-32">
+    <section ref={sectionRef} data-nav-theme="dark" className="relative overflow-hidden bg-primary-900 py-24 sm:py-32">
       <div className="absolute inset-0">
         <Image
           src="/images/bg/hub.jpg"

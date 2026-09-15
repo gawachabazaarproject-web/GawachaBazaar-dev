@@ -85,7 +85,7 @@ export default function RouteFlow() {
   }, []);
 
   return (
-    <section id="story" ref={sectionRef} className="relative overflow-hidden bg-neutral-100 py-24 sm:py-32">
+    <section id="story" ref={sectionRef} data-nav-theme="light" className="relative overflow-hidden bg-neutral-100 py-24 sm:py-32">
       <ChapterMark index={2} className="absolute left-0 top-2 sm:top-4" />
       <div className="relative mx-auto max-w-7xl px-5 sm:px-8">
         <p className="eyebrow text-primary-600">02 / 08 — The Direct Route</p>

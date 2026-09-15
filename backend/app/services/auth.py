@@ -1,3 +1,4 @@
+import secrets
 from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -7,13 +8,15 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.logging import logger
-from app.core.roles import CUSTOMER
+from app.core.roles import CUSTOMER, STAFF_ROLES
 from app.core.security import (
     create_access_token,
     decode_access_token,
     generate_refresh_token,
+    generate_verification_code,
     hash_password,
     hash_refresh_token,
+    hash_verification_code,
     normalize_email,
     normalize_phone,
     verify_password,
@@ -21,20 +24,38 @@ from app.core.security import (
 from app.exceptions.base import (
     AppException,
     AuthenticationError,
+    BusinessValidationError,
     ConflictError,
 )
 from app.models.auth_session import AuthSession
+from app.models.login_otp_challenge import LoginOtpChallenge
 from app.models.role import Role
 from app.models.user import User
 from app.models.user_role import UserRole
 from app.schemas.auth import (
     LoginRequest,
     LogoutResponse,
+    OtpChallengeResponse,
     RefreshTokenResponse,
     RegisterRequest,
     TokenResponse,
     UserResponse,
+    VerifyLoginOtpRequest,
 )
+from app.services.notification_gateway import ConsoleNotificationGateway, NotificationGateway
+
+LOGIN_OTP_TTL_MINUTES = 10
+LOGIN_OTP_MAX_ATTEMPTS = 5
+
+
+def _mask_email(email: str) -> str:
+    """`jo***@example.com` - enough for the account holder to recognize
+    their own address as correct without exposing the full value to
+    whoever is watching the screen (or a network log) at the login step.
+    """
+    local, _, domain = email.partition("@")
+    visible = local[:2] if len(local) > 2 else local[:1]
+    return f"{visible}***@{domain}"
 
 
 @contextmanager
@@ -64,8 +85,23 @@ def _transaction(db: Session):
 class AuthService:
     """Production authentication service managing user registration, sessions, and token lifecycles."""
 
-    def __init__(self, db: Session) -> None:
+    def __init__(self, db: Session, notification_gateway: NotificationGateway | None = None) -> None:
         self.db = db
+        self._notification_gateway = notification_gateway or ConsoleNotificationGateway()
+
+    def get_role_names(self, user_id: int) -> list[str]:
+        """Current role names for a user, read live from `user_roles`/`roles`.
+
+        Never derived from the JWT or cached - a role granted/revoked takes
+        effect the moment this is called again (next login, refresh, or /me).
+        """
+        rows = (
+            self.db.query(Role.name)
+            .join(UserRole, UserRole.role_id == Role.id)
+            .filter(UserRole.user_id == user_id)
+            .all()
+        )
+        return sorted(name for (name,) in rows)
 
     def register_user(
         self,
@@ -159,6 +195,7 @@ class AuthService:
                 phone=user.phone,
                 status=user.status,
                 created_at=user.created_at,
+                roles=[customer_role.name],
             ),
         )
 
@@ -166,16 +203,21 @@ class AuthService:
         self,
         data: LoginRequest,
         client_meta: dict[str, Any] | None = None,
-    ) -> TokenResponse:
-        """Authenticate user by email or phone with enumeration protection and issue a session.
+    ) -> TokenResponse | OtpChallengeResponse:
+        """Authenticate user by email or phone with enumeration protection.
 
         Enumeration Protection:
         Unknown email, unknown phone, wrong password, inactive status, and suspended status
         all return the identical generic AuthenticationError("Invalid credentials.").
+
+        Second Factor:
+        Correct credentials alone are not enough for a CUSTOMER/WHOLESALER
+        account - this issues an email-OTP challenge instead of a session
+        (see `_issue_otp_challenge`). STAFF_ROLES accounts (the Admin panel)
+        are unaffected and get a session immediately, exactly as before -
+        see app/core/roles.py STAFF_ROLES for why.
         """
-        meta = client_meta or {}
         identifier = data.identifier.strip()
-        now = datetime.now(UTC)
 
         # Normalize and look up user by email or phone
         if "@" in identifier:
@@ -200,6 +242,24 @@ class AuthService:
                     "AUTH_ACCOUNT_SUSPENDED: user_id=%s is suspended", user.id
                 )
             raise AuthenticationError("Invalid credentials.")
+
+        roles = self.get_role_names(user.id)
+        if STAFF_ROLES.isdisjoint(roles):
+            return self._issue_otp_challenge(user, client_meta)
+        return self._issue_session(user, roles, client_meta)
+
+    def _issue_session(
+        self,
+        user: User,
+        roles: list[str],
+        client_meta: dict[str, Any] | None = None,
+    ) -> TokenResponse:
+        """Creates the AuthSession + access/refresh token pair. The one
+        thing every successful login (direct, for staff) or verified OTP
+        challenge (for customers/wholesalers) ends with.
+        """
+        meta = client_meta or {}
+        now = datetime.now(UTC)
 
         with _transaction(self.db):
             raw_refresh_token = generate_refresh_token()
@@ -238,8 +298,120 @@ class AuthService:
                 phone=user.phone,
                 status=user.status,
                 created_at=user.created_at,
+                roles=roles,
             ),
         )
+
+    def _issue_otp_challenge(
+        self, user: User, client_meta: dict[str, Any] | None = None
+    ) -> OtpChallengeResponse:
+        meta = client_meta or {}
+        now = datetime.now(UTC)
+
+        # Supersede any still-pending challenge for this user (e.g. the
+        # customer re-submitted the login form because the first email was
+        # slow to arrive) rather than stacking multiple valid codes -
+        # same "cancel existing pending, create new" precedent as
+        # CustomerService.request_contact_change.
+        stale = (
+            self.db.query(LoginOtpChallenge)
+            .filter(
+                LoginOtpChallenge.user_id == user.id,
+                LoginOtpChallenge.status == "PENDING",
+            )
+            .all()
+        )
+        for challenge in stale:
+            challenge.status = "EXPIRED"
+
+        code = generate_verification_code()
+        challenge = LoginOtpChallenge(
+            challenge_token=secrets.token_urlsafe(32),
+            user_id=user.id,
+            code_hash=hash_verification_code(code),
+            status="PENDING",
+            ip_address=meta.get("ip_address"),
+            user_agent=meta.get("user_agent"),
+            device_name=meta.get("device_name"),
+            expires_at=now + timedelta(minutes=LOGIN_OTP_TTL_MINUTES),
+        )
+        self.db.add(challenge)
+        self.db.commit()
+        self.db.refresh(challenge)
+
+        logger.info(
+            "AUTH_LOGIN_OTP_ISSUED: user_id=%s challenge_id=%s", user.id, challenge.id
+        )
+        self._notification_gateway.send_verification_code(
+            channel="EMAIL", destination=user.email, code=code
+        )
+
+        return OtpChallengeResponse(
+            challenge_token=challenge.challenge_token,
+            masked_email=_mask_email(user.email),
+            expires_in_seconds=LOGIN_OTP_TTL_MINUTES * 60,
+        )
+
+    def verify_login_otp(
+        self,
+        data: VerifyLoginOtpRequest,
+        client_meta: dict[str, Any] | None = None,
+    ) -> TokenResponse:
+        """Completes a login OTP challenge and issues the session/tokens
+        `authenticate()` withheld. Mirrors
+        CustomerService.confirm_contact_change's expiry/attempts/hash-
+        comparison shape exactly.
+        """
+        challenge = (
+            self.db.query(LoginOtpChallenge)
+            .filter(LoginOtpChallenge.challenge_token == data.challenge_token)
+            .with_for_update()
+            .first()
+        )
+        if challenge is None or challenge.status != "PENDING":
+            raise AuthenticationError("This login code is invalid or has already been used.")
+
+        now = datetime.now(UTC)
+        if challenge.expires_at <= now:
+            challenge.status = "EXPIRED"
+            self.db.commit()
+            raise AuthenticationError("This login code has expired. Please log in again.")
+
+        if challenge.attempts >= LOGIN_OTP_MAX_ATTEMPTS:
+            challenge.status = "EXPIRED"
+            self.db.commit()
+            raise AuthenticationError("Too many incorrect attempts. Please log in again.")
+
+        if hash_verification_code(data.code) != challenge.code_hash:
+            challenge.attempts += 1
+            self.db.commit()
+            remaining = LOGIN_OTP_MAX_ATTEMPTS - challenge.attempts
+            raise BusinessValidationError(f"Incorrect code. {remaining} attempt(s) remaining.")
+
+        user = self.db.query(User).filter(User.id == challenge.user_id).first()
+        if not user or user.status != "ACTIVE":
+            challenge.status = "EXPIRED"
+            self.db.commit()
+            raise AuthenticationError("This account can no longer log in.")
+
+        challenge.status = "VERIFIED"
+        challenge.verified_at = now
+        self.db.commit()
+
+        # Use the ORIGINAL /auth/login call's client metadata (captured on
+        # the challenge) so the resulting AuthSession reflects the device
+        # that actually logged in, not whichever device happened to submit
+        # the code - falls back to the verify call's own metadata only if
+        # the challenge predates that column ever being populated.
+        session_meta = client_meta if not any(
+            [challenge.ip_address, challenge.user_agent, challenge.device_name]
+        ) else {
+            "ip_address": challenge.ip_address,
+            "user_agent": challenge.user_agent,
+            "device_name": challenge.device_name,
+        }
+
+        return self._issue_session(user, self.get_role_names(user.id), session_meta)
 
     def refresh_session(
         self,

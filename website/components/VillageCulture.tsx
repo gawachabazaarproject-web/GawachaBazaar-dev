@@ -61,7 +61,7 @@ export default function VillageCulture() {
   }, []);
 
   return (
-    <section className="relative -mt-36 sm:-mt-56">
+    <section data-nav-theme="dark" className="relative -mt-36 sm:-mt-56">
       <div
         ref={domeRef}
         className="relative z-10 overflow-hidden bg-primary-800 pb-28 pt-44 sm:pb-40 sm:pt-64"

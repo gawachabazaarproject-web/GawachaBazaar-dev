@@ -16,19 +16,39 @@ matters for atomicity is "no commit happens until everything succeeds",
 not whether the transaction was opened explicitly or implicitly.
 """
 
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from decimal import Decimal
 
+from sqlalchemy import func, or_
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from app.exceptions.base import BusinessValidationError, ConflictError, NotFoundError
 from app.models.batch import Batch
 from app.models.inventory_location import InventoryLocation
 from app.models.inventory_lot import InventoryLot
+from app.models.inventory_reservation import InventoryReservation
+from app.models.inventory_reservation_item import InventoryReservationItem
+from app.models.order import Order
+from app.models.product import Product
 from app.models.product_variant import ProductVariant
 from app.models.stock_movement import StockMovement
+from app.models.supplier import Supplier
+from app.schemas.admin_inventory import (
+    AdminInventoryLotDetailResponse,
+    AdminInventoryLotListItemResponse,
+    AdminInventoryLotListResponse,
+    InventoryDashboardResponse,
+    ReceiveStockRequest,
+    ReconcileStockRequest,
+    RelatedOrderResponse,
+    TransferStockRequest,
+    TransferStockResponse,
+)
 from app.schemas.inventory import (
+    BatchListResponse,
+    BatchResponse,
+    CreateBatchRequest,
     CreateInventoryLocationRequest,
     CreateInventoryLotRequest,
     CreateStockMovementRequest,
@@ -40,10 +60,21 @@ from app.schemas.inventory import (
     StockMovementResponse,
     UpdateInventoryLocationRequest,
 )
+from app.services.admin_audit import AdminAuditService
 
 _ACTIVE = "ACTIVE"
 _INACTIVE = "INACTIVE"
 _DEPLETED = "DEPLETED"
+
+# No `reorder_level` column exists anywhere in the schema (Product,
+# ProductVariant, InventoryLot) - there is no real configured business
+# threshold to read. This constant is an explicit, honestly-labeled
+# stand-in so the dashboard/list can still surface "getting low" as a
+# useful signal, NOT a claim that 10 units is Gawacha's actual reorder
+# policy. A genuine implementation needs a real reorder_level field added
+# to the domain model first - flagged, not silently worked around.
+DEFAULT_LOW_STOCK_THRESHOLD = Decimal("10")
+EXPIRING_SOON_DAYS = 7
 
 # Movement direction: centralizes the ONE place quantity sign is decided.
 # Client always supplies a positive quantity; direction comes from type.
@@ -141,6 +172,127 @@ class InventoryService:
             page=page,
             page_size=page_size,
             total=total,
+        )
+
+    # ------------------------------------------------------------------
+    # Batches (Admin Panel Inventory module) - app/models/batch.py existed
+    # since Phase 2/8.1/17 but had zero API surface before this. Additive
+    # only: no migration, just exposing the existing table.
+    # ------------------------------------------------------------------
+
+    def get_batch_or_404(self, batch_id: int) -> Batch:
+        batch = self.db.query(Batch).filter(Batch.id == batch_id).first()
+        if not batch:
+            raise NotFoundError("Batch not found.")
+        return batch
+
+    def get_batch_response(self, batch_id: int) -> BatchResponse:
+        return self._to_batch_response(self.get_batch_or_404(batch_id))
+
+    def create_batch(self, data: CreateBatchRequest, admin_user_id: int) -> BatchResponse:
+        product = self.db.query(Product).filter(Product.id == data.product_id).first()
+        if not product:
+            raise NotFoundError("Product not found.")
+        if data.supplier_id is None and data.wholesaler_user_id is None:
+            raise BusinessValidationError(
+                "A batch requires either a supplier or a wholesaler as its origin."
+            )
+        if data.supplier_id is not None:
+            supplier = self.db.query(Supplier).filter(Supplier.id == data.supplier_id).first()
+            if not supplier:
+                raise NotFoundError("Supplier not found.")
+
+        batch = Batch(
+            product_id=data.product_id,
+            batch_code=data.batch_code,
+            harvest_date=data.harvest_date,
+            expiry_date=data.expiry_date,
+            quantity=data.quantity,
+            unit=data.unit,
+            status=data.status,
+            supplier_id=data.supplier_id,
+            wholesaler_user_id=data.wholesaler_user_id,
+            purchase_price=data.purchase_price,
+            purchase_currency=data.purchase_currency,
+            received_date=data.received_date,
+            receiving_reference=data.receiving_reference,
+        )
+        self.db.add(batch)
+        self.db.flush()
+        AdminAuditService(self.db).record(
+            admin_user_id=admin_user_id,
+            action="inventory.batch.create",
+            resource_type="batch",
+            resource_id=batch.id,
+            new_state=batch.status,
+            reason=f"product_id={data.product_id} batch_code={data.batch_code}",
+        )
+        try:
+            self.db.commit()
+        except IntegrityError as exc:
+            self.db.rollback()
+            raise ConflictError("A batch with this batch_code already exists.") from exc
+        self.db.refresh(batch)
+        return self._to_batch_response(batch)
+
+    def list_batches(
+        self,
+        product_id: int | None,
+        status: str | None,
+        page: int,
+        page_size: int,
+    ) -> BatchListResponse:
+        query = self.db.query(Batch).options(
+            joinedload(Batch.product), joinedload(Batch.supplier)
+        )
+        if product_id is not None:
+            query = query.filter(Batch.product_id == product_id)
+        if status is not None:
+            query = query.filter(Batch.status == status)
+
+        total = query.count()
+        items = (
+            query.order_by(Batch.harvest_date.desc(), Batch.id.desc())
+            .offset((page - 1) * page_size)
+            .limit(page_size)
+            .all()
+        )
+        return BatchListResponse(
+            items=[self._to_batch_response(b) for b in items],
+            page=page,
+            page_size=page_size,
+            total=total,
+        )
+
+    def _to_batch_response(self, batch: Batch) -> BatchResponse:
+        product = batch.product or self.db.query(Product).filter(Product.id == batch.product_id).first()
+        supplier = (
+            batch.supplier
+            if batch.supplier_id and batch.supplier
+            else (
+                self.db.query(Supplier).filter(Supplier.id == batch.supplier_id).first()
+                if batch.supplier_id
+                else None
+            )
+        )
+        return BatchResponse(
+            id=batch.id,
+            product_id=batch.product_id,
+            product_name=product.name if product else "",
+            batch_code=batch.batch_code,
+            harvest_date=batch.harvest_date,
+            expiry_date=batch.expiry_date,
+            quantity=batch.quantity,
+            unit=batch.unit,
+            status=batch.status,
+            supplier_id=batch.supplier_id,
+            supplier_name=supplier.business_name if supplier else None,
+            wholesaler_user_id=batch.wholesaler_user_id,
+            purchase_price=batch.purchase_price,
+            purchase_currency=batch.purchase_currency,
+            received_date=batch.received_date,
+            receiving_reference=batch.receiving_reference,
+            created_at=batch.created_at,
         )
 
     # ------------------------------------------------------------------
@@ -414,4 +566,417 @@ class InventoryService:
             page=page,
             page_size=page_size,
             total=total,
+        )
+
+    # ------------------------------------------------------------------
+    # Admin: enriched list/detail/dashboard + domain actions (Admin Panel
+    # Inventory module). Every mutation here (receive/reconcile/transfer)
+    # goes through `apply_movement` above - the same row-locked,
+    # negative-quantity-rejecting core the raw movements endpoint uses -
+    # never a second stock-mutation code path.
+    # ------------------------------------------------------------------
+
+    def _operational_status(self, lot_status: str, on_hand: Decimal, reserved: Decimal, expiry: date | None) -> str:
+        if lot_status == _INACTIVE:
+            return "INACTIVE"
+        available = on_hand - reserved
+        today = datetime.now(UTC).date()
+        if expiry is not None:
+            if expiry < today:
+                return "EXPIRED"
+            if (expiry - today).days <= EXPIRING_SOON_DAYS:
+                return "EXPIRING"
+        if available <= 0:
+            return "OUT_OF_STOCK"
+        if available < DEFAULT_LOW_STOCK_THRESHOLD:
+            return "LOW_STOCK"
+        return "IN_STOCK"
+
+    def _enrich_lot(self, lot: InventoryLot, last_movement: datetime | None) -> AdminInventoryLotListItemResponse:
+        variant = lot.variant
+        product = variant.product
+        batch = lot.batch
+        location = lot.location
+        return AdminInventoryLotListItemResponse(
+            id=lot.id,
+            product_id=product.id,
+            product_name=product.name,
+            variant_id=variant.id,
+            variant_name=variant.name,
+            sku=variant.sku,
+            category_id=product.category_id,
+            category_name=product.category.name,
+            location_id=location.id,
+            location_name=location.name,
+            location_code=location.code,
+            batch_id=batch.id,
+            batch_code=batch.batch_code,
+            batch_expiry_date=batch.expiry_date,
+            on_hand=lot.quantity,
+            reserved=lot.reserved_quantity,
+            available=lot.quantity - lot.reserved_quantity,
+            lot_status=lot.status,
+            operational_status=self._operational_status(
+                lot.status, lot.quantity, lot.reserved_quantity, batch.expiry_date
+            ),
+            last_movement_at=last_movement,
+            updated_at=lot.updated_at,
+        )
+
+    def admin_list_lots(
+        self,
+        page: int,
+        page_size: int,
+        location_id: int | None = None,
+        category_id: int | None = None,
+        lot_status: str | None = None,
+        operational_status: str | None = None,
+        batch_id: int | None = None,
+        q: str | None = None,
+    ) -> AdminInventoryLotListResponse:
+        query = (
+            self.db.query(InventoryLot)
+            .join(ProductVariant, InventoryLot.variant_id == ProductVariant.id)
+            .join(Product, ProductVariant.product_id == Product.id)
+            .join(Batch, InventoryLot.batch_id == Batch.id)
+            .options(
+                joinedload(InventoryLot.variant).joinedload(ProductVariant.product).joinedload(Product.category),
+                joinedload(InventoryLot.batch),
+                joinedload(InventoryLot.location),
+            )
+        )
+        if location_id is not None:
+            query = query.filter(InventoryLot.location_id == location_id)
+        if category_id is not None:
+            query = query.filter(Product.category_id == category_id)
+        if lot_status is not None:
+            query = query.filter(InventoryLot.status == lot_status)
+        if batch_id is not None:
+            query = query.filter(InventoryLot.batch_id == batch_id)
+        if q:
+            like = f"%{q}%"
+            query = query.filter(
+                or_(Product.name.ilike(like), ProductVariant.sku.ilike(like), Batch.batch_code.ilike(like))
+            )
+
+        if operational_status:
+            # Computed status (blends lot state, reservation math, and
+            # batch expiry) can't be expressed as a single SQL predicate -
+            # evaluate it in Python over the filtered set, same approach
+            # already used for Products' price-range filter. Bounded to a
+            # generous cap; a grocery catalog's lot count is in the
+            # hundreds, not millions.
+            candidates = query.order_by(InventoryLot.updated_at.desc(), InventoryLot.id.desc()).limit(2000).all()
+            last_movements = self._last_movement_by_lot([c.id for c in candidates])
+            enriched = [self._enrich_lot(lot, last_movements.get(lot.id)) for lot in candidates]
+            matching = [item for item in enriched if item.operational_status == operational_status]
+            total = len(matching)
+            page_items = matching[(page - 1) * page_size : (page - 1) * page_size + page_size]
+            return AdminInventoryLotListResponse(items=page_items, page=page, page_size=page_size, total=total)
+
+        total = query.count()
+        lots = (
+            query.order_by(InventoryLot.updated_at.desc(), InventoryLot.id.desc())
+            .offset((page - 1) * page_size)
+            .limit(page_size)
+            .all()
+        )
+        last_movements = self._last_movement_by_lot([lot.id for lot in lots])
+        items = [self._enrich_lot(lot, last_movements.get(lot.id)) for lot in lots]
+        return AdminInventoryLotListResponse(items=items, page=page, page_size=page_size, total=total)
+
+    def _last_movement_by_lot(self, lot_ids: list[int]) -> dict[int, datetime]:
+        if not lot_ids:
+            return {}
+        rows = (
+            self.db.query(StockMovement.inventory_lot_id, func.max(StockMovement.occurred_at))
+            .filter(StockMovement.inventory_lot_id.in_(lot_ids))
+            .group_by(StockMovement.inventory_lot_id)
+            .all()
+        )
+        return dict(rows)
+
+    def admin_get_lot_detail(self, lot_id: int) -> AdminInventoryLotDetailResponse:
+        lot = (
+            self.db.query(InventoryLot)
+            .options(
+                joinedload(InventoryLot.variant).joinedload(ProductVariant.product).joinedload(Product.category),
+                joinedload(InventoryLot.batch),
+                joinedload(InventoryLot.location),
+            )
+            .filter(InventoryLot.id == lot_id)
+            .first()
+        )
+        if not lot:
+            raise NotFoundError("Inventory lot not found.")
+
+        variant = lot.variant
+        product = variant.product
+        batch = lot.batch
+        location = lot.location
+        image_url = None
+        if product.images:
+            primary = next((i for i in product.images if i.is_primary), None)
+            image_url = primary.image_url if primary else product.images[0].image_url
+
+        recent_movements = (
+            self.db.query(StockMovement)
+            .filter(StockMovement.inventory_lot_id == lot_id)
+            .order_by(StockMovement.occurred_at.desc(), StockMovement.id.desc())
+            .limit(20)
+            .all()
+        )
+
+        related = (
+            self.db.query(
+                Order.id,
+                Order.order_number,
+                InventoryReservationItem.quantity,
+                InventoryReservation.status,
+            )
+            .join(InventoryReservation, InventoryReservationItem.reservation_id == InventoryReservation.id)
+            .join(Order, InventoryReservation.order_id == Order.id)
+            .filter(InventoryReservationItem.inventory_lot_id == lot_id)
+            .order_by(Order.id.desc())
+            .limit(20)
+            .all()
+        )
+
+        return AdminInventoryLotDetailResponse(
+            id=lot.id,
+            product_id=product.id,
+            product_name=product.name,
+            product_image_url=image_url,
+            category_id=product.category_id,
+            category_name=product.category.name,
+            variant_id=variant.id,
+            variant_name=variant.name,
+            sku=variant.sku,
+            unit=variant.unit,
+            location_id=location.id,
+            location_name=location.name,
+            location_code=location.code,
+            location_city=location.city,
+            location_status=location.status,
+            batch=self._to_batch_response(batch),
+            on_hand=lot.quantity,
+            reserved=lot.reserved_quantity,
+            available=lot.quantity - lot.reserved_quantity,
+            lot_status=lot.status,
+            operational_status=self._operational_status(
+                lot.status, lot.quantity, lot.reserved_quantity, batch.expiry_date
+            ),
+            created_at=lot.created_at,
+            updated_at=lot.updated_at,
+            recent_movements=[StockMovementResponse.model_validate(m) for m in recent_movements],
+            related_orders=[
+                RelatedOrderResponse(
+                    order_id=order_id,
+                    order_number=order_number,
+                    reserved_quantity=qty,
+                    reservation_status=res_status,
+                )
+                for order_id, order_number, qty, res_status in related
+            ],
+        )
+
+    def admin_dashboard(self) -> InventoryDashboardResponse:
+        active_lots = self.db.query(InventoryLot).filter(InventoryLot.status != _INACTIVE).all()
+        total_skus = len({lot.variant_id for lot in active_lots})
+        total_on_hand = sum((lot.quantity for lot in active_lots), Decimal("0"))
+        total_reserved = sum((lot.reserved_quantity for lot in active_lots), Decimal("0"))
+        total_available = total_on_hand - total_reserved
+
+        today = datetime.now(UTC).date()
+        low_stock_count = 0
+        out_of_stock_count = 0
+        batch_ids = {lot.batch_id for lot in active_lots}
+        batches = {
+            b.id: b for b in self.db.query(Batch).filter(Batch.id.in_(batch_ids)).all()
+        } if batch_ids else {}
+        expiring_batches_count = 0
+        expired_batches_count = 0
+        seen_batches_expiring: set[int] = set()
+        seen_batches_expired: set[int] = set()
+        for lot in active_lots:
+            available = lot.quantity - lot.reserved_quantity
+            if available <= 0:
+                out_of_stock_count += 1
+            elif available < DEFAULT_LOW_STOCK_THRESHOLD:
+                low_stock_count += 1
+            batch = batches.get(lot.batch_id)
+            if batch and batch.expiry_date:
+                if batch.expiry_date < today and batch.id not in seen_batches_expired:
+                    expired_batches_count += 1
+                    seen_batches_expired.add(batch.id)
+                elif (
+                    batch.expiry_date >= today
+                    and (batch.expiry_date - today).days <= EXPIRING_SOON_DAYS
+                    and batch.id not in seen_batches_expiring
+                ):
+                    expiring_batches_count += 1
+                    seen_batches_expiring.add(batch.id)
+
+        recent_movements = (
+            self.db.query(StockMovement)
+            .order_by(StockMovement.occurred_at.desc(), StockMovement.id.desc())
+            .limit(10)
+            .all()
+        )
+
+        warehouses_requiring_attention = (
+            self.db.query(InventoryLocation.id)
+            .join(InventoryLot, InventoryLot.location_id == InventoryLocation.id)
+            .filter(InventoryLot.status != _INACTIVE)
+            .filter((InventoryLot.quantity - InventoryLot.reserved_quantity) <= 0)
+            .distinct()
+            .count()
+        )
+
+        return InventoryDashboardResponse(
+            total_skus=total_skus,
+            total_on_hand=total_on_hand,
+            total_reserved=total_reserved,
+            total_available=total_available,
+            low_stock_count=low_stock_count,
+            out_of_stock_count=out_of_stock_count,
+            expiring_batches_count=expiring_batches_count,
+            expired_batches_count=expired_batches_count,
+            recent_movements=[StockMovementResponse.model_validate(m) for m in recent_movements],
+            warehouses_requiring_attention=warehouses_requiring_attention,
+        )
+
+    def receive_stock(self, data: ReceiveStockRequest, admin_user_id: int) -> AdminInventoryLotListItemResponse:
+        """Get-or-create the (batch, variant, location) lot, lock it, and
+        apply one RECEIPT movement - one atomic admin action instead of
+        the raw two-call POST /lots + POST /lots/{id}/movements sequence.
+        """
+        lot = self.get_or_create_lot_no_commit(data.batch_id, data.variant_id, data.location_id)
+        lot = (
+            self.db.query(InventoryLot).filter(InventoryLot.id == lot.id).with_for_update().first()
+        )
+        self.apply_movement(
+            lot,
+            "RECEIPT",
+            data.quantity,
+            admin_user_id,
+            reference_type="admin_receive",
+            remarks=data.remarks,
+        )
+        try:
+            self.db.commit()
+        except IntegrityError as exc:
+            self.db.rollback()
+            raise ConflictError("Could not receive stock due to a conflicting update.") from exc
+        self.db.refresh(lot)
+        last_movement = self._last_movement_by_lot([lot.id]).get(lot.id)
+        return self._enrich_lot(lot, last_movement)
+
+    def reconcile_stock(
+        self, lot_id: int, data: ReconcileStockRequest, admin_user_id: int
+    ) -> AdminInventoryLotListItemResponse:
+        """Physical-count reconciliation: locks the lot, computes the
+        difference server-side, and applies it as an ADJUSTMENT_IN/OUT
+        movement through the same `apply_movement` core every other
+        mutation uses - never a separate "set quantity" code path.
+        """
+        lot = self.db.query(InventoryLot).filter(InventoryLot.id == lot_id).with_for_update().first()
+        if not lot:
+            raise NotFoundError("Inventory lot not found.")
+
+        system_count = lot.quantity
+        difference = data.physical_count - system_count
+        remarks = f"Reconciliation: system={system_count} physical={data.physical_count} reason={data.reason}"
+        if data.notes:
+            remarks += f" notes={data.notes}"
+
+        if difference == 0:
+            movement = None
+        elif difference > 0:
+            movement = self.apply_movement(
+                lot, "ADJUSTMENT_IN", difference, admin_user_id,
+                reference_type="reconciliation", remarks=remarks,
+            )
+        else:
+            movement = self.apply_movement(
+                lot, "ADJUSTMENT_OUT", abs(difference), admin_user_id,
+                reference_type="reconciliation", remarks=remarks,
+            )
+
+        AdminAuditService(self.db).record(
+            admin_user_id=admin_user_id,
+            action="inventory.reconcile",
+            resource_type="inventory_lot",
+            resource_id=lot.id,
+            previous_state=str(system_count),
+            new_state=str(data.physical_count),
+            reason=data.reason,
+        )
+
+        try:
+            self.db.commit()
+        except IntegrityError as exc:
+            self.db.rollback()
+            raise ConflictError("Could not reconcile stock due to a conflicting update.") from exc
+        self.db.refresh(lot)
+        last_movement = self._last_movement_by_lot([lot.id]).get(lot.id)
+        return self._enrich_lot(lot, last_movement)
+
+    def transfer_stock(self, data: TransferStockRequest, admin_user_id: int) -> TransferStockResponse:
+        """Atomic TRANSFER_OUT (source) + TRANSFER_IN (destination,
+        get-or-created for the same batch+variant). No in-transit state -
+        the backend has no transfer-request entity to represent one, so
+        this commits both sides together or neither.
+        """
+        source = (
+            self.db.query(InventoryLot).filter(InventoryLot.id == data.source_lot_id).with_for_update().first()
+        )
+        if not source:
+            raise NotFoundError("Source inventory lot not found.")
+        if source.location_id == data.destination_location_id:
+            raise BusinessValidationError("Source and destination locations must differ.")
+        self.get_location_or_404(data.destination_location_id)
+
+        destination = self.get_or_create_lot_no_commit(
+            source.batch_id, source.variant_id, data.destination_location_id
+        )
+        # Lock destination too (it may already have existed with concurrent
+        # activity) - fixed id-ascending order across the two lots avoids a
+        # deadlock against a concurrent transfer running the opposite way.
+        lot_ids_in_order = sorted([source.id, destination.id])
+        locked = {
+            lot.id: lot
+            for lot in self.db.query(InventoryLot).filter(InventoryLot.id.in_(lot_ids_in_order)).with_for_update().all()
+        }
+        source = locked[source.id]
+        destination = locked[destination.id]
+
+        self.apply_movement(
+            source, "TRANSFER_OUT", data.quantity, admin_user_id,
+            reference_type="transfer", reference_id=destination.id, remarks=data.remarks,
+        )
+        self.apply_movement(
+            destination, "TRANSFER_IN", data.quantity, admin_user_id,
+            reference_type="transfer", reference_id=source.id, remarks=data.remarks,
+        )
+
+        AdminAuditService(self.db).record(
+            admin_user_id=admin_user_id,
+            action="inventory.transfer",
+            resource_type="inventory_lot",
+            resource_id=source.id,
+            reason=f"to_location_id={data.destination_location_id} quantity={data.quantity}",
+        )
+
+        try:
+            self.db.commit()
+        except IntegrityError as exc:
+            self.db.rollback()
+            raise ConflictError("Could not transfer stock due to a conflicting update.") from exc
+        self.db.refresh(source)
+        self.db.refresh(destination)
+        moves = self._last_movement_by_lot([source.id, destination.id])
+        return TransferStockResponse(
+            source_lot=self._enrich_lot(source, moves.get(source.id)),
+            destination_lot=self._enrich_lot(destination, moves.get(destination.id)),
         )

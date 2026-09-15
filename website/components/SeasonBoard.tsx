@@ -47,7 +47,7 @@ export default function SeasonBoard() {
   }, []);
 
   return (
-    <section ref={ref} className="relative overflow-hidden bg-primary-800 py-24 sm:py-32">
+    <section ref={ref} data-nav-theme="dark" className="relative overflow-hidden bg-primary-800 py-24 sm:py-32">
       <ChapterMark index={5} tone="light" className="absolute left-0 top-2 sm:top-4" />
       <div className="relative mx-auto max-w-7xl px-5 sm:px-8">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">

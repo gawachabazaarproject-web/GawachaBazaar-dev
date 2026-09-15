@@ -7,6 +7,7 @@ from fastapi import Depends
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
+from app.core.permissions import role_has_permission
 from app.dependencies.database import get_db
 from app.exceptions.base import AuthenticationError, AuthorizationError
 from app.models.role import Role
@@ -72,3 +73,36 @@ def require_roles(*allowed_roles: str) -> Callable[..., Any]:
         return current_user
 
     return role_checker
+
+
+def require_permission(permission: str) -> Callable[..., Any]:
+    """Dependency factory enforcing a granular admin-panel permission.
+
+    Layered on top of `require_roles`, not a replacement for it: this reads
+    the same live `user_roles` state and checks it against the static
+    `ROLE_PERMISSIONS` map in `app/core/permissions.py`. A role's granted
+    permissions are code, not data - changing what a role can do here is a
+    backend deploy, not a runtime toggle, which is deliberate for anything
+    this sensitive.
+    """
+
+    def permission_checker(
+        current_user: User = Depends(get_current_user),
+        db: Session = Depends(get_db),
+    ) -> User:
+        role_names = [
+            name
+            for (name,) in (
+                db.query(Role.name)
+                .join(UserRole, UserRole.role_id == Role.id)
+                .filter(UserRole.user_id == current_user.id)
+                .all()
+            )
+        ]
+        if not role_has_permission(role_names, permission):
+            raise AuthorizationError(
+                "You do not have permission to perform this action."
+            )
+        return current_user
+
+    return permission_checker

@@ -27,6 +27,24 @@ export interface TokenResponse {
   user: UserResponse;
 }
 
+/** Returned from POST /auth/login instead of TokenResponse for every
+ * CUSTOMER/WHOLESALER account (staff/Admin-panel logins are unaffected -
+ * see backend/app/core/roles.py STAFF_ROLES). No session exists yet; call
+ * authApi.verifyLoginOtp with `challenge_token` and the 6-digit code
+ * emailed to `masked_email`. */
+export interface OtpChallengeResponse {
+  otp_required: true;
+  challenge_token: string;
+  masked_email: string;
+  expires_in_seconds: number;
+}
+
+export type LoginResult = TokenResponse | OtpChallengeResponse;
+
+export function isOtpChallenge(result: LoginResult): result is OtpChallengeResponse {
+  return "otp_required" in result;
+}
+
 export interface RefreshTokenResponse {
   access_token: string;
   refresh_token: string;
@@ -224,12 +242,29 @@ export interface OrderResponse {
   id: number;
   order_number: string;
   status: OrderStatus;
+  subtotal_amount: string;
+  discount_amount: string;
   total_amount: string;
+  applied_promo_code: string | null;
   currency: string;
   placed_at: string;
   created_at: string;
   cancelled_at: string | null;
   cancellation_reason: string | null;
+}
+
+/** Mirrors backend/app/schemas/promotion.py's PromotionEvaluationResponse -
+ * the same engine checkout itself calls, so a preview can never disagree
+ * with what checkout actually charges. */
+export interface PromotionEvaluationResponse {
+  eligible: boolean;
+  message: string;
+  promotion_id: number | null;
+  promotion_name: string | null;
+  applied_code: string | null;
+  subtotal: string;
+  discount_amount: string;
+  final_total: string;
 }
 
 export interface OrderDetailResponse extends OrderResponse {

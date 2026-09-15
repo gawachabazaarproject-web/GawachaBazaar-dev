@@ -38,7 +38,7 @@ export default function Testimonial() {
   }, []);
 
   return (
-    <section ref={sectionRef} className="relative flex h-[85vh] min-h-[560px] items-center overflow-hidden bg-primary-900">
+    <section ref={sectionRef} data-nav-theme="dark" className="relative flex h-[85vh] min-h-[560px] items-center overflow-hidden bg-primary-900">
       <Image
         src="/images/people/testimonial.jpg"
         alt="A family preparing a fresh Gawacha Bazaar delivery in their kitchen"

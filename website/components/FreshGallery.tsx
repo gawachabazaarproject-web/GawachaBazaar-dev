@@ -67,7 +67,7 @@ export default function FreshGallery() {
   }, []);
 
   return (
-    <section ref={ref} className="overflow-hidden bg-neutral-100 py-24 sm:py-32">
+    <section ref={ref} data-nav-theme="light" className="overflow-hidden bg-neutral-100 py-24 sm:py-32">
       <div className="mx-auto max-w-7xl px-5 sm:px-8">
         <div className="gallery-heading mx-auto max-w-2xl text-center">
           <p className="eyebrow text-primary-600">Straight From The Crate</p>

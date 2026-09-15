@@ -1,5 +1,5 @@
 import { apiClient } from "./client";
-import { CartItemResponse, CartResponse, OrderDetailResponse } from "@/types/api";
+import { CartItemResponse, CartResponse, OrderDetailResponse, PromotionEvaluationResponse } from "@/types/api";
 
 export const cartApi = {
   get: () => apiClient.get<CartResponse>("/cart").then((r) => r.data),
@@ -20,8 +20,16 @@ export const cartApi = {
 
   clear: () => apiClient.delete("/cart/items").then(() => undefined),
 
-  checkout: (addressId: number) =>
+  checkout: (addressId: number, promoCode?: string | null) =>
     apiClient
-      .post<OrderDetailResponse>("/cart/checkout", { address_id: addressId })
+      .post<OrderDetailResponse>("/cart/checkout", {
+        address_id: addressId,
+        promo_code: promoCode || undefined,
+      })
+      .then((r) => r.data),
+
+  evaluatePromo: (promoCode: string | null) =>
+    apiClient
+      .post<PromotionEvaluationResponse>("/cart/evaluate-promo", { promo_code: promoCode || undefined })
       .then((r) => r.data),
 };

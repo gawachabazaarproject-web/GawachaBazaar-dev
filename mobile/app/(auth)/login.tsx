@@ -33,7 +33,14 @@ export default function LoginScreen() {
 
     setLoading(true);
     try {
-      await login(identifier.trim(), password);
+      const outcome = await login(identifier.trim(), password);
+      if (outcome.otpRequired) {
+        router.push({
+          pathname: "/(auth)/verify-otp",
+          params: { challengeToken: outcome.challengeToken, maskedEmail: outcome.maskedEmail },
+        });
+        return;
+      }
       // AppGate handles the redirect once `status` flips to authenticated.
     } catch (err) {
       setError(toApiError(err).message);

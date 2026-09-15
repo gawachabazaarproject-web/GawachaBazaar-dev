@@ -11,6 +11,7 @@ table definitions.
 """
 
 from app.models.address import Address
+from app.models.admin_action_log import AdminActionLog
 from app.models.auth_session import AuthSession
 from app.models.batch import Batch
 from app.models.bulk_customer_profile import BulkCustomerProfile
@@ -19,12 +20,15 @@ from app.models.bulk_order_request_item import BulkOrderRequestItem
 from app.models.cart import Cart
 from app.models.cart_item import CartItem
 from app.models.category import Category
+from app.models.contact_change_request import ContactChangeRequest
+from app.models.customer_note import CustomerNote
 from app.models.farm import Farm
 from app.models.fulfillment import Fulfillment
 from app.models.inventory_location import InventoryLocation
 from app.models.inventory_lot import InventoryLot
 from app.models.inventory_reservation import InventoryReservation
 from app.models.inventory_reservation_item import InventoryReservationItem
+from app.models.login_otp_challenge import LoginOtpChallenge
 from app.models.order import Order
 from app.models.order_address import OrderAddress
 from app.models.order_item import OrderItem
@@ -38,6 +42,10 @@ from app.models.price import Price
 from app.models.product import Product
 from app.models.product_image import ProductImage
 from app.models.product_variant import ProductVariant
+from app.models.promotion import Promotion
+from app.models.promotion_eligible_customer import PromotionEligibleCustomer
+from app.models.promotion_redemption import PromotionRedemption
+from app.models.promotion_target import PromotionTarget
 from app.models.quality_check import QualityCheck
 from app.models.quote import Quote
 from app.models.quote_item import QuoteItem
@@ -53,6 +61,7 @@ from app.models.user_role import UserRole
 
 __all__ = [
     "Address",
+    "AdminActionLog",
     "AuthSession",
     "Batch",
     "BulkCustomerProfile",
@@ -61,12 +70,15 @@ __all__ = [
     "Cart",
     "CartItem",
     "Category",
+    "ContactChangeRequest",
+    "CustomerNote",
     "Farm",
     "Fulfillment",
     "InventoryLocation",
     "InventoryLot",
     "InventoryReservation",
     "InventoryReservationItem",
+    "LoginOtpChallenge",
     "Order",
     "OrderAddress",
     "OrderItem",
@@ -80,6 +92,10 @@ __all__ = [
     "Product",
     "ProductImage",
     "ProductVariant",
+    "Promotion",
+    "PromotionEligibleCustomer",
+    "PromotionRedemption",
+    "PromotionTarget",
     "QualityCheck",
     "Quote",
     "QuoteItem",

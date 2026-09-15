@@ -24,12 +24,12 @@ export default function Footer() {
   }, []);
 
   return (
-    <footer id="contact" ref={ref} className="bg-primary-900 text-neutral-100/70">
+    <footer id="contact" ref={ref} data-nav-theme="dark" className="bg-primary-900 text-neutral-100/70">
       <div className="mx-auto max-w-7xl px-5 pb-24 pt-28 sm:px-8 sm:pt-36">
         <p className="closing-line eyebrow text-secondary-400">08 / 08 — Closing</p>
         <h2 className="mt-6 font-display text-[13vw] font-bold uppercase leading-[0.92] text-neutral-100 sm:text-[7rem]">
           <span className="closing-line block overflow-hidden">From our village</span>
-          <span className="closing-line block overflow-hidden font-script italic normal-case text-secondary-400">
+          <span className="closing-line block overflow-hidden pb-[0.1em] font-script italic normal-case leading-[1.15] text-secondary-400">
             to your table.
           </span>
         </h2>

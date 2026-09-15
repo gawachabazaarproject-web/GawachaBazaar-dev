@@ -61,7 +61,10 @@ const styles = StyleSheet.create({
   panel: {
     width: PANEL_WIDTH,
     height: PANEL_HEIGHT,
-    borderRadius: radius.none,
+    borderRadius: radius.xs,
+    // Clips the absolutely-positioned image/gradient to the rounded shape
+    // above - without this, they'd stay square and visibly poke out past
+    // the panel's rounded corners.
     overflow: "hidden",
     backgroundColor: colors.primary,
     justifyContent: "space-between",

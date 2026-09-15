@@ -1,0 +1,28 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html {
+  background: #f7f4eb;
+}
+
+::selection {
+  background: #d9a52a;
+  color: #0b2d20;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: #f7f4eb;
+}
+::-webkit-scrollbar-thumb {
+  background: #dcd3b8;
+  border-radius: 999px;
+}
+
+.eyebrow {
+  @apply font-sans text-[11px] font-semibold uppercase tracking-widest2 text-neutral-600;
+}

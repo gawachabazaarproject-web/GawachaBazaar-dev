@@ -9,16 +9,23 @@ pattern used when one router's roles differ from another's within the
 same domain).
 """
 
+from datetime import datetime
+
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from app.core.roles import ADMIN, CUSTOMER
-from app.dependencies.auth import get_current_user, require_roles
+from app.dependencies.auth import get_current_user, require_permission, require_roles
 from app.dependencies.database import get_db
 from app.dependencies.payments import get_payment_gateway
 from app.exceptions.base import NotFoundError
 from app.models.order import Order
 from app.models.user import User
+from app.schemas.admin_order import (
+    AdminOrderDetailResponse,
+    AdminOrderListResponse,
+)
+from app.schemas.admin_order import MAX_PAGE_SIZE as ADMIN_MAX_PAGE_SIZE
 from app.schemas.fulfillment import CustomerFulfillmentResponse
 from app.schemas.inventory_reservation import InventoryReservationResponse
 from app.schemas.order import (
@@ -38,6 +45,13 @@ from app.services.refund import RefundService
 
 router = APIRouter(dependencies=[Depends(require_roles(CUSTOMER))])
 admin_router = APIRouter(dependencies=[Depends(require_roles(ADMIN))])
+# No blanket role restriction (unlike admin_router above, which is
+# ADMIN-only for the destructive cancel action): each route below declares
+# its own `require_permission(...)`, since orders.read is granted to
+# OPERATIONS/HUB_STAFF too (see app/core/permissions.py) while cancellation
+# stays ADMIN-only. Same per-route-RBAC-within-one-file pattern already
+# used in fulfillments.py.
+staff_router = APIRouter()
 
 
 @router.get("", response_model=OrderListResponse, summary="List the current user's orders")
@@ -156,3 +170,38 @@ def admin_cancel_order(
     db: Session = Depends(get_db),
 ) -> OrderDetailResponse:
     return OrderService(db).admin_cancel_order(current_user.id, order_id, payload.reason)
+
+
+@staff_router.get(
+    "/admin",
+    response_model=AdminOrderListResponse,
+    summary="List/search/filter every order on the platform (admin panel)",
+)
+def admin_list_orders(
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=ADMIN_MAX_PAGE_SIZE),
+    status: str | None = Query(default=None, description="Order status, e.g. PENDING"),
+    payment_status: str | None = Query(default=None),
+    fulfillment_status: str | None = Query(default=None),
+    date_from: datetime | None = Query(default=None, description="placed_at >= this"),
+    date_to: datetime | None = Query(default=None, description="placed_at <= this"),
+    q: str | None = Query(default=None, max_length=150, description="Order number or customer name/email/phone"),
+    current_user: User = Depends(require_permission("orders.read")),
+    db: Session = Depends(get_db),
+) -> AdminOrderListResponse:
+    return OrderService(db).admin_list_orders(
+        page, page_size, status, payment_status, fulfillment_status, date_from, date_to, q
+    )
+
+
+@staff_router.get(
+    "/admin/{order_id}",
+    response_model=AdminOrderDetailResponse,
+    summary="Get the complete operational detail for any order (admin panel)",
+)
+def admin_get_order(
+    order_id: int,
+    current_user: User = Depends(require_permission("orders.read")),
+    db: Session = Depends(get_db),
+) -> AdminOrderDetailResponse:
+    return OrderService(db).admin_get_order_detail(order_id)

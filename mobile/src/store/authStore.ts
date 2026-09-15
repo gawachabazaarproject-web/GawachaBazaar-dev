@@ -6,19 +6,33 @@ import {
   setSessionExpiredHandler,
 } from "@/api";
 import { clearTokens, getStoredTokens, saveTokens } from "@/api/tokenStorage";
-import { UserResponse } from "@/types/api";
+import { isOtpChallenge, TokenResponse, UserResponse } from "@/types/api";
 
 export type AuthStatus = "restoring" | "authenticated" | "unauthenticated";
+
+/** Result of `login()`: either the login completed outright (a staff
+ * account - never expected on this customer-only app, but handled
+ * correctly anyway) or an email-OTP challenge must be completed via
+ * `verifyOtp` before a session exists. */
+export type LoginOutcome =
+  | { otpRequired: false }
+  | { otpRequired: true; challengeToken: string; maskedEmail: string };
 
 interface AuthState {
   status: AuthStatus;
   user: UserResponse | null;
   sessionExpired: boolean;
   restoreSession: () => Promise<void>;
-  login: (identifier: string, password: string) => Promise<void>;
+  login: (identifier: string, password: string) => Promise<LoginOutcome>;
+  verifyOtp: (challengeToken: string, code: string) => Promise<void>;
   register: (params: { name: string; email: string; phone: string; password: string }) => Promise<void>;
   logout: () => Promise<void>;
   acknowledgeSessionExpired: () => void;
+}
+
+async function applySession(result: TokenResponse): Promise<void> {
+  await saveTokens({ accessToken: result.access_token, refreshToken: result.refresh_token });
+  setAuthTokens({ accessToken: result.access_token, refreshToken: result.refresh_token });
 }
 
 export const useAuthStore = create<AuthState>((set, get) => ({
@@ -53,15 +67,27 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   login: async (identifier, password) => {
     const result = await authApi.login({ identifier, password });
-    await saveTokens({ accessToken: result.access_token, refreshToken: result.refresh_token });
-    setAuthTokens({ accessToken: result.access_token, refreshToken: result.refresh_token });
+    if (isOtpChallenge(result)) {
+      return {
+        otpRequired: true,
+        challengeToken: result.challenge_token,
+        maskedEmail: result.masked_email,
+      };
+    }
+    await applySession(result);
+    set({ status: "authenticated", user: result.user, sessionExpired: false });
+    return { otpRequired: false };
+  },
+
+  verifyOtp: async (challengeToken, code) => {
+    const result = await authApi.verifyLoginOtp(challengeToken, code);
+    await applySession(result);
     set({ status: "authenticated", user: result.user, sessionExpired: false });
   },
 
   register: async ({ name, email, phone, password }) => {
     const result = await authApi.register({ name, email, phone, password });
-    await saveTokens({ accessToken: result.access_token, refreshToken: result.refresh_token });
-    setAuthTokens({ accessToken: result.access_token, refreshToken: result.refresh_token });
+    await applySession(result);
     set({ status: "authenticated", user: result.user, sessionExpired: false });
   },
 

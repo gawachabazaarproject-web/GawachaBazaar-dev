@@ -2,6 +2,19 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { cartApi } from "@/api";
 import { CartResponse } from "@/types/api";
 
+/**
+ * Preview a promo code (or the best automatic promotion) against the
+ * current cart. Calls the same backend engine checkout itself uses
+ * (`PromotionService.evaluate_for_cart`), so the discount shown here can
+ * never disagree with what checkout actually charges - this hook never
+ * computes a discount locally.
+ */
+export function useEvaluatePromo() {
+  return useMutation({
+    mutationFn: (promoCode: string | null) => cartApi.evaluatePromo(promoCode),
+  });
+}
+
 export const cartQueryKey = ["cart"] as const;
 
 /**
