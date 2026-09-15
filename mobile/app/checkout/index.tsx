@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Alert, Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { Alert, Pressable, ScrollView, StyleSheet, TextInput, View } from "react-native";
 import { Stack, useRouter } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import { Image } from "expo-image";
@@ -10,13 +10,13 @@ import { CheckoutSection } from "@/components/checkout/CheckoutSection";
 import { HarvestSlotSelector } from "@/components/checkout/HarvestSlotSelector";
 import { BasketSummaryCard } from "@/components/checkout/BasketSummaryCard";
 import { ImpactCard } from "@/components/checkout/ImpactCard";
-import { useCart } from "@/features/cart/useCart";
+import { useCart, useEvaluatePromo } from "@/features/cart/useCart";
 import { useAddresses } from "@/features/address/useAddresses";
 import { usePlaceOrder, PlaceOrderResult } from "@/features/checkout/useCheckout";
 import { useCancelOrder } from "@/features/orders/useOrders";
 import { formatMoney } from "@/utils/money";
 import { colors, radius, spacing } from "@/theme";
-import { PaymentMethod } from "@/types/api";
+import { PaymentMethod, PromotionEvaluationResponse } from "@/types/api";
 
 export default function CheckoutScreen() {
   const router = useRouter();
@@ -28,6 +28,20 @@ export default function CheckoutScreen() {
   const [selectedAddressId, setSelectedAddressId] = useState<number | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("COD");
   const [result, setResult] = useState<PlaceOrderResult | null>(null);
+
+  const [promoInput, setPromoInput] = useState("");
+  const [promoEvaluation, setPromoEvaluation] = useState<PromotionEvaluationResponse | null>(null);
+  const evaluatePromo = useEvaluatePromo();
+
+  const handleApplyPromo = () => {
+    if (!promoInput.trim()) return;
+    evaluatePromo.mutate(promoInput.trim(), { onSuccess: setPromoEvaluation });
+  };
+
+  const handleRemovePromo = () => {
+    setPromoInput("");
+    setPromoEvaluation(null);
+  };
 
   useEffect(() => {
     if (!selectedAddressId && addresses && addresses.length > 0) {
@@ -44,7 +58,11 @@ export default function CheckoutScreen() {
   const handlePlaceOrder = () => {
     if (!selectedAddressId) return;
     placeOrder.mutate(
-      { addressId: selectedAddressId, paymentMethod },
+      {
+        addressId: selectedAddressId,
+        paymentMethod,
+        promoCode: promoEvaluation?.eligible ? promoEvaluation.applied_code : null,
+      },
       { onSuccess: setResult },
     );
   };
@@ -112,7 +130,11 @@ export default function CheckoutScreen() {
     );
   }
 
-  const total = cart.total_amount ?? "0";
+  // The evaluated final_total (when a promo is applied) reflects what
+  // checkout will actually charge - cart.total_amount never includes a
+  // discount, since discounting only ever happens as part of order
+  // creation on the backend (see PromotionService.evaluate_for_cart).
+  const total = promoEvaluation?.eligible ? promoEvaluation.final_total : cart.total_amount ?? "0";
 
   return (
     <Screen edges={["top", "bottom"]}>
@@ -200,9 +222,69 @@ export default function CheckoutScreen() {
           />
         </CheckoutSection>
 
-        {/* 4. Order summary - real cart data */}
-        <CheckoutSection number={4} label="Order Summary" title="Review your order">
+        {/* 4. Promo code - real backend evaluation, never a locally-computed
+            discount (see PromotionService.evaluate_for_cart on the backend -
+            this screen only ever displays what that call returns). */}
+        <CheckoutSection number={4} label="Offers" title="Promo Code">
+          {promoEvaluation?.eligible ? (
+            <View style={styles.promoAppliedRow}>
+              <View style={{ flex: 1 }}>
+                <Text variant="bodyMedium" color={colors.success}>
+                  {promoEvaluation.applied_code} applied
+                </Text>
+                <Text variant="caption" color={colors.textSecondary}>
+                  {promoEvaluation.message} · You saved {formatMoney(promoEvaluation.discount_amount, cart.currency ?? "INR")}
+                </Text>
+              </View>
+              <Pressable onPress={handleRemovePromo} hitSlop={8}>
+                <Feather name="x-circle" size={20} color={colors.textSecondary} />
+              </Pressable>
+            </View>
+          ) : (
+            <View style={styles.promoRow}>
+              <View style={styles.promoInputWrapper}>
+                <Feather name="tag" size={16} color={colors.textSecondary} />
+                <TextInput
+                  value={promoInput}
+                  onChangeText={(text) => {
+                    setPromoInput(text.toUpperCase());
+                    if (promoEvaluation) setPromoEvaluation(null);
+                  }}
+                  placeholder="Enter promo code"
+                  placeholderTextColor={colors.textSecondary}
+                  autoCapitalize="characters"
+                  style={styles.promoInput}
+                />
+              </View>
+              <Pressable
+                style={[styles.promoApplyButton, (!promoInput.trim() || evaluatePromo.isPending) && styles.placeOrderButtonDisabled]}
+                onPress={handleApplyPromo}
+                disabled={!promoInput.trim() || evaluatePromo.isPending}
+              >
+                <Text variant="bodyMedium" color={colors.textOnAccent}>
+                  {evaluatePromo.isPending ? "Checking..." : "Apply"}
+                </Text>
+              </Pressable>
+            </View>
+          )}
+          {promoEvaluation && !promoEvaluation.eligible ? (
+            <Text variant="caption" color={colors.error} style={{ marginTop: spacing.xs }}>
+              {promoEvaluation.message}
+            </Text>
+          ) : null}
+        </CheckoutSection>
+
+        {/* 5. Order summary - real cart data */}
+        <CheckoutSection number={5} label="Order Summary" title="Review your order">
           <BasketSummaryCard items={cart.items} totalAmount={cart.total_amount} currency={cart.currency} />
+          {promoEvaluation?.eligible ? (
+            <View style={styles.discountSummaryRow}>
+              <Text variant="bodyMedium" color={colors.textSecondary}>Discount ({promoEvaluation.applied_code})</Text>
+              <Text variant="bodyMedium" color={colors.success}>
+                -{formatMoney(promoEvaluation.discount_amount, cart.currency ?? "INR")}
+              </Text>
+            </View>
+          ) : null}
           <ImpactCard />
           <Text variant="caption" color={colors.textSecondary} align="center" style={styles.sustainabilityNote}>
             Zero single-use plastics. Delivered in sanitised returnable jute crates.
@@ -327,6 +409,41 @@ const styles = StyleSheet.create({
   },
   paymentOptionSelected: { borderColor: colors.primary, backgroundColor: colors.primaryLight },
   paymentIcon: { width: 32, alignItems: "center" },
+  promoRow: { flexDirection: "row", gap: spacing.sm },
+  promoInputWrapper: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    borderRadius: radius.none,
+    paddingHorizontal: spacing.sm,
+  },
+  promoInput: { flex: 1, paddingVertical: spacing.sm, fontSize: 14, color: colors.textPrimary },
+  promoApplyButton: {
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.accent,
+    borderRadius: radius.none,
+    paddingHorizontal: spacing.lg,
+  },
+  promoAppliedRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    padding: spacing.sm,
+    borderWidth: 1.5,
+    borderColor: colors.success,
+    backgroundColor: colors.primaryLight,
+    borderRadius: radius.none,
+  },
+  discountSummaryRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginTop: spacing.sm,
+  },
   sustainabilityNote: { marginTop: spacing.sm, marginBottom: spacing.base },
   footer: { padding: spacing.base, paddingTop: spacing.sm, borderTopWidth: 1, borderTopColor: colors.border, backgroundColor: colors.surface },
   footerNote: { textAlign: "center", marginBottom: spacing.sm },

@@ -7,7 +7,7 @@ import { Text } from "../Text";
 import { PressableScale } from "../PressableScale";
 import { getEmbellishment } from "@/utils/productEmbellishments";
 import { useWholesaleStore } from "@/store/wholesaleStore";
-import { colors, radius, spacing, typography } from "@/theme";
+import { colors, radius, shadows, spacing, typography } from "@/theme";
 import { ProductCardData } from "../ProductCard";
 import { RequestUnit } from "@/types/api";
 
@@ -50,78 +50,84 @@ export function WholesaleProductCard({ product, onPress }: WholesaleProductCardP
 
   return (
     <PressableScale onPress={onPress} style={styles.card} accessibilityRole="button" accessibilityLabel={product.name}>
-      <View style={styles.imageWrap}>
-        <Image
-          source={product.imageUrl ?? undefined}
-          style={styles.image}
-          contentFit="cover"
-          transition={200}
-          placeholder={{ blurhash: "L4C~D%~q00~q~q00%M-;9F%M-;-;" }}
-        />
-        {draftItem ? (
-          <View style={styles.inBadge}>
-            <Feather name="check" size={11} color={colors.textInverse} />
-            <Text variant="label" color={colors.textInverse}>
-              IN REQUEST
-            </Text>
-          </View>
-        ) : null}
-      </View>
-
-      <View style={styles.body}>
-        {origin || eta ? (
-          <View style={styles.metaRow}>
-            {origin ? (
-              <Text variant="eyebrow" color={colors.accentDark} numberOfLines={1} style={{ flexShrink: 1 }}>
-                {origin.toUpperCase()}
-              </Text>
-            ) : null}
-          </View>
-        ) : null}
-        <Text variant="titleSmall" numberOfLines={1} style={styles.name}>
-          {product.name}
-        </Text>
-
-        <View style={styles.qtyRow}>
-          <TextInput
-            value={quantity}
-            onChangeText={setQuantity}
-            placeholder="Qty"
-            placeholderTextColor={colors.textMuted}
-            keyboardType="decimal-pad"
-            style={styles.qtyInput}
+      {/* Shadow lives on `card` (PressableScale) above, corner rounding +
+          clipping lives on this inner `surface` wrapper - overflow:hidden
+          on the same view as a shadow would clip the shadow away. */}
+      <View style={styles.surface}>
+        <View style={styles.imageWrap}>
+          <Image
+            source={product.imageUrl ?? undefined}
+            style={styles.image}
+            contentFit="cover"
+            transition={200}
+            placeholder={{ blurhash: "L4C~D%~q00~q~q00%M-;9F%M-;-;" }}
           />
-          <View style={styles.unitRow}>
-            {UNITS.map((u) => (
-              <Pressable key={u} onPress={() => setUnit(u)} style={[styles.unitChip, unit === u && styles.unitChipActive]}>
-                <Text variant="label" numberOfLines={1} color={unit === u ? colors.textInverse : colors.textSecondary}>
-                  {u}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
+          {draftItem ? (
+            <View style={styles.inBadge}>
+              <Feather name="check" size={11} color={colors.textInverse} />
+              <Text variant="label" color={colors.textInverse}>
+                IN REQUEST
+              </Text>
+            </View>
+          ) : null}
         </View>
 
-        {draftItem ? (
-          <Pressable style={styles.removeButton} onPress={handleRemove} accessibilityRole="button" accessibilityLabel="Remove from request">
-            <Text variant="button" color={colors.error}>
-              Remove
-            </Text>
-          </Pressable>
-        ) : (
-          <Pressable style={styles.addButton} onPress={handleAdd} accessibilityRole="button" accessibilityLabel="Add to request">
-            <Text variant="button" color={colors.primary}>
-              Add to request
-            </Text>
-          </Pressable>
-        )}
+        <View style={styles.body}>
+          {origin || eta ? (
+            <View style={styles.metaRow}>
+              {origin ? (
+                <Text variant="eyebrow" color={colors.accentDark} numberOfLines={1} style={{ flexShrink: 1 }}>
+                  {origin.toUpperCase()}
+                </Text>
+              ) : null}
+            </View>
+          ) : null}
+          <Text variant="titleSmall" numberOfLines={1} style={styles.name}>
+            {product.name}
+          </Text>
+
+          <View style={styles.qtyRow}>
+            <TextInput
+              value={quantity}
+              onChangeText={setQuantity}
+              placeholder="Qty"
+              placeholderTextColor={colors.textMuted}
+              keyboardType="decimal-pad"
+              style={styles.qtyInput}
+            />
+            <View style={styles.unitRow}>
+              {UNITS.map((u) => (
+                <Pressable key={u} onPress={() => setUnit(u)} style={[styles.unitChip, unit === u && styles.unitChipActive]}>
+                  <Text variant="label" numberOfLines={1} color={unit === u ? colors.textInverse : colors.textSecondary}>
+                    {u}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+          </View>
+
+          {draftItem ? (
+            <Pressable style={styles.removeButton} onPress={handleRemove} accessibilityRole="button" accessibilityLabel="Remove from request">
+              <Text variant="button" color={colors.error}>
+                Remove
+              </Text>
+            </Pressable>
+          ) : (
+            <Pressable style={styles.addButton} onPress={handleAdd} accessibilityRole="button" accessibilityLabel="Add to request">
+              <Text variant="button" color={colors.primary}>
+                Add to request
+              </Text>
+            </Pressable>
+          )}
+        </View>
       </View>
     </PressableScale>
   );
 }
 
 const styles = StyleSheet.create({
-  card: { flex: 1, backgroundColor: colors.surface },
+  card: { flex: 1, ...shadows.card },
+  surface: { borderRadius: radius.xs, overflow: "hidden", backgroundColor: colors.surface },
   imageWrap: {
     width: "100%",
     aspectRatio: 0.82,

@@ -29,11 +29,13 @@ export function usePlaceOrder() {
     mutationFn: async ({
       addressId,
       paymentMethod,
+      promoCode,
     }: {
       addressId: number;
       paymentMethod: PaymentMethod;
+      promoCode?: string | null;
     }): Promise<PlaceOrderResult> => {
-      const order = await cartApi.checkout(addressId);
+      const order = await cartApi.checkout(addressId, promoCode);
       try {
         const payment = await paymentApi.create({ order_id: order.id, payment_method: paymentMethod });
         return { order, payment, paymentError: null };

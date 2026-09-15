@@ -10,7 +10,7 @@ import { PressableScale } from "./PressableScale";
 import { useVariantStepper } from "@/features/cart/useCart";
 import { formatVariantSize } from "@/utils/money";
 import { getEmbellishment } from "@/utils/productEmbellishments";
-import { colors, radius, spacing } from "@/theme";
+import { colors, radius, shadows, spacing } from "@/theme";
 import { PriceResponse, ProductSummaryResponse, ProductVariantResponse } from "@/types/api";
 
 export interface ProductCardData {
@@ -67,32 +67,38 @@ export function ProductCard({ product, onPress, index = 0 }: ProductCardProps) {
   return (
     <Animated.View entering={FadeInUp.delay(Math.min(index, 8) * 40).duration(280)}>
       <PressableScale onPress={onPress} style={styles.card} accessibilityRole="button" accessibilityLabel={product.name}>
-        <View style={styles.imageWrap}>
-          <Image
-            source={product.imageUrl ?? undefined}
-            style={styles.image}
-            contentFit="cover"
-            transition={200}
-            placeholder={{ blurhash: "L4C~D%~q00~q~q00%M-;9F%M-;-;" }}
-          />
-          {badge ? (
-            <View style={styles.badge}>
-              <Text variant="label" color={colors.textOnAccent}>
-                {badge}
-              </Text>
-            </View>
-          ) : null}
-          {!isAvailable ? (
-            <View style={styles.unavailableOverlay}>
-              <Text variant="captionMedium" color={colors.textInverse}>
-                Unavailable
-              </Text>
-            </View>
-          ) : null}
-        </View>
+        {/* Shadow lives on `card` (PressableScale) above, corner rounding +
+            clipping lives on this inner `surface` wrapper below - an
+            RN gotcha: overflow:hidden on the same view as a shadow clips
+            the shadow itself away, so the two responsibilities can't share
+            one view. */}
+        <View style={styles.surface}>
+          <View style={styles.imageWrap}>
+            <Image
+              source={product.imageUrl ?? undefined}
+              style={styles.image}
+              contentFit="cover"
+              transition={200}
+              placeholder={{ blurhash: "L4C~D%~q00~q~q00%M-;9F%M-;-;" }}
+            />
+            {badge ? (
+              <View style={styles.badge}>
+                <Text variant="label" color={colors.textOnAccent}>
+                  {badge}
+                </Text>
+              </View>
+            ) : null}
+            {!isAvailable ? (
+              <View style={styles.unavailableOverlay}>
+                <Text variant="captionMedium" color={colors.textInverse}>
+                  Unavailable
+                </Text>
+              </View>
+            ) : null}
+          </View>
 
-        <View style={styles.body}>
-          <View style={styles.info}>
+          <View style={styles.body}>
+            <View style={styles.info}>
             {origin || eta ? (
               <View style={styles.metaRow}>
                 {origin ? (
@@ -144,6 +150,7 @@ export function ProductCard({ product, onPress, index = 0 }: ProductCardProps) {
               fullWidth
             />
           ) : null}
+          </View>
         </View>
       </PressableScale>
     </Animated.View>
@@ -170,12 +177,20 @@ export function productSummaryToCardData(product: ProductSummaryResponse): Produ
 const styles = StyleSheet.create({
   card: {
     flex: 1,
+    ...shadows.card,
+  },
+  // Corner rounding + clipping live here, separate from `card` above -
+  // overflow:hidden on the same view as a shadow would clip the shadow
+  // itself away (an RN gotcha), so the two responsibilities are split
+  // across an outer (shadow) and inner (rounded/clipped) view.
+  surface: {
+    borderRadius: radius.xs,
+    overflow: "hidden",
     backgroundColor: colors.surface,
   },
   imageWrap: {
     width: "100%",
     aspectRatio: 0.82,
-    borderRadius: radius.none,
     overflow: "hidden",
     backgroundColor: colors.background,
   },

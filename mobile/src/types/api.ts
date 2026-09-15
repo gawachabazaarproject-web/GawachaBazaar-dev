@@ -224,12 +224,29 @@ export interface OrderResponse {
   id: number;
   order_number: string;
   status: OrderStatus;
+  subtotal_amount: string;
+  discount_amount: string;
   total_amount: string;
+  applied_promo_code: string | null;
   currency: string;
   placed_at: string;
   created_at: string;
   cancelled_at: string | null;
   cancellation_reason: string | null;
+}
+
+/** Mirrors backend/app/schemas/promotion.py's PromotionEvaluationResponse -
+ * the same engine checkout itself calls, so a preview can never disagree
+ * with what checkout actually charges. */
+export interface PromotionEvaluationResponse {
+  eligible: boolean;
+  message: string;
+  promotion_id: number | null;
+  promotion_name: string | null;
+  applied_code: string | null;
+  subtotal: string;
+  discount_amount: string;
+  final_total: string;
 }
 
 export interface OrderDetailResponse extends OrderResponse {
