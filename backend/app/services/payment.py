@@ -46,6 +46,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.logging import logger
+from app.core.realtime import notify_status_event
 from app.exceptions.base import (
     AuthenticationError,
     BusinessValidationError,
@@ -245,7 +246,8 @@ class PaymentService:
 
         if latest_transaction is not None:
             applied = self._apply_transaction_status(
-                payment, latest_transaction, TransactionStatus(result.status), source="verify"
+                payment, latest_transaction, TransactionStatus(result.status),
+                source="verify", order_user_id=order.user_id,
             )
             if applied:
                 self._confirm_order_if_paid(order, payment)
@@ -478,7 +480,7 @@ class PaymentService:
             return
 
         applied = self._apply_transaction_status(
-            payment, transaction, event.status, source="webhook"
+            payment, transaction, event.status, source="webhook", order_user_id=order.user_id,
         )
         if applied:
             self._confirm_order_if_paid(order, payment)
@@ -573,6 +575,13 @@ class PaymentService:
         logger.info(
             "PAYMENT_COD_CONFIRMED: payment_id=%s order_id=%s", payment.id, order.id
         )
+        notify_status_event(
+            resource="order",
+            order_id=order.id,
+            user_id=order.user_id,
+            new_status="CONFIRMED",
+            previous_status="PENDING",
+        )
         return PaymentResponse.model_validate(payment)
 
     def _initiate_upi(self, order: Order, payment: Payment) -> PaymentInitiationResponse:
@@ -663,7 +672,8 @@ class PaymentService:
 
         # The gateway may confirm/reject synchronously right at initiation.
         applied = self._apply_transaction_status(
-            payment, transaction, TransactionStatus(result.status), source="initiate"
+            payment, transaction, TransactionStatus(result.status),
+            source="initiate", order_user_id=order.user_id,
         )
         if applied:
             self._confirm_order_if_paid(order, payment)
@@ -731,6 +741,7 @@ class PaymentService:
         new_transaction_status: TransactionStatus,
         *,
         source: str,
+        order_user_id: int | None = None,
     ) -> bool:
         """Caller MUST already hold the payment row lock in the current
         transaction. Returns True iff the payment's status actually
@@ -776,6 +787,14 @@ class PaymentService:
             "PAYMENT_STATE_TRANSITION: payment_id=%s source=%s %s -> %s",
             payment.id, source, result.previous.value, result.current.value,
         )
+        if order_user_id is not None:
+            notify_status_event(
+                resource="payment",
+                order_id=payment.order_id,
+                user_id=order_user_id,
+                new_status=result.current.value,
+                previous_status=result.previous.value,
+            )
         return True
 
     def _confirm_order_if_paid(self, order: Order, payment: Payment) -> None:
@@ -815,6 +834,13 @@ class PaymentService:
             order.status = "CONFIRMED"
             logger.info(
                 "PAYMENT_ORDER_CONFIRMED: order_id=%s payment_id=%s", order.id, payment.id
+            )
+            notify_status_event(
+                resource="order",
+                order_id=order.id,
+                user_id=order.user_id,
+                new_status="CONFIRMED",
+                previous_status="PENDING",
             )
         elif order.status == "CANCELLED":
             RefundService(self.db).create_refund_if_eligible(order, payment)

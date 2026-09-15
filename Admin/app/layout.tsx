@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Bodoni_Moda, Instrument_Serif, Plus_Jakarta_Sans } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/lib/auth-context";
+import { RealtimeProvider } from "@/lib/realtime-context";
 
 const bodoni = Bodoni_Moda({
   subsets: ["latin"],
@@ -38,7 +39,9 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
       <body
         className={`${bodoni.variable} ${instrument.variable} ${jakarta.variable} font-sans bg-neutral-100 text-primary-900 antialiased`}
       >
-        <AuthProvider>{children}</AuthProvider>
+        <AuthProvider>
+          <RealtimeProvider>{children}</RealtimeProvider>
+        </AuthProvider>
       </body>
     </html>
   );

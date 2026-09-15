@@ -49,6 +49,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.logging import logger
+from app.core.realtime import notify_status_event
 from app.core.roles import ADMIN, DELIVERY_PARTNER, HUB_STAFF, OPERATIONS
 from app.exceptions.base import AuthorizationError, ConflictError, NotFoundError
 from app.models.fulfillment import Fulfillment
@@ -297,6 +298,14 @@ class FulfillmentService:
                 "Could not update fulfillment due to a conflicting update."
             ) from exc
         self.db.refresh(fulfillment)
+        if result.applied:
+            notify_status_event(
+                resource="fulfillment",
+                order_id=order.id,
+                user_id=order.user_id,
+                new_status=result.current.value,
+                previous_status=result.previous.value,
+            )
         return FulfillmentResponse.model_validate(fulfillment)
 
     # ------------------------------------------------------------------
@@ -360,6 +369,13 @@ class FulfillmentService:
             "FULFILLMENT_ASSIGNED: fulfillment_id=%s delivery_partner_user_id=%s",
             fulfillment.id, target_user.id,
         )
+        notify_status_event(
+            resource="fulfillment",
+            order_id=order.id,
+            user_id=order.user_id,
+            new_status=FulfillmentStatus.ASSIGNED.value,
+            previous_status=FulfillmentStatus.READY_FOR_DELIVERY.value,
+        )
         return FulfillmentResponse.model_validate(fulfillment)
 
     # ------------------------------------------------------------------
@@ -397,6 +413,14 @@ class FulfillmentService:
                 "Could not update fulfillment due to a conflicting update."
             ) from exc
         self.db.refresh(fulfillment)
+        if result.applied:
+            notify_status_event(
+                resource="fulfillment",
+                order_id=order.id,
+                user_id=order.user_id,
+                new_status=result.current.value,
+                previous_status=result.previous.value,
+            )
         return FulfillmentResponse.model_validate(fulfillment)
 
     # ------------------------------------------------------------------
@@ -526,6 +550,7 @@ class FulfillmentService:
             )
             lot.reserved_quantity = lot.reserved_quantity - item.quantity
 
+        previous_fulfillment_status = fulfillment.status
         fulfillment.status = FulfillmentStatus.DELIVERED
         fulfillment.delivered_at = datetime.now(UTC)
         order.status = "COMPLETED"
@@ -543,6 +568,20 @@ class FulfillmentService:
             "FULFILLMENT_DELIVERED: fulfillment_id=%s order_id=%s lots_consumed=%s "
             "performed_by_user_id=%s",
             fulfillment.id, order.id, len(items), current_user.id,
+        )
+        notify_status_event(
+            resource="fulfillment",
+            order_id=order.id,
+            user_id=order.user_id,
+            new_status=FulfillmentStatus.DELIVERED.value,
+            previous_status=previous_fulfillment_status,
+        )
+        notify_status_event(
+            resource="order",
+            order_id=order.id,
+            user_id=order.user_id,
+            new_status="COMPLETED",
+            previous_status="CONFIRMED",
         )
         return FulfillmentResponse.model_validate(fulfillment)
 

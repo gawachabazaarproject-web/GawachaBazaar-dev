@@ -1,3 +1,4 @@
+import asyncio
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
@@ -12,6 +13,7 @@ from app.api.v1.router import api_router
 from app.core.config import settings
 from app.core.logging import logger
 from app.core.rate_limit import limiter
+from app.core.realtime import register_main_loop
 from app.core.request_id import RequestIDMiddleware
 from app.core.security_headers import SecurityHeadersMiddleware
 from app.dependencies.database import get_db
@@ -22,6 +24,9 @@ from app.schemas.base import DatabaseHealthResponse, HealthResponse
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Application lifespan events (startup and shutdown)."""
+    # Captured once here so service code (sync, threadpooled) can schedule
+    # realtime WebSocket sends onto it - see app/core/realtime.py.
+    register_main_loop(asyncio.get_running_loop())
     logger.info(
         "Starting %s [environment=%s, debug=%s]",
         settings.APP_NAME,

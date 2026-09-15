@@ -31,8 +31,18 @@ import { ToastHost } from "@/components/ToastHost";
 import { CartBar } from "@/components/CartBar";
 import { BulkRequestBar } from "@/components/home/BulkRequestBar";
 import { AppGate } from "@/navigation/AppGate";
+import { useRealtimeSync } from "@/features/orders/useRealtimeSync";
 
 SplashScreen.preventAutoHideAsync().catch(() => undefined);
+
+/** No-UI side-effect component (same shape as AppGate) - exists only
+ * because useRealtimeSync needs useQueryClient(), which requires being a
+ * descendant of QueryClientProvider in the rendered tree, not just
+ * textually nested under it in RootLayout's own return statement. */
+function RealtimeSync(): null {
+  useRealtimeSync();
+  return null;
+}
 
 export default function RootLayout() {
   const [fontsLoaded] = useFonts({
@@ -77,6 +87,7 @@ export default function RootLayout() {
       <SafeAreaProvider>
         <QueryClientProvider client={queryClient}>
           <StatusBar style="dark" />
+          <RealtimeSync />
           <AppGate>
             <Stack screenOptions={{ headerShown: false }}>
               <Stack.Screen name="(auth)" />
