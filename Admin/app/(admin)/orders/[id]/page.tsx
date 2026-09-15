@@ -4,6 +4,7 @@ import React, { use, useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { hasPermission } from "@/lib/permissions";
+import { RealtimeEvent, useOrderEvents } from "@/lib/realtime-context";
 import {
   AdminOrderDetail,
   cancelAdminOrder,
@@ -30,17 +31,17 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
   const [cancelling, setCancelling] = useState(false);
   const [cancelError, setCancelError] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (opts?: { silent?: boolean }) => {
     const token = getAccessToken();
     if (!token) return;
-    setLoading(true);
+    if (!opts?.silent) setLoading(true);
     setError(null);
     try {
       setOrder(await fetchAdminOrderDetail(token, orderId));
     } catch (err) {
       setError(err instanceof OrdersApiError ? err.message : "Unable to load this order.");
     } finally {
-      setLoading(false);
+      if (!opts?.silent) setLoading(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orderId]);
@@ -48,6 +49,18 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
   useEffect(() => {
     load();
   }, [load]);
+
+  // Live updates for this one order - payment/fulfillment/refund status
+  // changes (e.g. a delivery partner confirming delivery) show up here
+  // without a manual refresh. See lib/realtime-context.tsx.
+  useOrderEvents(
+    useCallback(
+      (event: RealtimeEvent) => {
+        if (event.order_id === orderId) load({ silent: true });
+      },
+      [orderId, load],
+    ),
+  );
 
   const handleCancel = async (reason: string) => {
     const token = getAccessToken();

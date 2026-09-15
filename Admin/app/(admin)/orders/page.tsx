@@ -3,6 +3,7 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
+import { useOrderEvents } from "@/lib/realtime-context";
 import { AdminOrderListItem, AdminOrderListResponse, fetchAdminOrders, OrdersApiError } from "@/lib/orders";
 import { formatDateTime, formatMoney } from "@/lib/format";
 import { PageHeader } from "@/components/PageHeader";
@@ -44,10 +45,10 @@ export default function OrdersPage() {
 
   const hasFilters = Boolean(q || status || paymentStatus || fulfillmentStatus || dateFrom || dateTo);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (opts?: { silent?: boolean }) => {
     const token = getAccessToken();
     if (!token) return;
-    setLoading(true);
+    if (!opts?.silent) setLoading(true);
     setError(null);
     try {
       const result = await fetchAdminOrders(token, {
@@ -64,10 +65,17 @@ export default function OrdersPage() {
     } catch (err) {
       setError(err instanceof OrdersApiError ? err.message : "Unable to load orders.");
     } finally {
-      setLoading(false);
+      if (!opts?.silent) setLoading(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page, q, status, paymentStatus, fulfillmentStatus, dateFrom, dateTo]);
+
+  // Any order/fulfillment/payment/refund status change anywhere re-fetches
+  // this same filtered/paginated list, silently - live updates instead of
+  // "reload the page to see what changed." See lib/realtime-context.tsx.
+  useOrderEvents(useCallback(() => {
+    load({ silent: true });
+  }, [load]));
 
   useEffect(() => {
     load();

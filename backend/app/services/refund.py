@@ -31,6 +31,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.logging import logger
+from app.core.realtime import notify_status_event
 from app.exceptions.base import ConflictError, NotFoundError
 from app.models.order import Order
 from app.models.payment import Payment
@@ -183,6 +184,10 @@ class RefundService:
         logger.info(
             "REFUND_APPROVED: refund_id=%s admin_user_id=%s", refund.id, admin_user_id
         )
+        self._notify_refund_event(
+            refund, new_status=RefundStatus.APPROVED.value,
+            previous_status=RefundStatus.PENDING_APPROVAL.value,
+        )
         return self._to_admin_response(refund)
 
     def reject_refund(
@@ -210,6 +215,10 @@ class RefundService:
         self.db.refresh(refund)
         logger.info(
             "REFUND_REJECTED: refund_id=%s admin_user_id=%s", refund.id, admin_user_id
+        )
+        self._notify_refund_event(
+            refund, new_status=RefundStatus.REJECTED.value,
+            previous_status=RefundStatus.PENDING_APPROVAL.value,
         )
         return self._to_admin_response(refund)
 
@@ -272,6 +281,10 @@ class RefundService:
         self.db.refresh(refund)
         self.db.refresh(transaction)
 
+        self._notify_refund_event(
+            refund, new_status=RefundStatus.PROCESSING.value,
+            previous_status=previous_status.value,
+        )
         logger.info(
             "REFUND_PROCESSING_STARTED: refund_id=%s transaction_id=%s admin_user_id=%s",
             refund.id, transaction.id, admin_user_id,
@@ -315,15 +328,23 @@ class RefundService:
         transaction.gateway_transaction_id = result.gateway_refund_id
         transaction.status = result.status
         transaction.completed_at = datetime.now(UTC)
+        new_refund_status: str | None = None
         if result.status == TransactionStatus.FAILED:
             transaction.failure_reason = (result.failure_reason or "")[:2000]
             self._apply_transition(refund, RefundStatus.FAILED)
+            new_refund_status = RefundStatus.FAILED.value
         elif result.status == TransactionStatus.SUCCESS:
             self._apply_transition(refund, RefundStatus.REFUNDED)
             refund.processed_at = datetime.now(UTC)
+            new_refund_status = RefundStatus.REFUNDED.value
 
         self.db.commit()
         self.db.refresh(refund)
+        if new_refund_status is not None:
+            self._notify_refund_event(
+                refund, new_status=new_refund_status,
+                previous_status=RefundStatus.PROCESSING.value,
+            )
         return self._to_admin_response(refund)
 
     def _fail_unresolved_attempt(
@@ -341,8 +362,11 @@ class RefundService:
             transaction.status = TransactionStatus.FAILED
             transaction.failure_reason = reason[:2000]
             transaction.completed_at = datetime.now(UTC)
+        previous_status = RefundStatus(refund.status)
+        transitioned = False
         try:
             self._apply_transition(refund, RefundStatus.FAILED)
+            transitioned = True
         except ConflictError:
             pass
         self.db.commit()
@@ -350,6 +374,11 @@ class RefundService:
             "REFUND_ATTEMPT_FAILED: refund_id=%s transaction_id=%s reason=%s",
             refund_id, transaction_id, reason,
         )
+        if transitioned:
+            self._notify_refund_event(
+                refund, new_status=RefundStatus.FAILED.value,
+                previous_status=previous_status.value,
+            )
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -365,6 +394,25 @@ class RefundService:
         if refund is None:
             raise NotFoundError("Refund not found.")
         return refund
+
+    def _notify_refund_event(
+        self, refund: Refund, *, new_status: str, previous_status: str
+    ) -> None:
+        """Refund has no user_id of its own (only order_id/payment_id) -
+        this is the one extra lookup every call site needs, centralized
+        here rather than repeated four times."""
+        owner_user_id = (
+            self.db.query(Order.user_id).filter(Order.id == refund.order_id).scalar()
+        )
+        if owner_user_id is None:
+            return
+        notify_status_event(
+            resource="refund",
+            order_id=refund.order_id,
+            user_id=owner_user_id,
+            new_status=new_status,
+            previous_status=previous_status,
+        )
 
     @staticmethod
     def _apply_transition(refund: Refund, target: RefundStatus) -> None:
