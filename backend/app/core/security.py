@@ -75,6 +75,28 @@ def hash_refresh_token(token: str) -> str:
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
+def generate_verification_code() -> str:
+    """6-digit numeric code for the contact-change verification flow.
+
+    `secrets.randbelow` (CSPRNG), not `random` - this is a security control,
+    not a display value.
+    """
+    return f"{secrets.randbelow(1_000_000):06d}"
+
+
+def hash_verification_code(code: str) -> str:
+    """Compute SHA-256 digest of a 6-digit verification code for storage.
+
+    Unlike `hash_refresh_token`, the input here has very low entropy (10^6
+    possibilities) - SHA-256 alone would be brute-forceable offline if this
+    hash ever leaked. The actual guessing protection is
+    ContactChangeRequest.attempts + expires_at (see
+    app/services/contact_change.py), not the hash algorithm; this function
+    only prevents the raw code from sitting in the database in plaintext.
+    """
+    return hashlib.sha256(code.encode("utf-8")).hexdigest()
+
+
 def create_access_token(
     data: dict[str, Any] | None = None,
     *,

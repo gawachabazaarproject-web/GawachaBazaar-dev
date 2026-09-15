@@ -1,7 +1,7 @@
 """Canonical baseline role names for RBAC.
 
 `roles.name` in the database is the authoritative record of which roles exist.
-This module is the single in-code representation of those six active role
+This module is the single in-code representation of those active role
 names, so application code never scatters raw role-name string literals.
 
 Farmer/Farm are future capabilities and intentionally have no role here.
@@ -13,6 +13,7 @@ ADMIN = "ADMIN"
 HUB_STAFF = "HUB_STAFF"
 OPERATIONS = "OPERATIONS"
 DELIVERY_PARTNER = "DELIVERY_PARTNER"
+SUPPORT = "SUPPORT"
 
 BASELINE_ROLES: tuple[str, ...] = (
     CUSTOMER,
@@ -21,4 +22,5 @@ BASELINE_ROLES: tuple[str, ...] = (
     HUB_STAFF,
     OPERATIONS,
     DELIVERY_PARTNER,
+    SUPPORT,
 )

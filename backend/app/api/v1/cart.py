@@ -17,8 +17,10 @@ from app.schemas.cart import (
     UpdateCartItemRequest,
 )
 from app.schemas.order import CheckoutRequest, OrderDetailResponse
+from app.schemas.promotion import EvaluatePromotionRequest, PromotionEvaluationResponse
 from app.services.cart import CartService
 from app.services.order import OrderService
+from app.services.promotion import PromotionService
 
 router = APIRouter(dependencies=[Depends(require_roles(CUSTOMER))])
 
@@ -87,6 +89,19 @@ def clear_cart(
     current_user: User = Depends(get_current_user), db: Session = Depends(get_db)
 ) -> None:
     CartService(db).clear_cart(current_user.id)
+
+
+@router.post(
+    "/evaluate-promo",
+    response_model=PromotionEvaluationResponse,
+    summary="Preview a promo code (or the best automatic promotion) against the current cart",
+)
+def evaluate_promo(
+    payload: EvaluatePromotionRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> PromotionEvaluationResponse:
+    return PromotionService(db).preview_for_active_cart(current_user.id, payload.promo_code)
 
 
 @router.post(

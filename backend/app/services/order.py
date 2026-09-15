@@ -33,20 +33,30 @@ import secrets
 from datetime import UTC, datetime
 from decimal import ROUND_HALF_UP, Decimal
 
+from sqlalchemy import func, or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.logging import logger
-from app.exceptions.base import ConflictError, NotFoundError
+from app.exceptions.base import BusinessValidationError, ConflictError, NotFoundError
 from app.models.address import Address
 from app.models.cart import Cart
 from app.models.cart_item import CartItem
+from app.models.fulfillment import Fulfillment
 from app.models.order import Order
 from app.models.order_address import OrderAddress
 from app.models.order_item import OrderItem
 from app.models.payment import Payment
 from app.models.product import Product
 from app.models.product_variant import ProductVariant
+from app.models.refund import Refund
+from app.models.user import User
+from app.schemas.admin_order import (
+    AdminOrderDetailResponse,
+    AdminOrderListItemResponse,
+    AdminOrderListResponse,
+)
+from app.schemas.fulfillment import FulfillmentResponse
 from app.schemas.order import (
     CheckoutRequest,
     OrderAddressResponse,
@@ -55,6 +65,9 @@ from app.schemas.order import (
     OrderListResponse,
     OrderResponse,
 )
+from app.schemas.payment import PaymentResponse
+from app.schemas.refund import AdminRefundResponse
+from app.services.admin_audit import AdminAuditService
 from app.services.inventory_reservation import InventoryReservationService
 from app.services.order_state import (
     IllegalOrderTransitionError,
@@ -62,6 +75,7 @@ from app.services.order_state import (
     transition_order_status,
 )
 from app.services.pricing import get_current_prices_for_variants
+from app.services.promotion import CartLineForPromo, PromotionService
 from app.services.refund import RefundService
 
 _ACTIVE = "ACTIVE"
@@ -111,6 +125,141 @@ class OrderService:
         return self._to_order_detail(order)
 
     # ------------------------------------------------------------------
+    # Admin reads (Admin Panel Phase 2/3) - unscoped by owner, gated by
+    # `require_permission("orders.read")` at the route level, not
+    # ownership. Every field returned is read straight off the same
+    # authoritative rows the customer-facing endpoints use - total_amount
+    # is never recomputed, and payment/fulfillment/refund status are the
+    # backend's own state-machine values (see order_state.py /
+    # payment_state.py / fulfillment_state.py / refund_state.py), not a
+    # frontend interpretation of them.
+    # ------------------------------------------------------------------
+
+    def admin_list_orders(
+        self,
+        page: int,
+        page_size: int,
+        status: str | None = None,
+        payment_status: str | None = None,
+        fulfillment_status: str | None = None,
+        date_from: datetime | None = None,
+        date_to: datetime | None = None,
+        q: str | None = None,
+        user_id: int | None = None,
+    ) -> AdminOrderListResponse:
+        query = self.db.query(Order).join(User, Order.user_id == User.id)
+
+        if user_id is not None:
+            query = query.filter(Order.user_id == user_id)
+        if status:
+            query = query.filter(Order.status == status)
+        if date_from:
+            query = query.filter(Order.placed_at >= date_from)
+        if date_to:
+            query = query.filter(Order.placed_at <= date_to)
+        if q:
+            like = f"%{q}%"
+            query = query.filter(
+                or_(
+                    Order.order_number.ilike(like),
+                    User.name.ilike(like),
+                    User.email.ilike(like),
+                    User.phone.ilike(like),
+                )
+            )
+        if payment_status:
+            query = query.join(Payment, Payment.order_id == Order.id).filter(
+                Payment.status == payment_status
+            )
+        if fulfillment_status:
+            query = query.join(Fulfillment, Fulfillment.order_id == Order.id).filter(
+                Fulfillment.status == fulfillment_status
+            )
+
+        total = query.count()
+        orders = (
+            query.order_by(Order.placed_at.desc(), Order.id.desc())
+            .offset((page - 1) * page_size)
+            .limit(page_size)
+            .all()
+        )
+
+        if not orders:
+            return AdminOrderListResponse(items=[], page=page, page_size=page_size, total=total)
+
+        order_ids = [o.id for o in orders]
+        customers = {u.id: u for u in self.db.query(User).filter(User.id.in_({o.user_id for o in orders}))}
+        payments = {
+            p.order_id: p
+            for p in self.db.query(Payment).filter(Payment.order_id.in_(order_ids))
+        }
+        fulfillments = {
+            f.order_id: f
+            for f in self.db.query(Fulfillment).filter(Fulfillment.order_id.in_(order_ids))
+        }
+        item_counts = dict(
+            self.db.query(OrderItem.order_id, func.count(OrderItem.id))
+            .filter(OrderItem.order_id.in_(order_ids))
+            .group_by(OrderItem.order_id)
+            .all()
+        )
+
+        items = []
+        for order in orders:
+            customer = customers[order.user_id]
+            payment = payments.get(order.id)
+            fulfillment = fulfillments.get(order.id)
+            items.append(
+                AdminOrderListItemResponse(
+                    id=order.id,
+                    order_number=order.order_number,
+                    status=order.status,
+                    total_amount=order.total_amount,
+                    discount_amount=order.discount_amount,
+                    applied_promo_code=order.applied_promo_code,
+                    currency=order.currency,
+                    placed_at=order.placed_at,
+                    customer_id=customer.id,
+                    customer_name=customer.name,
+                    customer_email=customer.email,
+                    item_count=item_counts.get(order.id, 0),
+                    payment_status=payment.status if payment else None,
+                    payment_method=payment.payment_method if payment else None,
+                    fulfillment_status=fulfillment.status if fulfillment else None,
+                    delivery_partner_user_id=(
+                        fulfillment.delivery_partner_user_id if fulfillment else None
+                    ),
+                )
+            )
+
+        return AdminOrderListResponse(items=items, page=page, page_size=page_size, total=total)
+
+    def admin_get_order_detail(self, order_id: int) -> AdminOrderDetailResponse:
+        order = self.db.query(Order).filter(Order.id == order_id).first()
+        if not order:
+            raise NotFoundError("Order not found.")
+
+        customer = self.db.query(User).filter(User.id == order.user_id).first()
+        payment = self.db.query(Payment).filter(Payment.order_id == order.id).first()
+        fulfillment = (
+            self.db.query(Fulfillment).filter(Fulfillment.order_id == order.id).first()
+        )
+        refund = self.db.query(Refund).filter(Refund.order_id == order.id).first()
+        base = self._to_order_detail(order)
+
+        return AdminOrderDetailResponse(
+            **base.model_dump(),
+            cancelled_by_user_id=order.cancelled_by_user_id,
+            customer_id=customer.id,
+            customer_name=customer.name,
+            customer_email=customer.email,
+            customer_phone=customer.phone,
+            payment=PaymentResponse.model_validate(payment) if payment else None,
+            fulfillment=FulfillmentResponse.model_validate(fulfillment) if fulfillment else None,
+            refund=AdminRefundResponse.model_validate(refund) if refund else None,
+        )
+
+    # ------------------------------------------------------------------
     # Cancellation (Phase 18)
     # ------------------------------------------------------------------
 
@@ -132,7 +281,7 @@ class OrderService:
         """Administrative cancellation - no ownership constraint."""
         order = self._lock_order_for_cancel(order_id)
         return self._cancel_locked_order(
-            order, actor_user_id=admin_user_id, reason=reason
+            order, actor_user_id=admin_user_id, reason=reason, is_admin_action=True
         )
 
     def _lock_order_for_cancel(self, order_id: int) -> Order:
@@ -150,7 +299,12 @@ class OrderService:
         return order
 
     def _cancel_locked_order(
-        self, order: Order, *, actor_user_id: int, reason: str | None
+        self,
+        order: Order,
+        *,
+        actor_user_id: int,
+        reason: str | None,
+        is_admin_action: bool = False,
     ) -> OrderDetailResponse:
         """Caller must already hold the order row lock. Central rule: an
         order may be cancelled any time before delivery is completed -
@@ -201,6 +355,13 @@ class OrderService:
             order.id, now=now, reason="order_cancelled"
         )
 
+        # Reverse promotion usage (frees the global/per-customer limit for
+        # reuse) - a no-op if this order never redeemed one. The order's
+        # own subtotal/discount/total_amount are left untouched: historical
+        # pricing must never change once an order exists.
+        if order.promotion_id is not None:
+            PromotionService(self.db).reverse_redemption_for_order(order.id, now=now)
+
         # Refund eligibility only for an online payment that actually
         # reached PAID - COD never creates a refund (nothing was
         # collected), and an online payment that never reached PAID has
@@ -208,6 +369,17 @@ class OrderService:
         # ADMIN approval + processing ever moves money.
         payment = self.db.query(Payment).filter(Payment.order_id == order.id).first()
         RefundService(self.db).create_refund_if_eligible(order, payment)
+
+        if is_admin_action:
+            AdminAuditService(self.db).record(
+                admin_user_id=actor_user_id,
+                action="order.cancel",
+                resource_type="order",
+                resource_id=order.id,
+                previous_state=result.previous.value,
+                new_state=result.current.value,
+                reason=reason,
+            )
 
         try:
             self.db.commit()
@@ -320,7 +492,8 @@ class OrderService:
             raise NotFoundError("Address not found.")
 
         order_item_rows = []
-        total_amount = Decimal("0")
+        promo_lines = []
+        subtotal_amount = Decimal("0")
         for item in items:
             variant = variants[item.variant_id]
             product = products[variant.product_id]
@@ -328,7 +501,7 @@ class OrderService:
             line_total = (item.quantity * price.price).quantize(
                 _CENTS, rounding=ROUND_HALF_UP
             )
-            total_amount += line_total
+            subtotal_amount += line_total
             order_item_rows.append(
                 {
                     "variant_id": variant.id,
@@ -341,15 +514,42 @@ class OrderService:
                     "total_price": line_total,
                 }
             )
+            promo_lines.append(
+                CartLineForPromo(
+                    variant_id=variant.id,
+                    product_id=product.id,
+                    category_id=product.category_id,
+                    quantity=item.quantity,
+                    line_total=line_total,
+                )
+            )
+
+        # Backend-authoritative discount calculation - the same engine the
+        # customer-facing preview endpoint uses. The client-supplied
+        # `promo_code` is only ever a lookup key here, never a source of
+        # the discount amount itself.
+        now = datetime.now(UTC)
+        promotion_service = PromotionService(self.db)
+        evaluation = promotion_service.evaluate_for_cart(
+            user_id=user_id, cart_items=promo_lines, promo_code=data.promo_code, now=now
+        )
+        if data.promo_code and evaluation.code_was_invalid:
+            raise BusinessValidationError(evaluation.message)
+
+        total_amount = evaluation.final_total
 
         order = Order(
             user_id=user_id,
             cart_id=cart.id,
             order_number=self._generate_order_number(),
             status="PENDING",
+            subtotal_amount=subtotal_amount,
+            discount_amount=evaluation.discount_amount,
             total_amount=total_amount,
             currency=currency,
-            placed_at=datetime.now(UTC),
+            promotion_id=evaluation.promotion.id if evaluation.promotion else None,
+            applied_promo_code=evaluation.promotion.code if evaluation.promotion else None,
+            placed_at=now,
         )
         self.db.add(order)
         self.db.flush()  # assign order.id for FK references below
@@ -364,6 +564,15 @@ class OrderService:
         InventoryReservationService(self.db).create_reservation_for_order(
             order, created_items
         )
+
+        if evaluation.promotion is not None:
+            promotion_service.record_redemption(
+                promotion_id=evaluation.promotion.id,
+                order_id=order.id,
+                customer_user_id=user_id,
+                discount_amount=evaluation.discount_amount,
+                now=now,
+            )
 
         self.db.add(
             OrderAddress(

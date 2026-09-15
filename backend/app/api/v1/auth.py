@@ -107,6 +107,7 @@ def logout(
 )
 def get_me(
     current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ) -> UserResponse:
     return UserResponse(
         id=current_user.id,
@@ -115,4 +116,5 @@ def get_me(
         phone=current_user.phone,
         status=current_user.status,
         created_at=current_user.created_at,
+        roles=AuthService(db).get_role_names(current_user.id),
     )

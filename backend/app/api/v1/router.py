@@ -13,14 +13,17 @@ from app.api.v1.bulk_orders import admin_router as bulk_orders_admin_router
 from app.api.v1.bulk_orders import customer_router as bulk_orders_customer_router
 from app.api.v1.cart import router as cart_router
 from app.api.v1.catalog import router as catalog_router
+from app.api.v1.customers import router as customers_router
 from app.api.v1.fulfillments import router as fulfillments_router
 from app.api.v1.inventory import router as inventory_router
 from app.api.v1.orders import admin_router as orders_admin_router
 from app.api.v1.orders import router as orders_router
+from app.api.v1.orders import staff_router as orders_staff_router
 from app.api.v1.packaging import router as packaging_router
 from app.api.v1.payments import admin_router as payments_admin_router
 from app.api.v1.payments import router as payments_router
 from app.api.v1.payments import webhook_router as payments_webhook_router
+from app.api.v1.promotions import router as promotions_router
 from app.api.v1.suppliers import router as suppliers_router
 from app.schemas.base import PingResponse
 
@@ -45,7 +48,16 @@ api_router.include_router(packaging_router, prefix="/packaging", tags=["packagin
 api_router.include_router(cart_router, prefix="/cart", tags=["cart"])
 
 # Order domain routes (CUSTOMER-only, user-scoped reads + self-cancellation;
-# admin_router: ADMIN-only administrative cancellation)
+# admin_router: ADMIN-only administrative cancellation; staff_router:
+# orders.read-permission list/detail for the admin panel).
+#
+# staff_router MUST be registered before orders_router: both define a GET
+# at the same single-segment shape under /orders (literal "/admin" vs the
+# customer router's `/{order_id}` catch-all), and FastAPI/Starlette match
+# routes in registration order - registering the customer catch-all first
+# would swallow `GET /orders/admin` as an attempt to parse "admin" as an
+# order id (422) before the staff route is ever tried.
+api_router.include_router(orders_staff_router, prefix="/orders", tags=["orders"])
 api_router.include_router(orders_router, prefix="/orders", tags=["orders"])
 api_router.include_router(orders_admin_router, prefix="/orders", tags=["orders"])
 
@@ -77,6 +89,15 @@ api_router.include_router(
 api_router.include_router(
     bulk_orders_admin_router, prefix="/bulk-orders", tags=["bulk-orders"]
 )
+
+# Promotion domain routes (ADMIN-only management; gated by promotions.*
+# permissions). Customer-facing preview lives at POST /cart/evaluate-promo.
+api_router.include_router(promotions_router, prefix="/promotions", tags=["promotions"])
+
+# Customer Management domain routes (ADMIN-only; gated by customers.*
+# permissions). A "customer" is an existing User with the CUSTOMER role -
+# no separate identity system.
+api_router.include_router(customers_router, prefix="/customers", tags=["customers"])
 
 
 @api_router.get(

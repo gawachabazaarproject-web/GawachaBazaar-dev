@@ -1,11 +1,22 @@
 """Catalog domain routes: public browsing (no auth) and ADMIN-only management."""
 
+from datetime import datetime
+from decimal import Decimal
+
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
 
-from app.core.roles import ADMIN
-from app.dependencies.auth import require_roles
+from app.dependencies.auth import require_permission
 from app.dependencies.database import get_db
+from app.models.user import User
+from app.schemas.admin_catalog import (
+    AdminCategoryDetailResponse,
+    AdminCategoryListResponse,
+    AdminProductDetailResponse,
+    AdminProductListResponse,
+    ProductActivityResponse,
+)
+from app.schemas.admin_catalog import MAX_PAGE_SIZE as ADMIN_MAX_PAGE_SIZE
 from app.schemas.catalog import (
     MAX_PAGE_SIZE,
     CategoryDetailResponse,
@@ -31,7 +42,124 @@ from app.services.catalog import CatalogService
 
 router = APIRouter()
 
-_admin_only = [Depends(require_roles(ADMIN))]
+
+# ---------------------------------------------------------------------------
+# Admin catalog reads - MUST be registered before the public `/products`
+# routes below: `GET /products/admin` and `GET /products/{product_id}` are
+# the same single-segment path shape, and FastAPI/Starlette match routes in
+# registration order (see the identical fix already applied to
+# app/api/v1/router.py for orders_staff_router vs orders_router). Listing
+# these routes first means "admin" is tried as a literal before the
+# customer catch-all ever gets a chance to swallow it as a product id.
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    "/products/admin",
+    response_model=AdminProductListResponse,
+    summary="List/search/filter every product regardless of status (admin panel)",
+)
+def admin_list_products(
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=ADMIN_MAX_PAGE_SIZE),
+    status_: str | None = Query(default=None, alias="status"),
+    category_id: int | None = Query(default=None),
+    q: str | None = Query(default=None, max_length=150, description="Product name or slug"),
+    price_min: Decimal | None = Query(default=None, ge=0),
+    price_max: Decimal | None = Query(default=None, ge=0),
+    created_from: datetime | None = Query(default=None),
+    created_to: datetime | None = Query(default=None),
+    updated_from: datetime | None = Query(default=None),
+    updated_to: datetime | None = Query(default=None),
+    current_user: User = Depends(require_permission("products.read")),
+    db: Session = Depends(get_db),
+) -> AdminProductListResponse:
+    return CatalogService(db).admin_list_products(
+        page,
+        page_size,
+        status_,
+        category_id,
+        q,
+        price_min,
+        price_max,
+        created_from,
+        created_to,
+        updated_from,
+        updated_to,
+    )
+
+
+@router.get(
+    "/products/admin/{product_id}",
+    response_model=AdminProductDetailResponse,
+    summary="Get the complete admin detail for any product regardless of status",
+)
+def admin_get_product(
+    product_id: int,
+    current_user: User = Depends(require_permission("products.read")),
+    db: Session = Depends(get_db),
+) -> AdminProductDetailResponse:
+    return CatalogService(db).admin_get_product_detail(product_id)
+
+
+@router.get(
+    "/products/admin/{product_id}/activity",
+    response_model=ProductActivityResponse,
+    summary="Real audit-log activity for this product and its variants/prices",
+)
+def admin_get_product_activity(
+    product_id: int,
+    current_user: User = Depends(require_permission("products.read")),
+    db: Session = Depends(get_db),
+) -> ProductActivityResponse:
+    return CatalogService(db).admin_get_product_activity(product_id)
+
+
+# `/categories/admin` vs `/categories/{category_id}` has the exact same
+# registration-order hazard as `/products/admin` above - same fix.
+
+
+@router.get(
+    "/categories/admin",
+    response_model=AdminCategoryListResponse,
+    summary="List/search/filter every category regardless of status (admin panel)",
+)
+def admin_list_categories(
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=ADMIN_MAX_PAGE_SIZE),
+    status_: str | None = Query(default=None, alias="status"),
+    parent_id: int | None = Query(default=None),
+    q: str | None = Query(default=None, max_length=150, description="Category name or slug"),
+    current_user: User = Depends(require_permission("categories.read")),
+    db: Session = Depends(get_db),
+) -> AdminCategoryListResponse:
+    return CatalogService(db).admin_list_categories(page, page_size, status_, parent_id, q)
+
+
+@router.get(
+    "/categories/admin/{category_id}",
+    response_model=AdminCategoryDetailResponse,
+    summary="Get the complete admin detail for any category regardless of status",
+)
+def admin_get_category(
+    category_id: int,
+    current_user: User = Depends(require_permission("categories.read")),
+    db: Session = Depends(get_db),
+) -> AdminCategoryDetailResponse:
+    return CatalogService(db).admin_get_category_detail(category_id)
+
+
+@router.get(
+    "/categories/admin/{category_id}/activity",
+    response_model=ProductActivityResponse,
+    summary="Real audit-log activity for this category",
+)
+def admin_get_category_activity(
+    category_id: int,
+    current_user: User = Depends(require_permission("categories.read")),
+    db: Session = Depends(get_db),
+) -> ProductActivityResponse:
+    return CatalogService(db).admin_get_category_activity(category_id)
 
 
 # ---------------------------------------------------------------------------
@@ -89,7 +217,9 @@ def get_product(product_id: int, db: Session = Depends(get_db)) -> ProductRespon
 
 
 # ---------------------------------------------------------------------------
-# Admin catalog management - ADMIN role required
+# Admin catalog management - granular products.*/categories.* permissions
+# (see app/core/permissions.py) - currently only ADMIN holds any of them,
+# same effective access as the `require_roles(ADMIN)` this replaces.
 # ---------------------------------------------------------------------------
 
 
@@ -98,24 +228,27 @@ def get_product(product_id: int, db: Session = Depends(get_db)) -> ProductRespon
     response_model=CategoryResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Create a category",
-    dependencies=_admin_only,
 )
 def create_category(
-    payload: CreateCategoryRequest, db: Session = Depends(get_db)
+    payload: CreateCategoryRequest,
+    current_user: User = Depends(require_permission("categories.create")),
+    db: Session = Depends(get_db),
 ) -> CategoryResponse:
-    return CatalogService(db).create_category(payload)
+    return CatalogService(db).create_category(payload, current_user.id)
 
 
 @router.patch(
     "/categories/{category_id}",
     response_model=CategoryResponse,
     summary="Update a category (including lifecycle status)",
-    dependencies=_admin_only,
 )
 def update_category(
-    category_id: int, payload: UpdateCategoryRequest, db: Session = Depends(get_db)
+    category_id: int,
+    payload: UpdateCategoryRequest,
+    current_user: User = Depends(require_permission("categories.update")),
+    db: Session = Depends(get_db),
 ) -> CategoryResponse:
-    return CatalogService(db).update_category(category_id, payload)
+    return CatalogService(db).update_category(category_id, payload, current_user.id)
 
 
 @router.post(
@@ -123,24 +256,27 @@ def update_category(
     response_model=ProductResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Create a product",
-    dependencies=_admin_only,
 )
 def create_product(
-    payload: CreateProductRequest, db: Session = Depends(get_db)
+    payload: CreateProductRequest,
+    current_user: User = Depends(require_permission("products.create")),
+    db: Session = Depends(get_db),
 ) -> ProductResponse:
-    return CatalogService(db).create_product(payload)
+    return CatalogService(db).create_product(payload, current_user.id)
 
 
 @router.patch(
     "/products/{product_id}",
     response_model=ProductResponse,
     summary="Update a product (including lifecycle status)",
-    dependencies=_admin_only,
 )
 def update_product(
-    product_id: int, payload: UpdateProductRequest, db: Session = Depends(get_db)
+    product_id: int,
+    payload: UpdateProductRequest,
+    current_user: User = Depends(require_permission("products.update")),
+    db: Session = Depends(get_db),
 ) -> ProductResponse:
-    return CatalogService(db).update_product(product_id, payload)
+    return CatalogService(db).update_product(product_id, payload, current_user.id)
 
 
 @router.post(
@@ -148,28 +284,28 @@ def update_product(
     response_model=ProductVariantResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Create a product variant",
-    dependencies=_admin_only,
 )
 def create_variant(
     product_id: int,
     payload: CreateProductVariantRequest,
+    current_user: User = Depends(require_permission("products.update")),
     db: Session = Depends(get_db),
 ) -> ProductVariantResponse:
-    return CatalogService(db).create_variant(product_id, payload)
+    return CatalogService(db).create_variant(product_id, payload, current_user.id)
 
 
 @router.patch(
     "/variants/{variant_id}",
     response_model=ProductVariantResponse,
     summary="Update a product variant (including lifecycle status)",
-    dependencies=_admin_only,
 )
 def update_variant(
     variant_id: int,
     payload: UpdateProductVariantRequest,
+    current_user: User = Depends(require_permission("products.update")),
     db: Session = Depends(get_db),
 ) -> ProductVariantResponse:
-    return CatalogService(db).update_variant(variant_id, payload)
+    return CatalogService(db).update_variant(variant_id, payload, current_user.id)
 
 
 @router.post(
@@ -177,36 +313,41 @@ def update_variant(
     response_model=ProductImageResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Add a product image",
-    dependencies=_admin_only,
 )
 def create_image(
     product_id: int,
     payload: CreateProductImageRequest,
+    current_user: User = Depends(require_permission("products.manage_media")),
     db: Session = Depends(get_db),
 ) -> ProductImageResponse:
-    return CatalogService(db).create_image(product_id, payload)
+    return CatalogService(db).create_image(product_id, payload, current_user.id)
 
 
 @router.patch(
     "/images/{image_id}",
     response_model=ProductImageResponse,
     summary="Update a product image, including primary image handoff",
-    dependencies=_admin_only,
 )
 def update_image(
-    image_id: int, payload: UpdateProductImageRequest, db: Session = Depends(get_db)
+    image_id: int,
+    payload: UpdateProductImageRequest,
+    current_user: User = Depends(require_permission("products.manage_media")),
+    db: Session = Depends(get_db),
 ) -> ProductImageResponse:
-    return CatalogService(db).update_image(image_id, payload)
+    return CatalogService(db).update_image(image_id, payload, current_user.id)
 
 
 @router.delete(
     "/images/{image_id}",
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Delete a product image",
-    dependencies=_admin_only,
 )
-def delete_image(image_id: int, db: Session = Depends(get_db)) -> None:
-    CatalogService(db).delete_image(image_id)
+def delete_image(
+    image_id: int,
+    current_user: User = Depends(require_permission("products.manage_media")),
+    db: Session = Depends(get_db),
+) -> None:
+    CatalogService(db).delete_image(image_id, current_user.id)
 
 
 @router.post(
@@ -214,21 +355,25 @@ def delete_image(image_id: int, db: Session = Depends(get_db)) -> None:
     response_model=PriceResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Create a new price for a variant (preserves price history)",
-    dependencies=_admin_only,
 )
 def create_price(
-    variant_id: int, payload: CreatePriceRequest, db: Session = Depends(get_db)
+    variant_id: int,
+    payload: CreatePriceRequest,
+    current_user: User = Depends(require_permission("products.manage_pricing")),
+    db: Session = Depends(get_db),
 ) -> PriceResponse:
-    return CatalogService(db).create_price(variant_id, payload)
+    return CatalogService(db).create_price(variant_id, payload, current_user.id)
 
 
 @router.patch(
     "/prices/{price_id}",
     response_model=PriceResponse,
     summary="Activate/deactivate or end a price's validity window",
-    dependencies=_admin_only,
 )
 def update_price(
-    price_id: int, payload: UpdatePriceRequest, db: Session = Depends(get_db)
+    price_id: int,
+    payload: UpdatePriceRequest,
+    current_user: User = Depends(require_permission("products.manage_pricing")),
+    db: Session = Depends(get_db),
 ) -> PriceResponse:
-    return CatalogService(db).update_price(price_id, payload)
+    return CatalogService(db).update_price(price_id, payload, current_user.id)

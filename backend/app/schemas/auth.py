@@ -69,6 +69,12 @@ class UserResponse(BaseSchema):
     phone: str
     status: str
     created_at: datetime
+    roles: list[str] = Field(
+        default_factory=list,
+        description="Role names currently assigned to this user (from user_roles), "
+        "e.g. ['ADMIN']. Read from the database on every auth response, never from "
+        "the JWT, so a role change takes effect on the user's next login/refresh.",
+    )
 
 
 class TokenResponse(BaseSchema):

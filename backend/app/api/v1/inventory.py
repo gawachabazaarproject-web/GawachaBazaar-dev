@@ -10,11 +10,25 @@ from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
 
 from app.core.roles import ADMIN, HUB_STAFF, OPERATIONS
-from app.dependencies.auth import get_current_user, require_roles
+from app.dependencies.auth import get_current_user, require_permission, require_roles
 from app.dependencies.database import get_db
 from app.models.user import User
+from app.schemas.admin_inventory import (
+    AdminInventoryLotDetailResponse,
+    AdminInventoryLotListItemResponse,
+    AdminInventoryLotListResponse,
+    InventoryDashboardResponse,
+    ReceiveStockRequest,
+    ReconcileStockRequest,
+    TransferStockRequest,
+    TransferStockResponse,
+)
+from app.schemas.admin_inventory import MAX_PAGE_SIZE as ADMIN_MAX_PAGE_SIZE
 from app.schemas.inventory import (
     MAX_PAGE_SIZE,
+    BatchListResponse,
+    BatchResponse,
+    CreateBatchRequest,
     CreateInventoryLocationRequest,
     CreateInventoryLotRequest,
     CreateStockMovementRequest,
@@ -226,3 +240,151 @@ def expire_reservation(
     reservation_id: int, db: Session = Depends(get_db)
 ) -> InventoryReservationResponse:
     return InventoryReservationService(db).expire_reservation_response(reservation_id)
+
+
+# ---------------------------------------------------------------------------
+# Batches (Admin Panel Inventory module) - app/models/batch.py existed with
+# no API surface at all before this; additive only, no migration.
+# ---------------------------------------------------------------------------
+
+
+@router.post(
+    "/batches",
+    response_model=BatchResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Create a batch (harvest lot) for stock receiving",
+)
+def create_batch(
+    payload: CreateBatchRequest,
+    current_user: User = Depends(require_permission("inventory.receive")),
+    db: Session = Depends(get_db),
+) -> BatchResponse:
+    return InventoryService(db).create_batch(payload, current_user.id)
+
+
+@router.get(
+    "/batches",
+    response_model=BatchListResponse,
+    summary="List batches",
+)
+def list_batches(
+    product_id: int | None = Query(default=None),
+    status_: str | None = Query(default=None, alias="status"),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=MAX_PAGE_SIZE),
+    current_user: User = Depends(require_permission("inventory.read")),
+    db: Session = Depends(get_db),
+) -> BatchListResponse:
+    return InventoryService(db).list_batches(product_id, status_, page, page_size)
+
+
+@router.get(
+    "/batches/{batch_id}",
+    response_model=BatchResponse,
+    summary="Get a batch",
+)
+def get_batch(
+    batch_id: int,
+    current_user: User = Depends(require_permission("inventory.read")),
+    db: Session = Depends(get_db),
+) -> BatchResponse:
+    return InventoryService(db).get_batch_response(batch_id)
+
+
+# ---------------------------------------------------------------------------
+# Admin: enriched lot list/detail + dashboard (Admin Panel Inventory module)
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    "/admin/dashboard",
+    response_model=InventoryDashboardResponse,
+    summary="Real-time inventory operational summary",
+)
+def admin_inventory_dashboard(
+    current_user: User = Depends(require_permission("inventory.read")),
+    db: Session = Depends(get_db),
+) -> InventoryDashboardResponse:
+    return InventoryService(db).admin_dashboard()
+
+
+@router.get(
+    "/admin/lots",
+    response_model=AdminInventoryLotListResponse,
+    summary="List/search/filter inventory lots with product/warehouse/batch context",
+)
+def admin_list_lots(
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=ADMIN_MAX_PAGE_SIZE),
+    location_id: int | None = Query(default=None),
+    category_id: int | None = Query(default=None),
+    status_: str | None = Query(default=None, alias="status"),
+    operational_status: str | None = Query(default=None),
+    batch_id: int | None = Query(default=None),
+    q: str | None = Query(default=None, max_length=150, description="Product name, SKU, or batch code"),
+    current_user: User = Depends(require_permission("inventory.read")),
+    db: Session = Depends(get_db),
+) -> AdminInventoryLotListResponse:
+    return InventoryService(db).admin_list_lots(
+        page, page_size, location_id, category_id, status_, operational_status, batch_id, q
+    )
+
+
+@router.get(
+    "/admin/lots/{lot_id}",
+    response_model=AdminInventoryLotDetailResponse,
+    summary="Complete operational detail for one inventory lot",
+)
+def admin_get_lot_detail(
+    lot_id: int,
+    current_user: User = Depends(require_permission("inventory.read")),
+    db: Session = Depends(get_db),
+) -> AdminInventoryLotDetailResponse:
+    return InventoryService(db).admin_get_lot_detail(lot_id)
+
+
+# ---------------------------------------------------------------------------
+# Admin: transactional stock actions - each is one domain action, not a raw
+# PATCH quantity, and each goes through the same locked apply_movement()
+# core the raw POST /lots/{id}/movements endpoint uses.
+# ---------------------------------------------------------------------------
+
+
+@router.post(
+    "/admin/receive",
+    response_model=AdminInventoryLotListItemResponse,
+    summary="Receive stock into a (batch, variant, location) lot - creates the lot if needed",
+)
+def admin_receive_stock(
+    payload: ReceiveStockRequest,
+    current_user: User = Depends(require_permission("inventory.receive")),
+    db: Session = Depends(get_db),
+) -> AdminInventoryLotListItemResponse:
+    return InventoryService(db).receive_stock(payload, current_user.id)
+
+
+@router.post(
+    "/admin/lots/{lot_id}/reconcile",
+    response_model=AdminInventoryLotListItemResponse,
+    summary="Reconcile a lot against a physical count - computes and applies the difference",
+)
+def admin_reconcile_stock(
+    lot_id: int,
+    payload: ReconcileStockRequest,
+    current_user: User = Depends(require_permission("inventory.reconcile")),
+    db: Session = Depends(get_db),
+) -> AdminInventoryLotListItemResponse:
+    return InventoryService(db).reconcile_stock(lot_id, payload, current_user.id)
+
+
+@router.post(
+    "/admin/transfer",
+    response_model=TransferStockResponse,
+    summary="Atomically transfer stock from one lot to a different warehouse",
+)
+def admin_transfer_stock(
+    payload: TransferStockRequest,
+    current_user: User = Depends(require_permission("inventory.transfer")),
+    db: Session = Depends(get_db),
+) -> TransferStockResponse:
+    return InventoryService(db).transfer_stock(payload, current_user.id)

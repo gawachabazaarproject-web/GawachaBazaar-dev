@@ -49,6 +49,7 @@ yarn-error.log*
 out/
 dist/
 .expo/
+*.tsbuildinfo
 
 # IDE / OS
 .idea/

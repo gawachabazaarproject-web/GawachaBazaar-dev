@@ -67,6 +67,20 @@ class AuthService:
     def __init__(self, db: Session) -> None:
         self.db = db
 
+    def get_role_names(self, user_id: int) -> list[str]:
+        """Current role names for a user, read live from `user_roles`/`roles`.
+
+        Never derived from the JWT or cached - a role granted/revoked takes
+        effect the moment this is called again (next login, refresh, or /me).
+        """
+        rows = (
+            self.db.query(Role.name)
+            .join(UserRole, UserRole.role_id == Role.id)
+            .filter(UserRole.user_id == user_id)
+            .all()
+        )
+        return sorted(name for (name,) in rows)
+
     def register_user(
         self,
         data: RegisterRequest,
@@ -159,6 +173,7 @@ class AuthService:
                 phone=user.phone,
                 status=user.status,
                 created_at=user.created_at,
+                roles=[customer_role.name],
             ),
         )
 
@@ -238,6 +253,7 @@ class AuthService:
                 phone=user.phone,
                 status=user.status,
                 created_at=user.created_at,
+                roles=self.get_role_names(user.id),
             ),
         )
 
