@@ -24,6 +24,7 @@ from app.api.v1.payments import admin_router as payments_admin_router
 from app.api.v1.payments import router as payments_router
 from app.api.v1.payments import webhook_router as payments_webhook_router
 from app.api.v1.promotions import router as promotions_router
+from app.api.v1.realtime import router as realtime_router
 from app.api.v1.suppliers import router as suppliers_router
 from app.schemas.base import PingResponse
 
@@ -109,6 +110,12 @@ api_router.include_router(promotions_router, prefix="/promotions", tags=["promot
 # permissions). A "customer" is an existing User with the CUSTOMER role -
 # no separate identity system.
 api_router.include_router(customers_router, prefix="/customers", tags=["customers"])
+
+# Live order/fulfillment/payment/refund status events (WebSocket). See
+# app/core/realtime.py for the in-process connection registry and message
+# contract - GET/POST auth (Bearer header) doesn't apply to a WebSocket
+# handshake, so this route authenticates via a query-string token instead.
+api_router.include_router(realtime_router, prefix="/ws", tags=["realtime"])
 
 
 @api_router.get(

@@ -38,6 +38,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.logging import logger
+from app.core.realtime import notify_status_event
 from app.exceptions.base import BusinessValidationError, ConflictError, NotFoundError
 from app.models.address import Address
 from app.models.cart import Cart
@@ -392,6 +393,13 @@ class OrderService:
         logger.info(
             "ORDER_CANCELLED: order_id=%s actor_user_id=%s reason=%s",
             order.id, actor_user_id, reason,
+        )
+        notify_status_event(
+            resource="order",
+            order_id=order.id,
+            user_id=order.user_id,
+            new_status=result.current.value,
+            previous_status=result.previous.value,
         )
         return self._to_order_detail(order)
 

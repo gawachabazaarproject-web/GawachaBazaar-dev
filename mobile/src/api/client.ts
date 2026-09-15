@@ -51,6 +51,21 @@ export function setAuthTokens(tokens: { accessToken: string; refreshToken: strin
   refreshToken = tokens?.refreshToken ?? null;
 }
 
+/** Current in-memory access token, for the one caller that can't go
+ * through `apiClient`'s own interceptor - the realtime WebSocket, which
+ * needs the token as a query param at connect time (see
+ * useRealtimeSync.ts and backend/app/api/v1/realtime.py for why). */
+export function getAccessToken(): string | null {
+  return accessToken;
+}
+
+/** Same host/port `apiClient` resolved to, swapped to the ws(s) scheme -
+ * a browser/RN WebSocket can't set the Authorization header a real
+ * request would, so the token travels as a query param instead. */
+export function getRealtimeUrl(token: string): string {
+  return `${BASE_URL.replace(/^http/, "ws")}/ws/events?token=${encodeURIComponent(token)}`;
+}
+
 /** Call once at app startup, before rendering, to hydrate the in-memory
  * tokens from secure storage. Returns true if a session was restored. */
 export async function hydrateAuthTokens(): Promise<boolean> {
