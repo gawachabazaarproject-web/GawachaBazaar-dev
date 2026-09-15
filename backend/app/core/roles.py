@@ -24,3 +24,14 @@ BASELINE_ROLES: tuple[str, ...] = (
     DELIVERY_PARTNER,
     SUPPORT,
 )
+
+# Admin-panel roles - used by AuthService.authenticate() to decide who
+# skips the login email-OTP second factor. Staff sign in from a controlled
+# operations context (the Admin panel) and are a much smaller, vetted
+# population than the open customer base, so this codebase treats them
+# differently rather than adding OTP friction with no corresponding risk
+# reduction. CUSTOMER and WHOLESALER are deliberately absent - both are
+# open self-registration account types and both require the OTP step.
+STAFF_ROLES: frozenset[str] = frozenset(
+    {ADMIN, HUB_STAFF, OPERATIONS, DELIVERY_PARTNER, SUPPORT}
+)

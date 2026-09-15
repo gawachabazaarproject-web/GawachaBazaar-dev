@@ -62,9 +62,20 @@ api_router.include_router(orders_router, prefix="/orders", tags=["orders"])
 api_router.include_router(orders_admin_router, prefix="/orders", tags=["orders"])
 
 # Payment domain routes (CUSTOMER-only: create/get/retry/verify;
-# admin_router: ADMIN-only refund review/approve/reject/process)
-api_router.include_router(payments_router, prefix="/payments", tags=["payments"])
+# admin_router: ADMIN-only payment list/detail + refund review/approve/
+# reject/process).
+#
+# admin_router MUST be registered before the customer router: both define a
+# GET at the same single-segment shape under /payments (literal "/refunds"/
+# "/admin" vs the customer router's `/{payment_id}` catch-all), and
+# FastAPI/Starlette match routes in registration order - registering the
+# customer catch-all first would swallow `GET /payments/refunds` as an
+# attempt to parse "refunds" as a payment id (422) before the admin route is
+# ever tried. Same fix already applied to orders.py/orders_staff_router -
+# verified live here: GET /payments/refunds returned 422 int_parsing before
+# this reorder.
 api_router.include_router(payments_admin_router, prefix="/payments", tags=["payments"])
+api_router.include_router(payments_router, prefix="/payments", tags=["payments"])
 
 # PNB gateway webhook (no JWT - authenticity verified via gateway signature)
 api_router.include_router(

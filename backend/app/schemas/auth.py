@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Literal
 
 from pydantic import EmailStr, Field, field_validator
 
@@ -85,6 +86,30 @@ class TokenResponse(BaseSchema):
     token_type: str = "bearer"
     expires_in: int
     user: UserResponse
+
+
+class OtpChallengeResponse(BaseSchema):
+    """Returned from POST /auth/login instead of TokenResponse when the
+    account requires the email-OTP second factor (every CUSTOMER/
+    WHOLESALER login - see app/core/roles.py STAFF_ROLES). No token is
+    issued yet; the client must call POST /auth/login/verify-otp with
+    `challenge_token` and the 6-digit code emailed to `masked_email`.
+    """
+
+    otp_required: Literal[True] = True
+    challenge_token: str
+    masked_email: str
+    expires_in_seconds: int
+
+
+class VerifyLoginOtpRequest(BaseSchema):
+    """Completes a login OTP challenge. `challenge_token` is the opaque
+    reference from OtpChallengeResponse, not a credential by itself - the
+    6-digit `code` is what actually proves control of the account's email.
+    """
+
+    challenge_token: str = Field(..., min_length=10, max_length=64)
+    code: str = Field(..., min_length=6, max_length=6, pattern=r"^\d{6}$")
 
 
 class RefreshTokenResponse(BaseSchema):

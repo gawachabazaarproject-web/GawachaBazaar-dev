@@ -5,13 +5,19 @@ Three routers in this one file:
 - `webhook_router`: the PNB gateway callback. No JWT - webhook
   authenticity is verified via the gateway's own signature scheme inside
   PaymentService.process_webhook, not FastAPI auth dependencies.
-- `admin_router` (Phase 18): ADMIN-only refund review/approve/reject/
-  process. Refunds are a payment concept, so they live here rather than a
-  new file - reuses this domain's existing customer/admin per-router-RBAC
-  split (see bulk_orders.py for the same pattern). OPERATIONS/HUB_STAFF
-  are deliberately excluded: no existing business rule in this codebase
-  grants either role financial/payment authority, and Phase 18 does not
-  introduce one.
+- `admin_router` (Phase 18, extended Phase 19): ADMIN-only payment list/
+  detail plus refund review/approve/reject/process. Refunds are a payment
+  concept, so they live here rather than a new file - reuses this domain's
+  existing customer/admin per-router-RBAC split (see bulk_orders.py for the
+  same pattern). OPERATIONS/HUB_STAFF are deliberately excluded: no existing
+  business rule in this codebase grants either role financial/payment
+  authority, and this module does not introduce one - a raw Payment record
+  (gateway references included) is at least as sensitive as refund
+  approval, which was already ADMIN-only.
+
+  This router MUST be registered before `router` in api/v1/router.py - see
+  that file's comment for the literal-vs-catch-all routing collision this
+  avoids (GET /payments/admin, /payments/refunds vs GET /payments/{id}).
 
 The webhook route is deliberately `async def` (every other route in this
 codebase is sync `def`) because verifying the gateway signature requires
@@ -23,6 +29,8 @@ every sync route already does (each of which FastAPI already runs in a
 threadpool automatically).
 """
 
+from datetime import datetime
+
 from fastapi import APIRouter, Depends, Query, Request, status
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
@@ -32,6 +40,11 @@ from app.dependencies.auth import get_current_user, require_roles
 from app.dependencies.database import get_db
 from app.dependencies.payments import get_payment_gateway
 from app.models.user import User
+from app.schemas.admin_payment import (
+    AdminPaymentDetailResponse,
+    AdminPaymentListResponse,
+)
+from app.schemas.admin_payment import MAX_PAGE_SIZE as ADMIN_MAX_PAGE_SIZE
 from app.schemas.payment import (
     CreatePaymentRequest,
     PaymentInitiationResponse,
@@ -127,6 +140,43 @@ async def pnb_webhook(
         PaymentService(db, gateway).process_webhook, raw_body, headers
     )
     return WebhookAckResponse()
+
+
+# ---------------------------------------------------------------------------
+# Admin: payment list/detail (Phase 19)
+# ---------------------------------------------------------------------------
+
+
+@admin_router.get(
+    "/admin",
+    response_model=AdminPaymentListResponse,
+    summary="List/search/filter every payment on the platform (admin panel)",
+)
+def admin_list_payments(
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=ADMIN_MAX_PAGE_SIZE),
+    status_: str | None = Query(default=None, alias="status"),
+    payment_method: str | None = Query(default=None),
+    order_id: int | None = Query(default=None, gt=0),
+    date_from: datetime | None = Query(default=None, description="created_at >= this"),
+    date_to: datetime | None = Query(default=None, description="created_at <= this"),
+    q: str | None = Query(
+        default=None, max_length=150, description="Order number, customer name/email, or gateway order id"
+    ),
+    db: Session = Depends(get_db),
+) -> AdminPaymentListResponse:
+    return PaymentService(db, None).admin_list_payments(
+        page, page_size, status_, payment_method, order_id, date_from, date_to, q
+    )
+
+
+@admin_router.get(
+    "/admin/{payment_id}",
+    response_model=AdminPaymentDetailResponse,
+    summary="Get the complete detail (incl. gateway attempt history) for any payment (admin panel)",
+)
+def admin_get_payment(payment_id: int, db: Session = Depends(get_db)) -> AdminPaymentDetailResponse:
+    return PaymentService(db, None).admin_get_payment_detail(payment_id)
 
 
 # ---------------------------------------------------------------------------

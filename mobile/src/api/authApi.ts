@@ -1,6 +1,7 @@
 import { apiClient } from "./client";
 import {
   LoginPayload,
+  LoginResult,
   RefreshTokenResponse,
   RegisterPayload,
   TokenResponse,
@@ -12,7 +13,12 @@ export const authApi = {
     apiClient.post<TokenResponse>("/auth/register", payload).then((r) => r.data),
 
   login: (payload: LoginPayload) =>
-    apiClient.post<TokenResponse>("/auth/login", payload).then((r) => r.data),
+    apiClient.post<LoginResult>("/auth/login", payload).then((r) => r.data),
+
+  verifyLoginOtp: (challengeToken: string, code: string) =>
+    apiClient
+      .post<TokenResponse>("/auth/login/verify-otp", { challenge_token: challengeToken, code })
+      .then((r) => r.data),
 
   refresh: (refreshToken: string) =>
     apiClient
