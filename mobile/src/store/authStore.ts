@@ -5,6 +5,7 @@ import {
   setAuthTokens,
   setSessionExpiredHandler,
 } from "@/api";
+import { queryClient } from "@/api/queryClient";
 import { clearTokens, getStoredTokens, saveTokens } from "@/api/tokenStorage";
 import { isOtpChallenge, TokenResponse, UserResponse } from "@/types/api";
 
@@ -60,7 +61,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       set({ status: "authenticated", user });
     } catch {
       // The interceptor already tried refreshing and clearing tokens on
-      // failure - just reflect the outcome here.
+      // failure - just reflect the outcome here. Also clears any
+      // in-memory react-query cache (cart, orders, ...) left over from
+      // before the app was backgrounded - otherwise a screen like
+      // CartBar, which only gates its *query* on auth status, would keep
+      // rendering the previous session's stale cached data forever (it
+      // never refetches once disabled, so nothing overwrites it).
+      queryClient.clear();
       set({ status: "unauthenticated", user: null });
     }
   },
@@ -100,6 +107,14 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
     await clearTokens();
     setAuthTokens(null);
+    // Every cached query (cart, orders, addresses, ...) belonged to the
+    // session that just ended - leaving it in place is what let CartBar
+    // keep showing the previous session's item count/total on the login
+    // screen (its query is gated on auth status, but a *disabled* query
+    // still returns whatever it last fetched; nothing clears that on its
+    // own). Also protects the next login on this device, if it's a
+    // different account, from briefly seeing this one's cached data.
+    queryClient.clear();
     set({ status: "unauthenticated", user: null, sessionExpired: false });
   },
 
@@ -110,5 +125,6 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 // refresh attempt, it calls this instead of reaching into the store
 // directly, keeping src/api/ free of any store dependency.
 setSessionExpiredHandler(() => {
+  queryClient.clear();
   useAuthStore.setState({ status: "unauthenticated", user: null, sessionExpired: true });
 });
