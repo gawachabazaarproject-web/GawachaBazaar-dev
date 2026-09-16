@@ -179,8 +179,14 @@ export default function CategoriesPage() {
                     className="cursor-pointer hover:bg-neutral-50"
                   >
                     <td className="px-4 py-3">
-                      <span style={{ paddingLeft: row.depth * 20 }} className="inline-flex items-center gap-1.5">
+                      <span style={{ paddingLeft: row.depth * 20 }} className="inline-flex items-center gap-2">
                         {row.depth > 0 && <span className="text-neutral-300">└</span>}
+                        {row.image_url ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={row.image_url} alt="" className="h-6 w-6 rounded object-cover" />
+                        ) : (
+                          <span className="h-6 w-6 rounded bg-neutral-100" />
+                        )}
                         <span className="font-medium text-primary-900">{row.name}</span>
                       </span>
                     </td>

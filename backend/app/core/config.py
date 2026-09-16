@@ -55,6 +55,15 @@ class Settings(BaseSettings):
     PNB_BASE_URL: str = "https://pnb-uat.example.invalid"
     PNB_TIMEOUT_SECONDS: float = 10.0
 
+    # Cloudinary (image uploads). Empty string means "not configured" -
+    # ImageUploadService raises a clear, honest error rather than silently
+    # failing if an upload route is ever called before these are set,
+    # same "don't fabricate a working integration" precedent as
+    # PaymentGateway/NotificationGateway.
+    CLOUDINARY_CLOUD_NAME: str = ""
+    CLOUDINARY_API_KEY: str = ""
+    CLOUDINARY_API_SECRET: str = ""
+
     # CORS
     ALLOWED_ORIGINS: list[str] = ["http://localhost:3000", "http://localhost:5173"]
 

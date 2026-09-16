@@ -61,6 +61,10 @@ class Category(Base):
         Text,
         nullable=True,
     )
+    image_url: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+    )
     status: Mapped[str] = mapped_column(
         String(30),
         nullable=False,

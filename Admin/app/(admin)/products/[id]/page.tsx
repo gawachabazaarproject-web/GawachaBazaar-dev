@@ -8,7 +8,6 @@ import {
   AdminProductDetail,
   Category,
   CatalogApiError,
-  createImage,
   createPrice,
   createVariant,
   deleteImage,
@@ -20,12 +19,14 @@ import {
   updateImage,
   updateProduct,
   updateVariant,
+  uploadProductImage,
   VARIANT_UNITS,
 } from "@/lib/products";
 import { formatDateTime, formatMoney } from "@/lib/format";
 import { ErrorState } from "@/components/ErrorState";
 import { StatusBadge } from "@/components/StatusBadge";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { ImageDropzone } from "@/components/ImageDropzone";
 import { Icon } from "@/components/icons";
 
 export default function ProductDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -300,26 +301,17 @@ function MediaSection({
   onChange: () => void;
 }) {
   const { getAccessToken } = useAuth();
-  const [imageUrl, setImageUrl] = useState("");
-  const [adding, setAdding] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const handleAdd = async () => {
+  const handleUpload = async (file: File) => {
     const token = getAccessToken();
-    if (!token || !imageUrl.trim()) return;
-    setAdding(true);
+    if (!token) return;
     setError(null);
     try {
-      await createImage(token, product.id, {
-        image_url: imageUrl.trim(),
-        is_primary: product.images.length === 0,
-      });
-      setImageUrl("");
+      await uploadProductImage(token, product.id, file, { isPrimary: product.images.length === 0 });
       onChange();
     } catch (err) {
-      setError(err instanceof CatalogApiError ? err.message : "Unable to add this image.");
-    } finally {
-      setAdding(false);
+      throw new Error(err instanceof CatalogApiError ? err.message : "Unable to upload this image.");
     }
   };
 
@@ -339,9 +331,6 @@ function MediaSection({
 
   return (
     <Section title="Media">
-      <p className="mb-3 text-xs text-neutral-400">
-        Images are added by URL - the backend has no file-upload storage yet, only an image_url field.
-      </p>
       {product.images.length === 0 ? (
         <p className="mb-3 text-sm text-neutral-400">No images yet.</p>
       ) : (
@@ -374,21 +363,7 @@ function MediaSection({
         </div>
       )}
       {canManageMedia && (
-        <div className="flex gap-2">
-          <input
-            value={imageUrl}
-            onChange={(e) => setImageUrl(e.target.value)}
-            placeholder="https://images.example.com/product.jpg"
-            className="flex-1 rounded border border-neutral-300 px-3 py-2 text-sm"
-          />
-          <button
-            onClick={handleAdd}
-            disabled={adding || !imageUrl.trim()}
-            className="rounded bg-primary-800 px-4 py-2 text-sm font-semibold text-white disabled:opacity-40"
-          >
-            {adding ? "Adding..." : "Add image"}
-          </button>
-        </div>
+        <ImageDropzone label="Add an image" onUpload={handleUpload} />
       )}
       {error && <p className="mt-2 text-sm text-status-danger">{error}</p>}
     </Section>
