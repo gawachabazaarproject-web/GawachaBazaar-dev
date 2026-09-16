@@ -624,6 +624,7 @@ class BulkOrderService:
             order_number=OrderService._generate_order_number(),
             status="PENDING",
             total_amount=total_amount,
+            subtotal_amount=total_amount,
             currency=accepted_version.currency,
             placed_at=datetime.now(UTC),
         )

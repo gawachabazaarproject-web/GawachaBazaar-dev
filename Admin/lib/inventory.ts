@@ -224,7 +224,7 @@ export async function createBatch(accessToken: string, payload: CreateBatchPaylo
 
 export async function receiveStock(
   accessToken: string,
-  payload: { batch_id: number; variant_id: number; location_id: number; quantity: string; remarks?: string },
+  payload: { batch_id?: number; variant_id: number; location_id: number; quantity: string; remarks?: string },
 ): Promise<AdminInventoryLotListItem> {
   return request(accessToken, "/inventory/admin/receive", { method: "POST", body: JSON.stringify(payload) });
 }

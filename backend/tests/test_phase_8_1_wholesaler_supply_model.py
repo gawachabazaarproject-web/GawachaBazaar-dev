@@ -108,7 +108,10 @@ def _create_product(
 
 
 # 1. Batch requires wholesaler_user_id
-def test_1_batch_requires_wholesaler_user_id(db_session: Session) -> None:
+def test_1_batch_without_wholesaler_user_id_allowed(db_session: Session) -> None:
+    """wholesaler_user_id is an optional FK (Phase 17: supplier_id is an
+    equally valid alternative origin, and an admin-direct stock addition
+    needs neither) - not a required column."""
     prod = _create_product(db_session)
     batch = Batch(
         wholesaler_user_id=None,  # Not provided
@@ -120,9 +123,9 @@ def test_1_batch_requires_wholesaler_user_id(db_session: Session) -> None:
         status="HARVESTED",
     )
     db_session.add(batch)
-    with pytest.raises(IntegrityError):
-        db_session.commit()
-    db_session.rollback()
+    db_session.commit()
+    db_session.refresh(batch)
+    assert batch.wholesaler_user_id is None
 
 
 # 2. Valid User can be assigned as Batch.wholesaler

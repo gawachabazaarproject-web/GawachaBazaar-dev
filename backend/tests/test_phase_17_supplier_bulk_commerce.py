@@ -226,24 +226,22 @@ def test_2_legacy_batch_with_only_wholesaler_user_id_still_works(
     assert batch.wholesaler_user_id == wholesaler.id
 
 
-def test_3_batch_with_neither_supplier_nor_wholesaler_rejected(
+def test_3_batch_with_neither_supplier_nor_wholesaler_allowed(
     client: TestClient, db_session: Session
 ) -> None:
-    from sqlalchemy.exc import IntegrityError
-
+    """An admin adding stock directly (e.g. Receive Stock) has no supplier
+    or wholesaler to attribute a batch to - both are optional FKs, not a
+    required-one-of pair. See ck_batches_supplier_or_wholesaler removal."""
     _p, variant = _create_product_variant(db_session, tag="T3")
     batch = Batch(
         product_id=variant.product_id, batch_code="BATCH-T3",
         harvest_date=date(2026, 1, 1), quantity=Decimal("10.000"), unit="KG", status="APPROVED",
     )
     db_session.add(batch)
-    try:
-        db_session.commit()
-        raised = False
-    except IntegrityError:
-        db_session.rollback()
-        raised = True
-    assert raised
+    db_session.commit()
+    db_session.refresh(batch)
+    assert batch.supplier_id is None
+    assert batch.wholesaler_user_id is None
 
 
 def test_4_batch_procurement_fields_populated(client: TestClient, db_session: Session) -> None:
