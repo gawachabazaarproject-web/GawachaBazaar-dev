@@ -35,6 +35,13 @@ class UpdateCategoryRequest(BaseSchema):
     description: str | None = Field(default=None)
     parent_id: int | None = Field(default=None)
     status: CategoryStatus | None = Field(default=None)
+    # Same "plain URL field" precedent as ProductImage.image_url - the
+    # image upload/delete routes in api/v1/catalog.py construct this same
+    # request internally with a Cloudinary-issued secure_url (or None to
+    # clear it), reusing update_category's existing generic
+    # `model_dump(exclude_unset=True)` + setattr loop rather than a
+    # separate code path.
+    image_url: str | None = Field(default=None, max_length=2048)
 
 
 class CategoryResponse(BaseSchema):
@@ -42,6 +49,7 @@ class CategoryResponse(BaseSchema):
     name: str
     slug: str
     description: str | None
+    image_url: str | None
     parent_id: int | None
     status: str
     created_at: datetime

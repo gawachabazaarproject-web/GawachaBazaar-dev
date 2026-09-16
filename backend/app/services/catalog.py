@@ -218,7 +218,13 @@ class CatalogService:
             status=data.status,
         )
         self.db.add(category)
-        self.db.flush()
+        try:
+            self.db.flush()
+        except IntegrityError as exc:
+            self.db.rollback()
+            raise ConflictError(
+                "A category with this slug already exists."
+            ) from exc
         AdminAuditService(self.db).record(
             admin_user_id=admin_user_id,
             action="category.create",
@@ -252,6 +258,18 @@ class CatalogService:
 
         for field, value in update_data.items():
             setattr(category, field, value)
+
+        try:
+            # Flush explicitly, before AdminAuditService.record() (which
+            # flushes internally too) - a duplicate-slug UniqueViolation
+            # must surface here as the intended 409, not as an unhandled
+            # 500 raised from inside the audit call's own flush.
+            self.db.flush()
+        except IntegrityError as exc:
+            self.db.rollback()
+            raise ConflictError(
+                "A category with this slug already exists."
+            ) from exc
 
         AdminAuditService(self.db).record(
             admin_user_id=admin_user_id,
@@ -326,6 +344,7 @@ class CatalogService:
                 name=c.name,
                 slug=c.slug,
                 description=c.description,
+                image_url=c.image_url,
                 parent_id=c.parent_id,
                 parent_name=parent_name,
                 status=c.status,
@@ -360,6 +379,7 @@ class CatalogService:
             name=category.name,
             slug=category.slug,
             description=category.description,
+            image_url=category.image_url,
             parent_id=category.parent_id,
             parent_name=parent_name,
             status=category.status,

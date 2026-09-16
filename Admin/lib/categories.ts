@@ -1,10 +1,10 @@
 /**
  * Types mirror backend/app/schemas/admin_catalog.py's category schemas
- * field-for-field. There is no image/sort_order/is_featured/SEO column on
- * Category in the backend today (confirmed against app/models/category.py)
- * - those fields are deliberately absent here rather than stubbed with a
- * fake default, matching the honest-gap pattern already used in Products
- * (Merchandising/Reviews).
+ * field-for-field. `image_url` is Cloudinary-backed (see
+ * uploadCategoryImage/deleteCategoryImage below) - there is still no
+ * sort_order/is_featured/SEO column on Category in the backend, so those
+ * stay absent here rather than a fabricated default, matching the
+ * honest-gap pattern already used in Products (Merchandising/Reviews).
  */
 
 export interface AdminCategoryListItem {
@@ -12,6 +12,7 @@ export interface AdminCategoryListItem {
   name: string;
   slug: string;
   description: string | null;
+  image_url: string | null;
   parent_id: number | null;
   parent_name: string | null;
   status: string;
@@ -33,6 +34,7 @@ export interface CategoryRef {
   name: string;
   slug: string;
   description: string | null;
+  image_url: string | null;
   parent_id: number | null;
   status: string;
   created_at: string;
@@ -43,6 +45,7 @@ export interface AdminCategoryDetail {
   name: string;
   slug: string;
   description: string | null;
+  image_url: string | null;
   parent_id: number | null;
   parent_name: string | null;
   status: string;
@@ -151,4 +154,27 @@ export async function updateCategory(accessToken: string, id: number, payload: U
     method: "PATCH",
     body: JSON.stringify(payload),
   });
+}
+
+/** Cloudinary-backed upload (see backend/app/services/image_upload.py) -
+ * a multipart POST, so this bypasses `request()`'s JSON Content-Type
+ * (the browser must set its own multipart boundary header). */
+export async function uploadCategoryImage(accessToken: string, id: number, file: File): Promise<CategoryRef> {
+  const form = new FormData();
+  form.append("file", file);
+
+  const response = await fetch(`${API_BASE_URL}/catalog/categories/${id}/image`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${accessToken}` },
+    body: form,
+  });
+  if (!response.ok) {
+    const body = await response.json().catch(() => null);
+    throw new CategoryApiError(response.status, body?.message ?? "Upload failed.");
+  }
+  return response.json();
+}
+
+export async function deleteCategoryImage(accessToken: string, id: number): Promise<CategoryRef> {
+  return request<CategoryRef>(accessToken, `/catalog/categories/${id}/image`, { method: "DELETE" });
 }

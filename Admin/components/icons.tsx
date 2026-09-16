@@ -18,7 +18,8 @@ export type IconName =
   | "bell"
   | "chevron-left"
   | "log-out"
-  | "user";
+  | "user"
+  | "upload";
 
 const PATHS: Record<IconName, React.ReactNode> = {
   grid: (
@@ -118,6 +119,13 @@ const PATHS: Record<IconName, React.ReactNode> = {
     <>
       <circle cx="12" cy="8" r="4" />
       <path d="M4 21a8 8 0 0 1 16 0" />
+    </>
+  ),
+  upload: (
+    <>
+      <path d="M12 16V4" />
+      <path d="M7 9l5-5 5 5" />
+      <path d="M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3" />
     </>
   ),
 };

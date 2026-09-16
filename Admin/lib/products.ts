@@ -266,3 +266,30 @@ export async function updateImage(accessToken: string, imageId: number, payload:
 export async function deleteImage(accessToken: string, imageId: number) {
   return request<void>(accessToken, `/catalog/images/${imageId}`, { method: "DELETE" });
 }
+
+/** Cloudinary-backed upload (see backend/app/services/image_upload.py) -
+ * a multipart POST, so this bypasses `request()`'s JSON Content-Type
+ * (the browser must set its own multipart boundary header). Uploads and
+ * attaches the resulting image to the product in one call. */
+export async function uploadProductImage(
+  accessToken: string,
+  productId: number,
+  file: File,
+  opts?: { altText?: string; isPrimary?: boolean },
+): Promise<ProductImage> {
+  const form = new FormData();
+  form.append("file", file);
+  if (opts?.altText) form.append("alt_text", opts.altText);
+  form.append("is_primary", String(opts?.isPrimary ?? false));
+
+  const response = await fetch(`${API_BASE_URL}/catalog/products/${productId}/images/upload`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${accessToken}` },
+    body: form,
+  });
+  if (!response.ok) {
+    const body = await response.json().catch(() => null);
+    throw new CatalogApiError(response.status, body?.message ?? "Upload failed.");
+  }
+  return response.json();
+}
