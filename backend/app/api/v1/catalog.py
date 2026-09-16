@@ -3,7 +3,7 @@
 from datetime import datetime
 from decimal import Decimal
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, File, Form, Query, UploadFile, status
 from sqlalchemy.orm import Session
 
 from app.dependencies.auth import require_permission
@@ -39,6 +39,7 @@ from app.schemas.catalog import (
     UpdateProductVariantRequest,
 )
 from app.services.catalog import CatalogService
+from app.services.image_upload import upload_image
 
 router = APIRouter()
 
@@ -252,6 +253,40 @@ def update_category(
 
 
 @router.post(
+    "/categories/{category_id}/image",
+    response_model=CategoryResponse,
+    summary="Upload (or replace) a category's image via Cloudinary",
+)
+def upload_category_image(
+    category_id: int,
+    file: UploadFile = File(...),
+    current_user: User = Depends(require_permission("categories.update")),
+    db: Session = Depends(get_db),
+) -> CategoryResponse:
+    service = CatalogService(db)
+    service.get_category_or_404(category_id)
+    result = upload_image(file, folder=f"gawachabazaar/categories/{category_id}")
+    return service.update_category(
+        category_id, UpdateCategoryRequest(image_url=result["secure_url"]), current_user.id
+    )
+
+
+@router.delete(
+    "/categories/{category_id}/image",
+    response_model=CategoryResponse,
+    summary="Remove a category's image",
+)
+def delete_category_image(
+    category_id: int,
+    current_user: User = Depends(require_permission("categories.update")),
+    db: Session = Depends(get_db),
+) -> CategoryResponse:
+    return CatalogService(db).update_category(
+        category_id, UpdateCategoryRequest(image_url=None), current_user.id
+    )
+
+
+@router.post(
     "/products",
     response_model=ProductResponse,
     status_code=status.HTTP_201_CREATED,
@@ -348,6 +383,32 @@ def delete_image(
     db: Session = Depends(get_db),
 ) -> None:
     CatalogService(db).delete_image(image_id, current_user.id)
+
+
+@router.post(
+    "/products/{product_id}/images/upload",
+    response_model=ProductImageResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Upload a product image via Cloudinary and attach it to the product",
+)
+def upload_product_image(
+    product_id: int,
+    file: UploadFile = File(...),
+    alt_text: str | None = Form(default=None),
+    is_primary: bool = Form(default=False),
+    current_user: User = Depends(require_permission("products.manage_media")),
+    db: Session = Depends(get_db),
+) -> ProductImageResponse:
+    service = CatalogService(db)
+    service.get_product_or_404(product_id)
+    result = upload_image(file, folder=f"gawachabazaar/products/{product_id}")
+    return service.create_image(
+        product_id,
+        CreateProductImageRequest(
+            image_url=result["secure_url"], alt_text=alt_text, is_primary=is_primary
+        ),
+        current_user.id,
+    )
 
 
 @router.post(

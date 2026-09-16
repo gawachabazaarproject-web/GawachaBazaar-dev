@@ -87,17 +87,17 @@ class AdminCategoryListItemResponse(BaseSchema):
     `COUNT(*) ... GROUP BY category_id` over the Product table, never
     derived from whatever page of products happens to be loaded client-side
     (see the admin-panel Categories spec's explicit "must come from
-    authoritative backend data" rule). There is no image/sort_order/
-    is_featured column on Category today (see the Phase 1 admin-panel
-    audit) - `image_url`/`is_featured` are intentionally absent from this
-    schema rather than stubbed with a null default that would look like a
-    real-but-empty field.
+    authoritative backend data" rule). `is_featured`/`sort_order` still
+    have no backing column on Category and stay absent here rather than a
+    fabricated default - `image_url` was added once a real column (and
+    the Cloudinary-backed upload/delete routes that populate it) existed.
     """
 
     id: int
     name: str
     slug: str
     description: str | None
+    image_url: str | None
     parent_id: int | None
     parent_name: str | None
     status: str
@@ -119,6 +119,7 @@ class AdminCategoryDetailResponse(BaseSchema):
     name: str
     slug: str
     description: str | None
+    image_url: str | None
     parent_id: int | None
     parent_name: str | None
     status: str

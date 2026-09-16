@@ -10,10 +10,12 @@ import {
   CategoryApiError,
   CATEGORY_STATUSES,
   CategoryRef,
+  deleteCategoryImage,
   fetchAdminCategories,
   fetchAdminCategoryDetail,
   fetchCategoryActivity,
   updateCategory,
+  uploadCategoryImage,
 } from "@/lib/categories";
 import { AdminProductListItem, fetchAdminProducts, updateProduct } from "@/lib/products";
 import { formatDateTime, formatMoney } from "@/lib/format";
@@ -21,6 +23,7 @@ import { ErrorState } from "@/components/ErrorState";
 import { StatusBadge } from "@/components/StatusBadge";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { EmptyState } from "@/components/EmptyState";
+import { ImageDropzone } from "@/components/ImageDropzone";
 import { Icon } from "@/components/icons";
 
 export default function CategoryDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -139,6 +142,28 @@ export default function CategoryDetailPage({ params }: { params: Promise<{ id: s
     if (!token) return;
     await updateCategory(token, categoryId, { status: "ACTIVE" }).catch(() => undefined);
     load();
+  };
+
+  const handleUploadImage = async (file: File) => {
+    const token = getAccessToken();
+    if (!token) return;
+    try {
+      await uploadCategoryImage(token, categoryId, file);
+      await load();
+    } catch (err) {
+      throw new Error(err instanceof CategoryApiError ? err.message : "Unable to upload this image.");
+    }
+  };
+
+  const handleRemoveImage = async () => {
+    const token = getAccessToken();
+    if (!token) return;
+    try {
+      await deleteCategoryImage(token, categoryId);
+      await load();
+    } catch (err) {
+      throw new Error(err instanceof CategoryApiError ? err.message : "Unable to remove this image.");
+    }
   };
 
   const handleMoveProduct = async (productId: number, newCategoryId: string) => {
@@ -304,10 +329,22 @@ export default function CategoryDetailPage({ params }: { params: Promise<{ id: s
         )}
       </Section>
 
-      <Section title="Media, ordering & featured state">
-        <p className="text-sm text-neutral-400">
-          Categories don&apos;t have an image, display-order, or featured-state field in the backend yet - there is
-          nothing real to control here until that model is extended.
+      <Section title="Image">
+        {canEdit ? (
+          <ImageDropzone
+            currentUrl={category.image_url}
+            onUpload={handleUploadImage}
+            onRemove={category.image_url ? handleRemoveImage : undefined}
+          />
+        ) : category.image_url ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={category.image_url} alt="" className="max-h-40 rounded object-contain" />
+        ) : (
+          <p className="text-sm text-neutral-400">No image set.</p>
+        )}
+        <p className="mt-3 text-xs text-neutral-400">
+          Display-order and featured-state still have no backing field in the backend - there is nothing real to
+          control for those here yet.
         </p>
       </Section>
 
