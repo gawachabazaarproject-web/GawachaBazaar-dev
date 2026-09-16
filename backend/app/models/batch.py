@@ -30,15 +30,15 @@ if TYPE_CHECKING:
 class Batch(Base):
     """Harvest lot of fresh agricultural produce.
 
-    Phase 17: `supplier_id` is the new, preferred way to record who
-    supplied this batch (an independent `Supplier` business record, no
-    login required). `wholesaler_user_id` (Phase 8.1: a `User` holding
-    the WHOLESALER role) is kept for full backward compatibility - it is
-    still a valid way to record origin, just no longer the only one. See
-    `ck_batches_supplier_or_wholesaler`: at least one of the two is
-    always required, so no batch ever loses a traceable origin. Fully
-    deprecating `wholesaler_user_id` is an explicit future stage, not
-    attempted in Phase 17.
+    Phase 17: `supplier_id` is the preferred way to record who supplied
+    this batch (an independent `Supplier` business record, no login
+    required). `wholesaler_user_id` (Phase 8.1: a `User` holding the
+    WHOLESALER role) is kept for full backward compatibility as another
+    valid way to record origin. Both are optional - an admin adding stock
+    directly (e.g. via the Admin panel's Receive Stock flow, which never
+    collects either) doesn't have to attribute it to a traced external
+    origin; a supplier/wholesaler can still be set whenever that
+    traceability is actually wanted.
     """
 
     __tablename__ = "batches"
@@ -56,10 +56,6 @@ class Batch(Base):
         CheckConstraint(
             "unit IN ('KG', 'G', 'L', 'ML', 'UNIT', 'DOZEN', 'BOX', 'CRATE')",
             name="ck_batches_unit",
-        ),
-        CheckConstraint(
-            "wholesaler_user_id IS NOT NULL OR supplier_id IS NOT NULL",
-            name="ck_batches_supplier_or_wholesaler",
         ),
         CheckConstraint(
             "purchase_price IS NULL OR purchase_price > 0",

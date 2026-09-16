@@ -16,6 +16,7 @@ matters for atomicity is "no commit happens until everything succeeds",
 not whether the transaction was opened explicitly or implicitly.
 """
 
+import secrets
 from datetime import UTC, date, datetime
 from decimal import Decimal
 
@@ -193,10 +194,6 @@ class InventoryService:
         product = self.db.query(Product).filter(Product.id == data.product_id).first()
         if not product:
             raise NotFoundError("Product not found.")
-        if data.supplier_id is None and data.wholesaler_user_id is None:
-            raise BusinessValidationError(
-                "A batch requires either a supplier or a wholesaler as its origin."
-            )
         if data.supplier_id is not None:
             supplier = self.db.query(Supplier).filter(Supplier.id == data.supplier_id).first()
             if not supplier:
@@ -850,8 +847,32 @@ class InventoryService:
         """Get-or-create the (batch, variant, location) lot, lock it, and
         apply one RECEIPT movement - one atomic admin action instead of
         the raw two-call POST /lots + POST /lots/{id}/movements sequence.
+
+        If `data.batch_id` is omitted, a minimal Batch is auto-created
+        first (server-generated code, harvest date today, no
+        supplier/wholesaler) - the traceability row still exists, it's
+        just not admin-authored. See ReceiveStockRequest docstring.
         """
-        lot = self.get_or_create_lot_no_commit(data.batch_id, data.variant_id, data.location_id)
+        batch_id = data.batch_id
+        if batch_id is None:
+            variant = (
+                self.db.query(ProductVariant).filter(ProductVariant.id == data.variant_id).first()
+            )
+            if not variant:
+                raise NotFoundError("Product variant not found.")
+            batch = Batch(
+                product_id=variant.product_id,
+                batch_code=f"ADMIN-{secrets.token_hex(4).upper()}",
+                harvest_date=date.today(),
+                quantity=data.quantity,
+                unit=variant.unit if variant.unit != "PACK" else "BOX",
+                status="APPROVED",
+            )
+            self.db.add(batch)
+            self.db.flush()
+            batch_id = batch.id
+
+        lot = self.get_or_create_lot_no_commit(batch_id, data.variant_id, data.location_id)
         lot = (
             self.db.query(InventoryLot).filter(InventoryLot.id == lot.id).with_for_update().first()
         )

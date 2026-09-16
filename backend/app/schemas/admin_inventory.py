@@ -118,9 +118,17 @@ class ReceiveStockRequest(BaseSchema):
     RECEIPT movement, atomically - see InventoryService.receive_stock.
     This is the "Stock Receiving" convenience the raw POST /lots + POST
     /lots/{id}/movements two-step doesn't offer as a single admin action.
+
+    `batch_id` is optional - every InventoryLot still requires a real
+    Batch row (traceability - Packaging/QualityCheck both reference lots
+    by batch), but an admin just adding stock with no existing batch to
+    pick shouldn't have to think about harvest dates or batch codes to do
+    it. Omitting it makes receive_stock create a minimal batch
+    automatically (see its docstring) - the traceability row still
+    exists, it's just server-generated instead of admin-authored.
     """
 
-    batch_id: int = Field(..., gt=0)
+    batch_id: int | None = Field(default=None, gt=0)
     variant_id: int = Field(..., gt=0)
     location_id: int = Field(..., gt=0)
     quantity: Decimal = Field(..., gt=0, max_digits=12, decimal_places=3)
