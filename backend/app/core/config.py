@@ -64,6 +64,17 @@ class Settings(BaseSettings):
     CLOUDINARY_API_KEY: str = ""
     CLOUDINARY_API_SECRET: str = ""
 
+    # Resend (transactional email - OTP codes). Empty API key means "not
+    # configured" - NotificationGateway falls back to logging the code
+    # server-side (ConsoleNotificationGateway) rather than fabricating a
+    # sent email, same honest-boundary precedent as Cloudinary/PNBGateway.
+    # RESEND_FROM_EMAIL defaults to Resend's own sandbox sender, which
+    # works with no domain verification - fine for early testing, but
+    # only delivers to the Resend account's own verified/test addresses
+    # until a real sending domain is verified.
+    RESEND_API_KEY: str = ""
+    RESEND_FROM_EMAIL: str = "Gawacha Bazaar <onboarding@resend.dev>"
+
     # CORS
     ALLOWED_ORIGINS: list[str] = ["http://localhost:3000", "http://localhost:5173"]
 

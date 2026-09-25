@@ -10,6 +10,7 @@ Refund Approval) SQLAlchemy models so that Base.metadata contains all
 table definitions.
 """
 
+from app.models.ad import Ad
 from app.models.address import Address
 from app.models.admin_action_log import AdminActionLog
 from app.models.auth_session import AuthSession
@@ -35,6 +36,7 @@ from app.models.order_item import OrderItem
 from app.models.packaging_input import PackagingInput
 from app.models.packaging_operation import PackagingOperation
 from app.models.packaging_output import PackagingOutput
+from app.models.password_reset_challenge import PasswordResetChallenge
 from app.models.payment import Payment
 from app.models.payment_transaction import PaymentTransaction
 from app.models.payment_webhook_event import PaymentWebhookEvent
@@ -60,6 +62,7 @@ from app.models.user import User
 from app.models.user_role import UserRole
 
 __all__ = [
+    "Ad",
     "Address",
     "AdminActionLog",
     "AuthSession",
@@ -85,6 +88,7 @@ __all__ = [
     "PackagingInput",
     "PackagingOperation",
     "PackagingOutput",
+    "PasswordResetChallenge",
     "Payment",
     "PaymentTransaction",
     "PaymentWebhookEvent",

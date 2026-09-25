@@ -23,6 +23,7 @@ from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
 import pytest
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 from starlette.testclient import TestClient
 
@@ -36,6 +37,7 @@ from app.models.order import Order
 from app.models.payment import Payment
 from app.models.payment_transaction import PaymentTransaction
 from app.models.payment_webhook_event import PaymentWebhookEvent
+from app.models.refund import Refund
 from app.models.role import Role
 from app.models.user import User
 from app.models.user_role import UserRole
@@ -1014,3 +1016,104 @@ def test_forced_failure_during_paid_confirmation_leaves_no_partial_state(
     assert webhook_event is None  # the whole transaction (incl. the dedup row) rolled back
 
     monkeypatch.setattr(payment_module.PaymentService, "_confirm_order_if_paid", original)
+
+
+def test_payment_paid_after_reservation_expiry_creates_refund_eligibility(
+    client: TestClient, db_session: Session, gateway: FakePNBGateway
+) -> None:
+    """Regression test for a business-logic audit finding: when a payment
+    resolves PAID after its reservation already lazily expired (order
+    PENDING -> EXPIRED, a terminal state), refund eligibility must be
+    created - exactly like the already-cancelled case in
+    _confirm_order_if_paid - because money was genuinely collected for an
+    order that can now never be fulfilled. Previously this path only
+    logged an ERROR and left the payment PAID with no refund record
+    anywhere, an orphaned "paid but nothing to show for it" state only
+    visible by grepping logs.
+    """
+    user, headers = _customer(db_session, "EXPIREDPAID")
+    order = _create_order(db_session, user, total_amount=Decimal("75.00"))
+    payment = client.post(
+        "/api/v1/payments", json={"order_id": order.id, "payment_method": "UPI"}, headers=headers
+    ).json()
+    txn = db_session.query(PaymentTransaction).filter_by(payment_id=payment["id"]).first()
+
+    # Force the reservation to have already lapsed before the webhook arrives.
+    reservation = db_session.query(InventoryReservation).filter_by(order_id=order.id).first()
+    reservation.expires_at = datetime.now(UTC) - timedelta(minutes=1)
+    db_session.commit()
+
+    body = _webhook_body(
+        event_id="evt-expired-paid-1", event_type="PAYMENT_SUCCESS",
+        gateway_order_id=payment["gateway_order_id"], gateway_transaction_id=txn.gateway_transaction_id,
+        status="SUCCESS", amount="75.00", currency="INR",
+    )
+    response = client.post(
+        "/api/v1/payments/webhooks/pnb", content=body, headers=_webhook_headers(WEBHOOK_SECRET, body)
+    )
+    assert response.status_code == 200
+
+    db_session.expire_all()
+    refreshed_payment = db_session.get(Payment, payment["id"])
+    assert refreshed_payment.status == "PAID"
+    refreshed_order = db_session.get(Order, order.id)
+    assert refreshed_order.status == "EXPIRED"
+    refund = db_session.query(Refund).filter_by(order_id=order.id).first()
+    assert refund is not None
+    assert refund.status == "PENDING_APPROVAL"
+    assert refund.amount == Decimal("75.00")
+
+
+def test_realtime_notify_fires_only_after_commit_is_durable(
+    client: TestClient, db_session: Session, test_engine, gateway: FakePNBGateway, monkeypatch
+) -> None:
+    """Regression test for a business-logic audit finding: PaymentService
+    used to call notify_status_event directly inside
+    _apply_transaction_status/_confirm_order_if_paid, before the
+    enclosing db.commit() - a client could be told PAID/CONFIRMED for a
+    transition that then rolled back. Those calls are now queued and
+    only flushed via _flush_pending_realtime_events() after commit
+    succeeds. Verified here by checking, from a genuinely separate DB
+    connection, that the moment notify fires the new status is already
+    durably visible - under Postgres READ COMMITTED a separate
+    connection only ever sees committed data, so if notify still fired
+    pre-commit this connection would observe the OLD status instead.
+    """
+    import app.services.payment as payment_module
+
+    user, headers = _customer(db_session, "NOTIFYORDER")
+    order = _create_order(db_session, user, total_amount=Decimal("40.00"))
+    payment = client.post(
+        "/api/v1/payments", json={"order_id": order.id, "payment_method": "UPI"}, headers=headers
+    ).json()
+    txn = db_session.query(PaymentTransaction).filter_by(payment_id=payment["id"]).first()
+
+    observed_payment_statuses: list[str] = []
+    observed_order_statuses: list[str] = []
+
+    def spy_notify(*, resource, order_id, user_id, new_status, previous_status=None):
+        with test_engine.connect() as separate_conn:
+            if resource == "payment":
+                row = separate_conn.execute(
+                    text("SELECT status FROM payments WHERE id = :pid"), {"pid": payment["id"]}
+                ).first()
+                observed_payment_statuses.append(row[0])
+            elif resource == "order":
+                row = separate_conn.execute(
+                    text("SELECT status FROM orders WHERE id = :oid"), {"oid": order.id}
+                ).first()
+                observed_order_statuses.append(row[0])
+
+    monkeypatch.setattr(payment_module, "notify_status_event", spy_notify)
+
+    body = _webhook_body(
+        event_id="evt-notify-order-1", event_type="PAYMENT_SUCCESS",
+        gateway_order_id=payment["gateway_order_id"], gateway_transaction_id=txn.gateway_transaction_id,
+        status="SUCCESS", amount="40.00", currency="INR",
+    )
+    response = client.post(
+        "/api/v1/payments/webhooks/pnb", content=body, headers=_webhook_headers(WEBHOOK_SECRET, body)
+    )
+    assert response.status_code == 200
+    assert observed_payment_statuses == ["PAID"]
+    assert observed_order_statuses == ["CONFIRMED"]

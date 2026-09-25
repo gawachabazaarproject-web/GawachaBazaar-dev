@@ -965,13 +965,13 @@ def test_42_unwanted_tables_do_not_exist(test_engine) -> None:
         "inventory",
         "warehouses",
         "coupons",
-        "promotions",
         "reviews",
         "delivery",
-        # "suppliers" removed from this blocklist in Phase 17 - it was a
-        # premature/speculative table as of Phase 3 and is now a real,
-        # deliberately-built independent business entity (see
-        # ARCHITECTURE.md §21c). Everything else here remains genuinely
+        # "suppliers" removed from this blocklist in Phase 17, and
+        # "promotions" removed here for the identical reason: both were
+        # premature/speculative table names as of Phase 3 and are now
+        # real, deliberately-built domain tables (the Admin Panel
+        # Promotions module). Everything else here remains genuinely
         # out of scope.
         "farmers",
         "procurement",

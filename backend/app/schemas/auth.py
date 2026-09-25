@@ -125,3 +125,42 @@ class LogoutResponse(BaseSchema):
     """Confirmation message upon session revocation."""
 
     message: str = "Logged out successfully."
+
+
+class ForgotPasswordRequest(BaseSchema):
+    """Step 1 of the reset-password flow: prove control of the account's
+    email before anything about a new password is even asked for."""
+
+    email: EmailStr
+
+    @field_validator("email", mode="after")
+    @classmethod
+    def validate_and_normalize_email(cls, v: EmailStr) -> str:
+        return normalize_email(str(v))
+
+
+class ForgotPasswordResponse(BaseSchema):
+    """Always the same shape and message whether or not the email is
+    registered - this is the enumeration-protection boundary, so nothing
+    here (a token, a masked email) may ever reveal account existence."""
+
+    message: str = "If that email is registered, we've sent a 6-digit reset code to it."
+
+
+class ResetPasswordRequest(BaseSchema):
+    """Step 2: the code just proved above, plus the new password. Re-sends
+    `email` rather than an opaque challenge token, since
+    ForgotPasswordResponse deliberately never hands one out."""
+
+    email: EmailStr
+    code: str = Field(..., min_length=6, max_length=6, pattern=r"^\d{6}$")
+    new_password: str = Field(..., min_length=8, max_length=128)
+
+    @field_validator("email", mode="after")
+    @classmethod
+    def validate_and_normalize_email(cls, v: EmailStr) -> str:
+        return normalize_email(str(v))
+
+
+class ResetPasswordResponse(BaseSchema):
+    message: str = "Your password has been reset. Please log in with your new password."

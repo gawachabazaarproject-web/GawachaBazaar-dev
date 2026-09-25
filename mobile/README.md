@@ -121,9 +121,12 @@ one-time address-onboarding screen, and the main tab experience.
   each category's real products into hand-curated "department" tiles for the Categories screen.
   The grouping and photography are a client-side presentation layer - every product and count
   shown is real, and every department slug list exactly partitions its category's real catalog.
-- **Profile editing and password reset do not exist** - the backend has no corresponding endpoints
-  (profile update, password reset), and neither was fabricated. Login's "Forgot password?" link
-  routes to Support rather than a fake reset flow. See the Phase 20 report's Post-MVP Backlog.
+- **Profile editing does not exist** - the backend has no profile-update endpoint, and none was
+  fabricated. See the Phase 20 report's Post-MVP Backlog.
+- **Password reset is real**: `POST /auth/forgot-password` + `POST /auth/reset-password` (email-OTP
+  verified, same code-hash/attempts/expiry shape as login OTP), wired end-to-end at
+  `app/(auth)/forgot-password.tsx` - enter email, enter the emailed code + new password, done. A
+  successful reset revokes every existing session for the account.
 - **No MRP/discount pricing.** `PriceTag` supports an optional struck-through MRP, but the backend
   has no MRP field - only a single current price. `src/utils/productEmbellishments.ts` supplies an
   illustrative MRP (and Marathi name/origin/ETA) per product, purely for presentation, clearly

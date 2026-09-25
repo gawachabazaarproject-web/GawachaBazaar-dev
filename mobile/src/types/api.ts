@@ -64,6 +64,23 @@ export interface LoginPayload {
   password: string;
 }
 
+/** Always the same generic shape whether or not the email is registered -
+ * this is the enumeration-protection boundary, so the UI must never infer
+ * account existence from this response. */
+export interface ForgotPasswordResponse {
+  message: string;
+}
+
+export interface ResetPasswordPayload {
+  email: string;
+  code: string;
+  new_password: string;
+}
+
+export interface ResetPasswordResponse {
+  message: string;
+}
+
 // ---------------------------------------------------------------------------
 // Address
 // ---------------------------------------------------------------------------
@@ -330,6 +347,19 @@ export interface PaymentInitiationResponse extends PaymentResponse {
 export interface CreatePaymentPayload {
   order_id: number;
   payment_method: PaymentMethod;
+}
+
+// ---------------------------------------------------------------------------
+// Ads (brand-advertising creatives, admin-managed - see
+// backend/app/models/ad.py. Distinct from Promotion: pure display/link
+// content, no pricing/redemption logic.)
+// ---------------------------------------------------------------------------
+
+export interface AdResponse {
+  id: number;
+  brand_name: string;
+  image_url: string;
+  link_url: string | null;
 }
 
 // ---------------------------------------------------------------------------

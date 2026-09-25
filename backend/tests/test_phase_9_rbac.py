@@ -27,6 +27,7 @@ from app.core.roles import (
     DELIVERY_PARTNER,
     HUB_STAFF,
     OPERATIONS,
+    SUPPORT,
     WHOLESALER,
 )
 from app.core.security import hash_password
@@ -56,6 +57,7 @@ def test_1_baseline_roles_seeded_by_migration(test_engine) -> None:
         HUB_STAFF,
         OPERATIONS,
         DELIVERY_PARTNER,
+        SUPPORT,
     )
     for role_name in BASELINE_ROLES:
         assert role_name in names, f"{role_name} role missing after migration"
@@ -77,7 +79,8 @@ def test_2_role_seeding_is_idempotent(test_engine) -> None:
                 "('ADMIN', 'Superuser.'), "
                 "('HUB_STAFF', 'Hub staff.'), "
                 "('OPERATIONS', 'Operations staff.'), "
-                "('DELIVERY_PARTNER', 'Delivery partner.') "
+                "('DELIVERY_PARTNER', 'Delivery partner.'), "
+                "('SUPPORT', 'Support staff.') "
                 "ON CONFLICT (name) DO NOTHING"
             )
         )

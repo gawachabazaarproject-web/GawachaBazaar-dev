@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from "react-native";
-import { Link, useRouter } from "expo-router";
+import { Link } from "expo-router";
 import { Screen } from "@/components/Screen";
 import { Text } from "@/components/Text";
 import { TextField } from "@/components/TextField";
@@ -14,7 +14,6 @@ import { validateEmail, validateName, validatePassword, validatePhone } from "@/
 type FieldErrors = { name?: string; email?: string; phone?: string; password?: string };
 
 export default function RegisterScreen() {
-  const router = useRouter();
   const register = useAuthStore((s) => s.register);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");

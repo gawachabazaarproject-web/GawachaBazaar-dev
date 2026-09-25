@@ -233,7 +233,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     borderWidth: 1.5,
     borderColor: colors.primary,
-    borderRadius: radius.none,
+    borderRadius: radius.card,
     paddingVertical: spacing.md,
     marginBottom: spacing.sm,
   },
@@ -243,7 +243,7 @@ const styles = StyleSheet.create({
   chip: {
     paddingHorizontal: spacing.base,
     paddingVertical: spacing.sm,
-    borderRadius: radius.none,
+    borderRadius: radius.card,
     borderWidth: 1.5,
     borderColor: colors.border,
   },

@@ -65,7 +65,7 @@ const styles = StyleSheet.create({
   bar: {
     height: 56,
     backgroundColor: colors.primary,
-    borderRadius: radius.none,
+    borderRadius: radius.card,
     borderWidth: 1,
     borderColor: colors.primaryDark,
     paddingHorizontal: spacing.base,

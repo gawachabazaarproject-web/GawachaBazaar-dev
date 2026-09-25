@@ -29,23 +29,30 @@ from app.exceptions.base import (
 )
 from app.models.auth_session import AuthSession
 from app.models.login_otp_challenge import LoginOtpChallenge
+from app.models.password_reset_challenge import PasswordResetChallenge
 from app.models.role import Role
 from app.models.user import User
 from app.models.user_role import UserRole
 from app.schemas.auth import (
+    ForgotPasswordRequest,
+    ForgotPasswordResponse,
     LoginRequest,
     LogoutResponse,
     OtpChallengeResponse,
     RefreshTokenResponse,
     RegisterRequest,
+    ResetPasswordRequest,
+    ResetPasswordResponse,
     TokenResponse,
     UserResponse,
     VerifyLoginOtpRequest,
 )
-from app.services.notification_gateway import ConsoleNotificationGateway, NotificationGateway
+from app.services.notification_gateway import NotificationGateway, get_default_notification_gateway
 
 LOGIN_OTP_TTL_MINUTES = 10
 LOGIN_OTP_MAX_ATTEMPTS = 5
+PASSWORD_RESET_OTP_TTL_MINUTES = 10
+PASSWORD_RESET_MAX_ATTEMPTS = 5
 
 
 def _mask_email(email: str) -> str:
@@ -87,7 +94,7 @@ class AuthService:
 
     def __init__(self, db: Session, notification_gateway: NotificationGateway | None = None) -> None:
         self.db = db
-        self._notification_gateway = notification_gateway or ConsoleNotificationGateway()
+        self._notification_gateway = notification_gateway or get_default_notification_gateway()
 
     def get_role_names(self, user_id: int) -> list[str]:
         """Current role names for a user, read live from `user_roles`/`roles`.
@@ -109,6 +116,13 @@ class AuthService:
         client_meta: dict[str, Any] | None = None,
     ) -> TokenResponse:
         """Atomically register a new user, assign the default CUSTOMER role, and create an auth session.
+
+        No OTP step here (unlike login) - registration issues a session
+        immediately. Removed deliberately after the Resend sandbox
+        restriction (unverified domain: only the account's own address can
+        receive mail) made registration untestable with arbitrary emails;
+        revisit once a domain is verified if email-verified signup is
+        wanted again.
 
         Concurrency & Race Conditions:
         If duplicate email or phone is attempted concurrently, PostgreSQL unique constraints
@@ -522,6 +536,109 @@ class AuthService:
                 logger.info("AUTH_LOGOUT_SUCCESS: session_id=%s revoked", session.id)
 
         return LogoutResponse(message="Logged out successfully.")
+
+    def forgot_password(self, data: ForgotPasswordRequest) -> ForgotPasswordResponse:
+        """Step 1 of password reset. Always returns the identical generic
+        response regardless of whether the email is registered - that
+        response's own docstring is the enumeration-protection boundary,
+        so a non-existent/inactive account silently no-ops here rather
+        than raising or returning a different shape.
+        """
+        user = (
+            self.db.query(User)
+            .filter(User.email == data.email, User.status == "ACTIVE")
+            .first()
+        )
+        if user is not None:
+            now = datetime.now(UTC)
+            # Same "supersede any still-pending challenge" precedent as
+            # _issue_otp_challenge - one live code per user at a time.
+            stale = (
+                self.db.query(PasswordResetChallenge)
+                .filter(
+                    PasswordResetChallenge.user_id == user.id,
+                    PasswordResetChallenge.status == "PENDING",
+                )
+                .all()
+            )
+            for challenge in stale:
+                challenge.status = "EXPIRED"
+
+            code = generate_verification_code()
+            self.db.add(
+                PasswordResetChallenge(
+                    user_id=user.id,
+                    code_hash=hash_verification_code(code),
+                    status="PENDING",
+                    expires_at=now + timedelta(minutes=PASSWORD_RESET_OTP_TTL_MINUTES),
+                )
+            )
+            self.db.commit()
+
+            logger.info("AUTH_PASSWORD_RESET_OTP_ISSUED: user_id=%s", user.id)
+            self._notification_gateway.send_verification_code(
+                channel="EMAIL", destination=user.email, code=code
+            )
+        else:
+            logger.info("AUTH_PASSWORD_RESET_REQUEST_UNKNOWN_EMAIL")
+
+        return ForgotPasswordResponse()
+
+    def reset_password(self, data: ResetPasswordRequest) -> ResetPasswordResponse:
+        """Step 2: verify the code that just proved control of `email`,
+        then set the new password. Also revokes every existing session for
+        the account - a password reset is exactly the moment any session
+        that might not belong to the real account owner should stop
+        working immediately, not wait for its own expiry.
+        """
+        user = self.db.query(User).filter(User.email == data.email).first()
+        if user is None:
+            # Identical failure to "wrong code" - never confirms whether
+            # the email exists, same enumeration-protection boundary as
+            # forgot_password itself.
+            raise BusinessValidationError("Incorrect code, or this code has expired.")
+
+        challenge = (
+            self.db.query(PasswordResetChallenge)
+            .filter(
+                PasswordResetChallenge.user_id == user.id,
+                PasswordResetChallenge.status == "PENDING",
+            )
+            .order_by(PasswordResetChallenge.id.desc())
+            .with_for_update()
+            .first()
+        )
+        if challenge is None:
+            raise BusinessValidationError("Incorrect code, or this code has expired.")
+
+        now = datetime.now(UTC)
+        if challenge.expires_at <= now:
+            challenge.status = "EXPIRED"
+            self.db.commit()
+            raise BusinessValidationError("This code has expired. Please request a new one.")
+
+        if challenge.attempts >= PASSWORD_RESET_MAX_ATTEMPTS:
+            challenge.status = "EXPIRED"
+            self.db.commit()
+            raise BusinessValidationError(
+                "Too many incorrect attempts. Please request a new code."
+            )
+
+        if hash_verification_code(data.code) != challenge.code_hash:
+            challenge.attempts += 1
+            self.db.commit()
+            remaining = PASSWORD_RESET_MAX_ATTEMPTS - challenge.attempts
+            raise BusinessValidationError(f"Incorrect code. {remaining} attempt(s) remaining.")
+
+        challenge.status = "VERIFIED"
+        challenge.verified_at = now
+        user.password_hash = hash_password(data.new_password)
+        self.db.query(AuthSession).filter(AuthSession.user_id == user.id).delete()
+
+        self.db.commit()
+        logger.info("AUTH_PASSWORD_RESET_SUCCESS: user_id=%s", user.id)
+
+        return ResetPasswordResponse()
 
     def resolve_current_user(self, token: str) -> User:
         """Resolve, validate, and return the authenticated user from a Bearer JWT.

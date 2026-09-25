@@ -90,7 +90,7 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
     borderWidth: 1.5,
     borderColor: colors.border,
-    borderRadius: radius.none,
+    borderRadius: radius.card,
     paddingHorizontal: spacing.base,
     paddingVertical: spacing.md,
     backgroundColor: colors.surface,

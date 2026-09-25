@@ -154,6 +154,24 @@ AUDIT_PERMISSIONS = {
     "audit.read",
 }
 
+# Staff/employee management - creating internal accounts and assigning the
+# operational roles that gate the rest of this admin panel. ADMIN-only, same
+# precedent as Refunds/Promotions: who can act as staff (including who can
+# grant ADMIN itself) is at least as sensitive as a discount rule.
+STAFF_PERMISSIONS = {
+    "staff.read",
+    "staff.manage",
+}
+
+# Brand-advertising creatives shown in the mobile app's ads carousel -
+# display/link content, no pricing or redemption logic (see app/models/ad.py,
+# distinct from Promotion). ADMIN-only for now, same precedent as
+# Promotions: customer-facing content a brand is paying to show.
+AD_PERMISSIONS = {
+    "ads.read",
+    "ads.manage",
+}
+
 ALL_PERMISSIONS: frozenset[str] = frozenset(
     CATALOG_PERMISSIONS
     | INVENTORY_PERMISSIONS
@@ -166,6 +184,8 @@ ALL_PERMISSIONS: frozenset[str] = frozenset(
     | REPORT_PERMISSIONS
     | SETTINGS_PERMISSIONS
     | AUDIT_PERMISSIONS
+    | STAFF_PERMISSIONS
+    | AD_PERMISSIONS
 )
 
 # ADMIN is the top role until a dedicated SUPER_ADMIN role is introduced

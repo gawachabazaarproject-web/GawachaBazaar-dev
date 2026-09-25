@@ -133,7 +133,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.divider,
-    borderRadius: radius.none,
+    borderRadius: radius.card,
     paddingHorizontal: spacing.md,
     height: 48,
   },
@@ -143,7 +143,7 @@ const styles = StyleSheet.create({
   list: { paddingHorizontal: spacing.base, paddingBottom: spacing.xl + CART_BAR_CLEARANCE, gap: spacing.md },
   panel: {
     height: 220,
-    borderRadius: radius.none,
+    borderRadius: radius.card,
     overflow: "hidden",
     backgroundColor: colors.primary,
     justifyContent: "space-between",
@@ -156,7 +156,7 @@ const styles = StyleSheet.create({
   panelArrow: {
     width: 34,
     height: 34,
-    borderRadius: radius.none,
+    borderRadius: radius.card,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.5)",
     alignItems: "center",

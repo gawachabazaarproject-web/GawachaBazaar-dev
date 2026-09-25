@@ -113,6 +113,12 @@ class PaymentService:
         """
         self.db = db
         self.gateway = gateway
+        # Realtime events are queued here and only ever flushed by
+        # `_flush_pending_realtime_events()` after the enclosing
+        # `db.commit()` has actually succeeded - see that method's
+        # docstring for why (a client must never be told about a
+        # transition that then rolls back).
+        self._pending_realtime_events: list[dict] = []
 
     # ------------------------------------------------------------------
     # Customer-facing
@@ -259,6 +265,7 @@ class PaymentService:
             raise ConflictError(
                 "Could not verify payment due to a conflicting update."
             ) from exc
+        self._flush_pending_realtime_events()
 
         self.db.refresh(payment)
         return PaymentResponse.model_validate(payment)
@@ -496,6 +503,7 @@ class PaymentService:
             raise ConflictError(
                 "Could not process webhook due to a conflicting update."
             ) from exc
+        self._flush_pending_realtime_events()
 
         logger.info(
             "PAYMENT_WEBHOOK_PROCESSED: gateway=%s event_id=%s payment_id=%s transaction_id=%s",
@@ -685,6 +693,7 @@ class PaymentService:
             raise ConflictError(
                 "Could not persist payment gateway reference due to a conflicting update."
             ) from exc
+        self._flush_pending_realtime_events()
         self.db.refresh(payment)
         self.db.refresh(transaction)
 
@@ -788,14 +797,31 @@ class PaymentService:
             payment.id, source, result.previous.value, result.current.value,
         )
         if order_user_id is not None:
-            notify_status_event(
-                resource="payment",
-                order_id=payment.order_id,
-                user_id=order_user_id,
-                new_status=result.current.value,
-                previous_status=result.previous.value,
+            self._pending_realtime_events.append(
+                dict(
+                    resource="payment",
+                    order_id=payment.order_id,
+                    user_id=order_user_id,
+                    new_status=result.current.value,
+                    previous_status=result.previous.value,
+                )
             )
         return True
+
+    def _flush_pending_realtime_events(self) -> None:
+        """Fire every realtime event queued by this call. Callers must
+        invoke this ONLY after their enclosing `db.commit()` has actually
+        succeeded - `_apply_transaction_status`/`_confirm_order_if_paid`
+        run before that commit (so an `IntegrityError` there rolls back
+        cleanly), and previously called `notify_status_event` directly at
+        that point, meaning a client could be told "PAID"/"CONFIRMED" for
+        a transition that then failed to commit. Queuing and flushing
+        post-commit matches every other call site in the codebase
+        (fulfillment.py, refund.py, order.py, `_confirm_cod` below).
+        """
+        events, self._pending_realtime_events = self._pending_realtime_events, []
+        for event in events:
+            notify_status_event(**event)
 
     def _confirm_order_if_paid(self, order: Order, payment: Payment) -> None:
         """Caller must already hold the order row lock.
@@ -811,11 +837,13 @@ class PaymentService:
         Phase 18: a payment can also resolve to PAID AFTER its order was
         already cancelled (the customer cancelled while a UPI attempt was
         still PROCESSING). Money was genuinely collected for an order that
-        will never be fulfilled, so this is the second of the two call
-        sites that create refund eligibility (the first being
-        OrderService.cancel_order itself, for the case where the payment
-        was already PAID at cancellation time) - never issuing the refund
-        itself, only making it visible for ADMIN approval.
+        will never be fulfilled, so this is one of three call sites that
+        create refund eligibility (the others being OrderService.cancel_order
+        itself, for the case where the payment was already PAID at
+        cancellation time, and the EXPIRED branch just below, for the case
+        where `commit_reservation_for_order` lazily expires the order
+        right here) - never issuing the refund itself, only making it
+        visible for ADMIN approval.
         """
         if payment.status != PaymentStatus.PAID:
             return
@@ -824,23 +852,42 @@ class PaymentService:
                 self.db
             ).commit_reservation_for_order(order, now=datetime.now(UTC))
             if not committed:
-                logger.error(
-                    "PAYMENT_RESERVATION_MISMATCH: order_id=%s payment_id=%s payment "
-                    "PAID but reservation could not be committed (expired/released) "
-                    "- order left PENDING, not auto-confirmed",
-                    order.id, payment.id,
-                )
+                if order.status == "EXPIRED":
+                    # commit_reservation_for_order's own lazy-expiry path
+                    # (reservation was ACTIVE but past expires_at) just
+                    # moved this order PENDING -> EXPIRED, a terminal
+                    # state it can never leave. Payment is already PAID -
+                    # without this, that money had no refund-eligibility
+                    # record anywhere (unlike the identical-in-substance
+                    # CANCELLED case below), a silent stuck-paid order
+                    # visible only via an ERROR log line.
+                    RefundService(self.db).create_refund_if_eligible(order, payment)
+                    logger.warning(
+                        "PAYMENT_RECONCILIATION: order_id=%s payment_id=%s payment "
+                        "PAID but reservation expired before confirmation - order "
+                        "EXPIRED, refund eligibility created for admin review",
+                        order.id, payment.id,
+                    )
+                else:
+                    logger.error(
+                        "PAYMENT_RESERVATION_MISMATCH: order_id=%s payment_id=%s "
+                        "payment PAID but reservation could not be committed - "
+                        "order left %s, not auto-confirmed",
+                        order.id, payment.id, order.status,
+                    )
                 return
             order.status = "CONFIRMED"
             logger.info(
                 "PAYMENT_ORDER_CONFIRMED: order_id=%s payment_id=%s", order.id, payment.id
             )
-            notify_status_event(
-                resource="order",
-                order_id=order.id,
-                user_id=order.user_id,
-                new_status="CONFIRMED",
-                previous_status="PENDING",
+            self._pending_realtime_events.append(
+                dict(
+                    resource="order",
+                    order_id=order.id,
+                    user_id=order.user_id,
+                    new_status="CONFIRMED",
+                    previous_status="PENDING",
+                )
             )
         elif order.status == "CANCELLED":
             RefundService(self.db).create_refund_if_eligible(order, payment)

@@ -1,9 +1,12 @@
 import { apiClient } from "./client";
 import {
+  ForgotPasswordResponse,
   LoginPayload,
   LoginResult,
   RefreshTokenResponse,
   RegisterPayload,
+  ResetPasswordPayload,
+  ResetPasswordResponse,
   TokenResponse,
   UserResponse,
 } from "@/types/api";
@@ -29,4 +32,14 @@ export const authApi = {
     apiClient.post("/auth/logout", { refresh_token: refreshToken }).then((r) => r.data),
 
   me: () => apiClient.get<UserResponse>("/auth/me").then((r) => r.data),
+
+  forgotPassword: (email: string) =>
+    apiClient
+      .post<ForgotPasswordResponse>("/auth/forgot-password", { email })
+      .then((r) => r.data),
+
+  resetPassword: (payload: ResetPasswordPayload) =>
+    apiClient
+      .post<ResetPasswordResponse>("/auth/reset-password", payload)
+      .then((r) => r.data),
 };

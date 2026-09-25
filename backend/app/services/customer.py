@@ -64,7 +64,7 @@ from app.schemas.admin_customer import (
     CUSTOMER_ACCOUNT_STATUSES,
 )
 from app.services.admin_audit import AdminAuditService
-from app.services.notification_gateway import ConsoleNotificationGateway, NotificationGateway
+from app.services.notification_gateway import NotificationGateway, get_default_notification_gateway
 
 # UI-display heuristic only (mirrors Inventory's LOW_STOCK_THRESHOLD
 # convention) - "new"/"recently active"/"inactive" are a documented display
@@ -112,7 +112,7 @@ class CustomerService:
         # Only the contact-change methods use this - defaulted so every
         # other route (read endpoints, notes, status changes) can keep
         # constructing CustomerService(db) exactly as before.
-        self._notification_gateway = notification_gateway or ConsoleNotificationGateway()
+        self._notification_gateway = notification_gateway or get_default_notification_gateway()
 
     # ------------------------------------------------------------------
     # Internal helpers

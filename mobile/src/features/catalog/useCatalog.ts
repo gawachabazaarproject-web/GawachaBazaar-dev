@@ -1,5 +1,13 @@
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
-import { catalogApi, ListProductsParams } from "@/api";
+import { adsApi, catalogApi, ListProductsParams } from "@/api";
+
+export function useAds() {
+  return useQuery({
+    queryKey: ["ads"],
+    queryFn: () => adsApi.listActive(),
+    staleTime: 5 * 60_000,
+  });
+}
 
 export function useCategories() {
   return useQuery({

@@ -49,5 +49,5 @@ const styles = StyleSheet.create({
   },
   header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   title: { marginTop: spacing.xs, marginBottom: spacing.md },
-  pill: { backgroundColor: colors.accentLight, borderRadius: radius.none, paddingHorizontal: spacing.xs, paddingVertical: 3 },
+  pill: { backgroundColor: colors.accentLight, borderRadius: radius.card, paddingHorizontal: spacing.xs, paddingVertical: 3 },
 });

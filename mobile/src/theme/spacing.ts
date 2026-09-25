@@ -15,13 +15,15 @@ export const spacing = {
 export type SpacingToken = keyof typeof spacing;
 
 export const radius = {
-  // De-roundified, editorial default - matches the website's `rounded-none`
-  // philosophy. Prefer this on new cards/images/panels; the larger values
-  // below remain only for genuinely circular controls (avatars, dots).
+  // Zero radius - kept for genuinely sharp-cornered cases (rare); prefer
+  // `card` below for the app's default corner treatment.
   none: 0,
   xs: 4,
   sm: 8,
   md: 12,
+  // The app-wide default for cards/images/panels - every such surface
+  // reads `card`, so the overall look tunes from this one value.
+  card: 16,
   lg: 16,
   xl: 24,
   pill: 999,

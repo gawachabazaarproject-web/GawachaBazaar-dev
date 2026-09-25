@@ -157,7 +157,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.divider,
-    borderRadius: radius.none,
+    borderRadius: radius.card,
     padding: spacing.base,
     marginBottom: spacing.base,
   },

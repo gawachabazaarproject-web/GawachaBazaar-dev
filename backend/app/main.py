@@ -1,6 +1,7 @@
 import asyncio
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
+from datetime import UTC, datetime
 
 from fastapi import Depends, FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -16,9 +17,35 @@ from app.core.rate_limit import limiter
 from app.core.realtime import register_main_loop
 from app.core.request_id import RequestIDMiddleware
 from app.core.security_headers import SecurityHeadersMiddleware
+from app.db.session import SessionLocal
 from app.dependencies.database import get_db
 from app.exceptions.handlers import register_exception_handlers
 from app.schemas.base import DatabaseHealthResponse, HealthResponse
+from app.services.inventory_reservation import InventoryReservationService
+
+# No Celery/APScheduler exists in this codebase - this is the smallest
+# safe way to give inventory reservation expiry a proactive sweep
+# instead of relying only on something happening to read/pay/expire one
+# specific order. See InventoryReservationService.sweep_expired_reservations.
+RESERVATION_EXPIRY_SWEEP_INTERVAL_SECONDS = 120
+
+
+def _run_reservation_sweep(db: Session) -> int:
+    return InventoryReservationService(db).sweep_expired_reservations(now=datetime.now(UTC))
+
+
+async def _reservation_expiry_sweep_loop() -> None:
+    while True:
+        await asyncio.sleep(RESERVATION_EXPIRY_SWEEP_INTERVAL_SECONDS)
+        db = SessionLocal()
+        try:
+            count = await asyncio.to_thread(_run_reservation_sweep, db)
+            if count:
+                logger.info("INVENTORY_RESERVATION_SWEEP: expired_count=%s", count)
+        except Exception:
+            logger.exception("INVENTORY_RESERVATION_SWEEP_LOOP_ERROR")
+        finally:
+            db.close()
 
 
 @asynccontextmanager
@@ -33,7 +60,13 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         settings.APP_ENV,
         settings.DEBUG,
     )
+    sweep_task = asyncio.create_task(_reservation_expiry_sweep_loop())
     yield
+    sweep_task.cancel()
+    try:
+        await sweep_task
+    except asyncio.CancelledError:
+        pass
     logger.info("Shutting down %s", settings.APP_NAME)
 
 

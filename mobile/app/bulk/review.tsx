@@ -198,7 +198,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderColor: colors.divider,
   },
-  itemImage: { width: 56, height: 56, borderRadius: radius.none, backgroundColor: colors.background },
+  itemImage: { width: 56, height: 56, borderRadius: radius.card, backgroundColor: colors.background },
   sectionLabel: { marginTop: spacing.xl, marginBottom: spacing.md },
   addAddressLink: { flexDirection: "row", alignItems: "center" },
   addressOption: { flexDirection: "row", alignItems: "flex-start", gap: spacing.sm, marginBottom: spacing.md },

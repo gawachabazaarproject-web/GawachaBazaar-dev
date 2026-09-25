@@ -107,7 +107,7 @@ const styles = StyleSheet.create({
   content: { padding: spacing.base },
   summaryCard: {
     backgroundColor: colors.surface,
-    borderRadius: radius.none,
+    borderRadius: radius.card,
     borderWidth: 1,
     borderColor: colors.border,
     padding: spacing.lg,
@@ -118,7 +118,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: colors.errorLight,
-    borderRadius: radius.none,
+    borderRadius: radius.card,
     padding: spacing.base,
   },
   timeline: { paddingLeft: spacing.sm },
