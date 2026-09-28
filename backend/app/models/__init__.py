@@ -21,7 +21,6 @@ from app.models.bulk_order_request_item import BulkOrderRequestItem
 from app.models.cart import Cart
 from app.models.cart_item import CartItem
 from app.models.category import Category
-from app.models.contact_change_request import ContactChangeRequest
 from app.models.customer_note import CustomerNote
 from app.models.farm import Farm
 from app.models.fulfillment import Fulfillment
@@ -29,14 +28,12 @@ from app.models.inventory_location import InventoryLocation
 from app.models.inventory_lot import InventoryLot
 from app.models.inventory_reservation import InventoryReservation
 from app.models.inventory_reservation_item import InventoryReservationItem
-from app.models.login_otp_challenge import LoginOtpChallenge
 from app.models.order import Order
 from app.models.order_address import OrderAddress
 from app.models.order_item import OrderItem
 from app.models.packaging_input import PackagingInput
 from app.models.packaging_operation import PackagingOperation
 from app.models.packaging_output import PackagingOutput
-from app.models.password_reset_challenge import PasswordResetChallenge
 from app.models.payment import Payment
 from app.models.payment_transaction import PaymentTransaction
 from app.models.payment_webhook_event import PaymentWebhookEvent
@@ -73,7 +70,6 @@ __all__ = [
     "Cart",
     "CartItem",
     "Category",
-    "ContactChangeRequest",
     "CustomerNote",
     "Farm",
     "Fulfillment",
@@ -81,14 +77,12 @@ __all__ = [
     "InventoryLot",
     "InventoryReservation",
     "InventoryReservationItem",
-    "LoginOtpChallenge",
     "Order",
     "OrderAddress",
     "OrderItem",
     "PackagingInput",
     "PackagingOperation",
     "PackagingOutput",
-    "PasswordResetChallenge",
     "Payment",
     "PaymentTransaction",
     "PaymentWebhookEvent",

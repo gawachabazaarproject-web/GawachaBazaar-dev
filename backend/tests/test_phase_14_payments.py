@@ -743,7 +743,7 @@ def test_gateway_timeout_leaves_payment_processing_not_failed(
     response = client.post(
         "/api/v1/payments", json={"order_id": order.id, "payment_method": "UPI"}, headers=headers
     )
-    assert response.status_code == 500  # honest error to the client
+    assert response.status_code == 502  # honest gateway error to the client, never a generic 500
 
     db_session.expire_all()
     payment = db_session.query(Payment).filter_by(order_id=order.id).first()

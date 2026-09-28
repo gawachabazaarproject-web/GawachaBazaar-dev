@@ -1,0 +1,6 @@
+# Shell scripts and the Caddyfile run inside Linux containers / on the
+# Contabo server - CRLF line endings would break them (`/bin/sh^M`).
+*.sh        text eol=lf
+Caddyfile   text eol=lf
+Dockerfile  text eol=lf
+*.yml       text eol=lf

@@ -15,7 +15,11 @@ from datetime import datetime
 from decimal import Decimal
 
 from app.schemas.base import BaseSchema
-from app.schemas.catalog import CategoryResponse, ProductImageResponse, ProductVariantResponse
+from app.schemas.catalog import (
+    CategoryResponse,
+    ProductImageResponse,
+    ProductVariantResponse,
+)
 
 MAX_PAGE_SIZE = 100
 

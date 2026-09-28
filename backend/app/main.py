@@ -60,6 +60,29 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         settings.APP_ENV,
         settings.DEBUG,
     )
+    # Online payments and uploads degrade honestly (a clear 503) rather
+    # than failing startup, but in production that is invisible until a
+    # customer or admin hits it - say so loudly at boot instead.
+    if settings.is_production and not settings.RAZORPAY_KEY_ID:
+        logger.warning(
+            "RAZORPAY_KEY_ID is not set: online payments are OFF - customers "
+            "can only use Cash on Delivery."
+        )
+    elif settings.is_production and settings.RAZORPAY_KEY_ID.startswith("rzp_test_"):
+        logger.warning(
+            "Razorpay is using TEST keys (rzp_test_...) in production - no "
+            "real money will be collected. Switch to rzp_live_ keys to go live."
+        )
+    # Uploads - see the comment above.
+    if settings.is_production and not (
+        settings.CLOUDINARY_CLOUD_NAME
+        and settings.CLOUDINARY_API_KEY
+        and settings.CLOUDINARY_API_SECRET
+    ):
+        logger.warning(
+            "Cloudinary is not configured: Admin image uploads will fail "
+            "with UPLOADS_NOT_CONFIGURED."
+        )
     sweep_task = asyncio.create_task(_reservation_expiry_sweep_loop())
     yield
     sweep_task.cancel()

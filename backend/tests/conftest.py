@@ -52,7 +52,7 @@ def db_session(test_engine) -> Generator[Session, None, None]:
     # Clean test tables before each test in dependency order
     session.execute(
         text(
-            "TRUNCATE TABLE auth_sessions, login_otp_challenges, contact_change_requests, "
+            "TRUNCATE TABLE auth_sessions, "
             "customer_notes, admin_action_logs, payment_webhook_events, "
             "payment_transactions, refunds, payments, "
             "promotion_redemptions, promotion_targets, promotion_eligible_customers, promotions, "

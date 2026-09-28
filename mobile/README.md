@@ -111,10 +111,12 @@ one-time address-onboarding screen, and the main tab experience.
 
 ## Known limitations (genuine, not deferred silently)
 
-- **UPI payments cannot succeed against the current backend.** `PNBGateway.initiate_payment` is an
-  intentional placeholder (Phase 14) that always raises `NotImplementedError`. The app handles
-  this honestly (see `app/checkout/index.tsx`'s payment-failure recovery state) rather than faking
-  success - COD is the only payment method that can currently complete an order end-to-end.
+- **Online payment uses Razorpay Checkout in a WebView** (`src/components/payment/RazorpayCheckout.tsx`,
+  plus a `.web.tsx` variant using Razorpay's checkout.js). It works in Expo Go and standalone builds with
+  no native SDK. The app only relays Razorpay's success payload to `POST /payments/{id}/confirm`, and
+  the backend verifies the signature and re-checks the order with Razorpay. If the backend has no
+  Razorpay keys, "Pay online" gets a clear "not available" error and COD still works. A customer who
+  closes the sheet can finish from the checkout screen or from the order page ("Complete payment").
 - **Categories have no image field in the backend** (`app/models/category.py`), and products have
   no subcategory/department field. `src/utils/categoryVisuals.ts` maps each category to a real
   photo (hashed fallback for any category added later); `src/utils/categoryDepartments.ts` groups
@@ -123,10 +125,10 @@ one-time address-onboarding screen, and the main tab experience.
   shown is real, and every department slug list exactly partitions its category's real catalog.
 - **Profile editing does not exist** - the backend has no profile-update endpoint, and none was
   fabricated. See the Phase 20 report's Post-MVP Backlog.
-- **Password reset is real**: `POST /auth/forgot-password` + `POST /auth/reset-password` (email-OTP
-  verified, same code-hash/attempts/expiry shape as login OTP), wired end-to-end at
-  `app/(auth)/forgot-password.tsx` - enter email, enter the emailed code + new password, done. A
-  successful reset revokes every existing session for the account.
+- **No email/SMS codes anywhere**: login is email-or-phone + password only. There is no
+  self-service password reset - the login screen tells customers to contact support, and an
+  admin sets a new password from the Admin panel (Customers → customer → Account information),
+  which signs the customer out of every device.
 - **No MRP/discount pricing.** `PriceTag` supports an optional struck-through MRP, but the backend
   has no MRP field - only a single current price. `src/utils/productEmbellishments.ts` supplies an
   illustrative MRP (and Marathi name/origin/ETA) per product, purely for presentation, clearly

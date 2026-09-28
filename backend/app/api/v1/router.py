@@ -15,6 +15,7 @@ from app.api.v1.bulk_orders import customer_router as bulk_orders_customer_route
 from app.api.v1.cart import router as cart_router
 from app.api.v1.catalog import router as catalog_router
 from app.api.v1.customers import router as customers_router
+from app.api.v1.dashboard import router as dashboard_router
 from app.api.v1.fulfillments import router as fulfillments_router
 from app.api.v1.inventory import router as inventory_router
 from app.api.v1.orders import admin_router as orders_admin_router
@@ -112,6 +113,9 @@ api_router.include_router(promotions_router, prefix="/promotions", tags=["promot
 # permissions). A "customer" is an existing User with the CUSTOMER role -
 # no separate identity system.
 api_router.include_router(customers_router, prefix="/customers", tags=["customers"])
+
+# Admin panel home - live operational snapshot (reports.read).
+api_router.include_router(dashboard_router, prefix="/dashboard", tags=["dashboard"])
 
 # Staff/employee management routes (ADMIN-only; gated by staff.*
 # permissions). A "staff member" is an existing User holding at least one

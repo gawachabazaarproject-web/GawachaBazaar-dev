@@ -118,8 +118,9 @@ def test_database_dependency_lifecycle() -> None:
         next(gen)
 
 
-def test_auth_dependency_boundaries_not_wired_to_active_routes() -> None:
-    """Verify get_current_user enforces authentication and require_roles exists as Phase 9 boundary."""
+def test_auth_dependency_boundaries() -> None:
+    """Verify get_current_user enforces authentication and require_roles
+    denies an authenticated user holding none of the required roles."""
     mock_db = MagicMock(spec=Session)
 
     # Calling get_current_user without credentials raises AuthenticationError
@@ -127,8 +128,9 @@ def test_auth_dependency_boundaries_not_wired_to_active_routes() -> None:
         get_current_user(credentials=None, db=mock_db)
     assert "Not authenticated" in exc_info.value.message
 
-    # Role checker factory raises explicit AuthorizationError
-    role_checker = require_roles("admin")
+    # Role checker: no matching user_roles row -> AuthorizationError (403)
+    mock_db.query.return_value.join.return_value.filter.return_value.first.return_value = None
+    role_checker = require_roles("ADMIN")
     with pytest.raises(AuthorizationError) as authz_exc:
-        role_checker(current_user=None)
-    assert "Phase 9" in authz_exc.value.message
+        role_checker(current_user=MagicMock(id=1), db=mock_db)
+    assert "permission" in authz_exc.value.message

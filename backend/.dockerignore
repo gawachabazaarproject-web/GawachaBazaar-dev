@@ -28,3 +28,10 @@ htmlcov/
 # Logs
 *.log
 logs/
+
+# Not needed at runtime (dev compose bind-mounts the full source anyway)
+tests/
+docs/
+uv.lock
+.agents/
+.claude/

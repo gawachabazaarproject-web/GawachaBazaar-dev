@@ -79,7 +79,8 @@ const styles = StyleSheet.create({
   content: { padding: spacing.xs, paddingBottom: spacing.xs + CART_BAR_CLEARANCE, flexGrow: 1 },
   row: { gap: spacing.xs },
   column: { flex: 1, marginBottom: spacing.xs },
-  skeletonGrid: { flexDirection: "row", flexWrap: "wrap", padding: spacing.xs, gap: spacing.xs },
+  // space-between, not a column gap: 2 x 49.5% + gap overflows narrow phones.
+  skeletonGrid: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", padding: spacing.xs, rowGap: spacing.xs },
   skeletonColumn: { width: "49.5%" },
   footer: { paddingVertical: spacing.lg },
 });

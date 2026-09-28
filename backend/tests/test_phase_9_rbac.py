@@ -4,10 +4,12 @@ Per project policy this is focused validation only, not full regression.
 Two independent concerns are covered:
 
 1. Role initialization (migration 37bbdf459894): baseline roles exist and
-   the seeding mechanism is idempotent. These tests use `test_engine`
-   directly (no `db_session`) because `db_session` truncates `roles` before
-   each test - that truncation is intentional per-test isolation and is
-   orthogonal to verifying what the migration itself seeds.
+   the seeding mechanism is idempotent. `db_session` truncates `roles`
+   before every test, so by the time these run in a full suite the rows
+   the migration originally inserted are long gone - instead these tests
+   execute that migration's own `upgrade()` against the test database and
+   check what it produces, which verifies the real seeding code
+   regardless of test order.
 
 2. RBAC (`require_roles` in app.dependencies.auth): authentication vs.
    authorization separation, 401 vs 403 behavior, and any-of-multiple-roles
@@ -15,6 +17,9 @@ Two independent concerns are covered:
    Users/Roles/UserRoles directly, consistent with the existing test_auth.py
    pattern.
 """
+
+import importlib.util
+from pathlib import Path
 
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -42,9 +47,33 @@ from app.models.user_role import UserRole
 # ---------------------------------------------------------------------------
 
 
+_VERSIONS_DIR = Path(__file__).resolve().parent.parent / "alembic" / "versions"
+# Every migration that seeds baseline roles, in revision order: the original
+# six, then SUPPORT (Admin Panel Customers follow-up).
+_SEED_ROLE_MIGRATIONS = (
+    "37bbdf459894_seed_baseline_roles.py",
+    "a3f8c1d2e6b4_seed_support_role.py",
+)
+
+
+def _run_seed_roles_migration(conn) -> None:
+    """Execute each role-seeding migration's own `upgrade()` on `conn`."""
+    from alembic.migration import MigrationContext
+    from alembic.operations import Operations
+
+    for filename in _SEED_ROLE_MIGRATIONS:
+        spec = importlib.util.spec_from_file_location(filename[:-3], _VERSIONS_DIR / filename)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        with Operations.context(MigrationContext.configure(conn)):
+            module.upgrade()
+    conn.commit()
+
+
 def test_1_baseline_roles_seeded_by_migration(test_engine) -> None:
-    """All six active roles exist after `alembic upgrade head`."""
+    """All active roles exist after the seed migration runs."""
     with test_engine.connect() as conn:
+        _run_seed_roles_migration(conn)
         names = {
             row[0]
             for row in conn.execute(text("SELECT name FROM roles")).fetchall()
@@ -67,25 +96,12 @@ def test_1_baseline_roles_seeded_by_migration(test_engine) -> None:
 
 
 def test_2_role_seeding_is_idempotent(test_engine) -> None:
-    """Re-running the seed INSERT does not duplicate rows or error."""
+    """Re-running the seed migration does not duplicate rows or error."""
     with test_engine.connect() as conn:
+        _run_seed_roles_migration(conn)
         before = conn.execute(text("SELECT COUNT(*) FROM roles")).scalar()
 
-        conn.execute(
-            text(
-                "INSERT INTO roles (name, description) VALUES "
-                "('CUSTOMER', 'Retail customer.'), "
-                "('WHOLESALER', 'Supply partner.'), "
-                "('ADMIN', 'Superuser.'), "
-                "('HUB_STAFF', 'Hub staff.'), "
-                "('OPERATIONS', 'Operations staff.'), "
-                "('DELIVERY_PARTNER', 'Delivery partner.'), "
-                "('SUPPORT', 'Support staff.') "
-                "ON CONFLICT (name) DO NOTHING"
-            )
-        )
-        conn.commit()
-
+        _run_seed_roles_migration(conn)
         after = conn.execute(text("SELECT COUNT(*) FROM roles")).scalar()
 
     assert before == after, "Re-seeding must not create duplicate role rows"

@@ -7,6 +7,15 @@ import { colors, radius, spacing } from "@/theme";
 type Day = "today" | "tomorrow";
 type Slot = "morning" | "evening";
 
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+/** "28 Sep" for today + `offsetDays`, from the device clock. */
+function dayLabel(offsetDays: number): string {
+  const date = new Date();
+  date.setDate(date.getDate() + offsetDays);
+  return `${date.getDate()} ${MONTHS[date.getMonth()]}`;
+}
+
 /**
  * Delivery-slot picker. This is real, interactive UI state - selecting a
  * day/slot genuinely changes and is reflected on screen - but there is
@@ -26,7 +35,7 @@ export function HarvestSlotSelector() {
       <View style={styles.dayRow}>
         <Pressable style={[styles.dayCard, day === "today" && styles.dayCardActive]} onPress={() => setDay("today")}>
           <Text variant="bodyMedium" color={day === "today" ? colors.textInverse : colors.textPrimary}>
-            Today, 24 Oct
+            Today, {dayLabel(0)}
           </Text>
           <Text variant="caption" color={day === "today" ? colors.primaryLight : colors.textSecondary}>
             Fastest Express
@@ -34,7 +43,7 @@ export function HarvestSlotSelector() {
         </Pressable>
         <Pressable style={[styles.dayCard, day === "tomorrow" && styles.dayCardActive]} onPress={() => setDay("tomorrow")}>
           <Text variant="bodyMedium" color={day === "tomorrow" ? colors.textInverse : colors.textPrimary}>
-            Tomorrow, 25 Oct
+            Tomorrow, {dayLabel(1)}
           </Text>
           <Text variant="caption" color={day === "tomorrow" ? colors.primaryLight : colors.textSecondary}>
             Dawn Harvest (4 AM)

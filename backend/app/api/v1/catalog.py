@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from app.dependencies.auth import require_permission
 from app.dependencies.database import get_db
 from app.models.user import User
+from app.schemas.admin_catalog import MAX_PAGE_SIZE as ADMIN_MAX_PAGE_SIZE
 from app.schemas.admin_catalog import (
     AdminCategoryDetailResponse,
     AdminCategoryListResponse,
@@ -16,7 +17,6 @@ from app.schemas.admin_catalog import (
     AdminProductListResponse,
     ProductActivityResponse,
 )
-from app.schemas.admin_catalog import MAX_PAGE_SIZE as ADMIN_MAX_PAGE_SIZE
 from app.schemas.catalog import (
     MAX_PAGE_SIZE,
     CategoryDetailResponse,

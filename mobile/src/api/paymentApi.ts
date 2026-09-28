@@ -1,5 +1,11 @@
 import { apiClient } from "./client";
-import { CreatePaymentPayload, PaymentInitiationResponse, PaymentResponse } from "@/types/api";
+import {
+  CreatePaymentPayload,
+  PaymentCheckoutResponse,
+  PaymentInitiationResponse,
+  PaymentResponse,
+  RazorpaySuccessPayload,
+} from "@/types/api";
 
 export const paymentApi = {
   create: (payload: CreatePaymentPayload) =>
@@ -12,4 +18,10 @@ export const paymentApi = {
 
   verify: (id: number) =>
     apiClient.post<PaymentResponse>(`/payments/${id}/verify`).then((r) => r.data),
+
+  checkout: (id: number) =>
+    apiClient.get<PaymentCheckoutResponse>(`/payments/${id}/checkout`).then((r) => r.data),
+
+  confirm: (id: number, payload: RazorpaySuccessPayload) =>
+    apiClient.post<PaymentResponse>(`/payments/${id}/confirm`, payload).then((r) => r.data),
 };

@@ -16,6 +16,9 @@ const securityHeaders = [
 const nextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
+  // Self-contained server bundle (.next/standalone) for the production
+  // Docker image - see Dockerfile. No effect on `next dev`.
+  output: "standalone",
   turbopack: {
     root: __dirname,
   },

@@ -17,6 +17,12 @@ from fastapi.responses import JSONResponse
 
 from app.core.logging import logger
 from app.exceptions.base import AppException
+from app.services.payment_gateway import (
+    GatewayConnectionError,
+    GatewayError,
+    GatewayRejectedError,
+    GatewayTimeoutError,
+)
 
 
 def register_exception_handlers(app: FastAPI) -> None:
@@ -40,6 +46,35 @@ def register_exception_handlers(app: FastAPI) -> None:
                 "message": exc.message,
                 "details": exc.details,
             },
+        )
+
+    @app.exception_handler(GatewayError)
+    async def gateway_exception_handler(request: Request, exc: GatewayError) -> JSONResponse:
+        """Payment gateway failures surface as 502, never a generic 500.
+        A timeout/connection failure means the outcome is UNKNOWN (the
+        charge may still land - PaymentService leaves the payment
+        PROCESSING and a webhook or /verify resolves it), so the message
+        must not tell the customer the payment failed."""
+        logger.warning(
+            "Payment gateway error on %s %s [%s]: %s",
+            request.method, request.url.path, type(exc).__name__, exc,
+        )
+        if isinstance(exc, GatewayRejectedError):
+            code, message = "PAYMENT_GATEWAY_REJECTED", f"The payment gateway declined this request: {exc}"
+        elif isinstance(exc, (GatewayTimeoutError, GatewayConnectionError)):
+            code, message = (
+                "PAYMENT_GATEWAY_UNAVAILABLE",
+                "The payment gateway did not respond. If you were charged, your "
+                "payment will be confirmed automatically - please check your order shortly.",
+            )
+        else:
+            code, message = (
+                "PAYMENT_GATEWAY_ERROR",
+                "The payment gateway reported an error. Please check your order before trying again.",
+            )
+        return JSONResponse(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            content={"code": code, "message": message, "details": None},
         )
 
     @app.exception_handler(RequestValidationError)

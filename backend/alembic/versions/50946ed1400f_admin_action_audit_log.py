@@ -18,8 +18,9 @@ and still authoritative for their own tables; this is the cross-module
 from. No update/delete path exists or should ever exist for this table.
 """
 
-from alembic import op
 import sqlalchemy as sa
+
+from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = "50946ed1400f"

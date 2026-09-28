@@ -1,5 +1,4 @@
 from datetime import datetime
-from typing import Literal
 
 from pydantic import EmailStr, Field, field_validator
 
@@ -88,30 +87,6 @@ class TokenResponse(BaseSchema):
     user: UserResponse
 
 
-class OtpChallengeResponse(BaseSchema):
-    """Returned from POST /auth/login instead of TokenResponse when the
-    account requires the email-OTP second factor (every CUSTOMER/
-    WHOLESALER login - see app/core/roles.py STAFF_ROLES). No token is
-    issued yet; the client must call POST /auth/login/verify-otp with
-    `challenge_token` and the 6-digit code emailed to `masked_email`.
-    """
-
-    otp_required: Literal[True] = True
-    challenge_token: str
-    masked_email: str
-    expires_in_seconds: int
-
-
-class VerifyLoginOtpRequest(BaseSchema):
-    """Completes a login OTP challenge. `challenge_token` is the opaque
-    reference from OtpChallengeResponse, not a credential by itself - the
-    6-digit `code` is what actually proves control of the account's email.
-    """
-
-    challenge_token: str = Field(..., min_length=10, max_length=64)
-    code: str = Field(..., min_length=6, max_length=6, pattern=r"^\d{6}$")
-
-
 class RefreshTokenResponse(BaseSchema):
     """Token rotation response on successful refresh."""
 
@@ -125,42 +100,3 @@ class LogoutResponse(BaseSchema):
     """Confirmation message upon session revocation."""
 
     message: str = "Logged out successfully."
-
-
-class ForgotPasswordRequest(BaseSchema):
-    """Step 1 of the reset-password flow: prove control of the account's
-    email before anything about a new password is even asked for."""
-
-    email: EmailStr
-
-    @field_validator("email", mode="after")
-    @classmethod
-    def validate_and_normalize_email(cls, v: EmailStr) -> str:
-        return normalize_email(str(v))
-
-
-class ForgotPasswordResponse(BaseSchema):
-    """Always the same shape and message whether or not the email is
-    registered - this is the enumeration-protection boundary, so nothing
-    here (a token, a masked email) may ever reveal account existence."""
-
-    message: str = "If that email is registered, we've sent a 6-digit reset code to it."
-
-
-class ResetPasswordRequest(BaseSchema):
-    """Step 2: the code just proved above, plus the new password. Re-sends
-    `email` rather than an opaque challenge token, since
-    ForgotPasswordResponse deliberately never hands one out."""
-
-    email: EmailStr
-    code: str = Field(..., min_length=6, max_length=6, pattern=r"^\d{6}$")
-    new_password: str = Field(..., min_length=8, max_length=128)
-
-    @field_validator("email", mode="after")
-    @classmethod
-    def validate_and_normalize_email(cls, v: EmailStr) -> str:
-        return normalize_email(str(v))
-
-
-class ResetPasswordResponse(BaseSchema):
-    message: str = "Your password has been reset. Please log in with your new password."

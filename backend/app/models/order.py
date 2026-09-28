@@ -48,6 +48,14 @@ class Order(Base):
             name="ck_orders_status",
         ),
         CheckConstraint("total_amount >= 0", name="ck_orders_total_amount"),
+        # Created by migration f67f1f1790ab - declared here too so a future
+        # `alembic revision --autogenerate` doesn't propose dropping them.
+        CheckConstraint("subtotal_amount >= 0", name="ck_orders_subtotal_amount"),
+        CheckConstraint("discount_amount >= 0", name="ck_orders_discount_amount"),
+        CheckConstraint(
+            "discount_amount <= subtotal_amount",
+            name="ck_orders_discount_not_exceeding_subtotal",
+        ),
         Index("ix_orders_user_id", "user_id"),
         Index("ix_orders_status", "status"),
         Index("ix_orders_placed_at", "placed_at"),

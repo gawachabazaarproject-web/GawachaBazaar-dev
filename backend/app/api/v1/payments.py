@@ -2,7 +2,8 @@
 
 Three routers in this one file:
 - `router`: customer-facing, CUSTOMER-only (create/get/retry/verify).
-- `webhook_router`: the PNB gateway callback. No JWT - webhook
+- `webhook_router`: the payment gateway callback
+  (POST /payments/webhooks/razorpay in production). No JWT - webhook
   authenticity is verified via the gateway's own signature scheme inside
   PaymentService.process_webhook, not FastAPI auth dependencies.
 - `admin_router` (Phase 18, extended Phase 19): ADMIN-only payment list/
@@ -32,6 +33,7 @@ threadpool automatically).
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, Query, Request, status
+from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
@@ -40,13 +42,15 @@ from app.dependencies.auth import get_current_user, require_roles
 from app.dependencies.database import get_db
 from app.dependencies.payments import get_payment_gateway
 from app.models.user import User
+from app.schemas.admin_payment import MAX_PAGE_SIZE as ADMIN_MAX_PAGE_SIZE
 from app.schemas.admin_payment import (
     AdminPaymentDetailResponse,
     AdminPaymentListResponse,
 )
-from app.schemas.admin_payment import MAX_PAGE_SIZE as ADMIN_MAX_PAGE_SIZE
 from app.schemas.payment import (
+    ConfirmCheckoutRequest,
     CreatePaymentRequest,
+    PaymentCheckoutResponse,
     PaymentInitiationResponse,
     PaymentResponse,
     WebhookAckResponse,
@@ -70,7 +74,7 @@ admin_router = APIRouter(dependencies=[Depends(require_roles(ADMIN))])
     "",
     response_model=PaymentInitiationResponse,
     status_code=status.HTTP_201_CREATED,
-    summary="Initiate payment for an order (UPI or COD)",
+    summary="Initiate payment for an order (online via Razorpay, or COD)",
 )
 def create_payment(
     payload: CreatePaymentRequest,
@@ -98,7 +102,7 @@ def get_payment(
 @router.post(
     "/{payment_id}/retry",
     response_model=PaymentInitiationResponse,
-    summary="Start a new UPI attempt for a FAILED/EXPIRED payment",
+    summary="Start a new online attempt for a FAILED/EXPIRED payment",
 )
 def retry_payment(
     payment_id: int,
@@ -123,16 +127,54 @@ def verify_payment(
     return PaymentService(db, gateway).verify_payment(current_user.id, payment_id)
 
 
-@webhook_router.post(
-    "/pnb",
-    response_model=WebhookAckResponse,
-    summary="PNB gateway webhook callback (no JWT - gateway signature verified internally)",
+@router.get(
+    "/{payment_id}/checkout",
+    response_model=PaymentCheckoutResponse,
+    summary="Details for opening (or re-opening) the gateway checkout for an online payment",
 )
-async def pnb_webhook(
+def get_checkout(
+    payment_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    gateway: PaymentGateway = Depends(get_payment_gateway),
+) -> PaymentCheckoutResponse:
+    return PaymentService(db, gateway).get_checkout(current_user.id, payment_id)
+
+
+@router.post(
+    "/{payment_id}/confirm",
+    response_model=PaymentResponse,
+    summary="Hand off a completed Razorpay Checkout (signature verified, status re-checked with Razorpay)",
+)
+def confirm_checkout(
+    payment_id: int,
+    payload: ConfirmCheckoutRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    gateway: PaymentGateway = Depends(get_payment_gateway),
+) -> PaymentResponse:
+    return PaymentService(db, gateway).confirm_checkout(current_user.id, payment_id, payload)
+
+
+@webhook_router.post(
+    "/{gateway_slug}",
+    response_model=WebhookAckResponse,
+    summary="Payment gateway webhook callback (no JWT - gateway signature verified internally)",
+    responses={404: {"description": "Not the configured gateway"}},
+)
+async def gateway_webhook(
+    gateway_slug: str,
     request: Request,
     db: Session = Depends(get_db),
     gateway: PaymentGateway = Depends(get_payment_gateway),
 ) -> WebhookAckResponse:
+    # Only the configured gateway's own path answers (e.g. /razorpay) -
+    # anything else is a 404 before the body is even read.
+    if gateway_slug != gateway.gateway_name.lower():
+        return JSONResponse(
+            status_code=status.HTTP_404_NOT_FOUND,
+            content={"code": "NOT_FOUND", "message": "Not found.", "details": None},
+        )
     raw_body = await request.body()
     headers = dict(request.headers)
 
@@ -232,6 +274,20 @@ def admin_reject_refund(
     db: Session = Depends(get_db),
 ) -> AdminRefundResponse:
     return RefundService(db).reject_refund(refund_id, current_user.id, payload.reason)
+
+
+@admin_router.post(
+    "/refunds/{refund_id}/sync",
+    response_model=AdminRefundResponse,
+    summary="Ask the gateway for a PROCESSING refund's current outcome and apply it",
+)
+def admin_sync_refund(
+    refund_id: int,
+    current_user: User = Depends(require_roles(ADMIN)),
+    db: Session = Depends(get_db),
+    gateway: PaymentGateway = Depends(get_payment_gateway),
+) -> AdminRefundResponse:
+    return RefundService(db, gateway).sync_with_gateway(refund_id, current_user.id)
 
 
 @admin_router.post(

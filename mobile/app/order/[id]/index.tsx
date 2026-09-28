@@ -8,6 +8,8 @@ import { Button } from "@/components/Button";
 import { StatusBadge } from "@/components/StatusBadge";
 import { OrderTimeline } from "@/features/orders/OrderTimeline";
 import { useOrder, useOrderFulfillment, useOrderPayment, useOrderRefund } from "@/features/orders/useOrders";
+import { useOnlinePayment } from "@/features/payment/useOnlinePayment";
+import { RazorpayCheckout } from "@/components/payment/RazorpayCheckout";
 import { presentOrderStatus, presentPaymentStatus, isOrderCancellable } from "@/utils/statusPresentation";
 import { formatMoney } from "@/utils/money";
 import { colors, radius, spacing } from "@/theme";
@@ -21,6 +23,7 @@ export default function OrderDetailsScreen() {
   const { data: fulfillment } = useOrderFulfillment(orderId);
   const { data: payment } = useOrderPayment(orderId);
   const { data: refund } = useOrderRefund(orderId);
+  const online = useOnlinePayment();
 
   if (isLoading || !order) {
     return (
@@ -41,7 +44,7 @@ export default function OrderDetailsScreen() {
       <Stack.Screen options={{ headerShown: true, title: `Order ${order.order_number}` }} />
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.headerRow}>
-          <View>
+          <View style={styles.headerText}>
             <Text variant="h2">Order {order.order_number}</Text>
             <Text variant="bodySmall" color={colors.textSecondary}>
               Placed {new Date(order.placed_at).toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" })}
@@ -93,7 +96,7 @@ export default function OrderDetailsScreen() {
               <Text variant="body" color={colors.textSecondary}>
                 Method
               </Text>
-              <Text variant="bodyMedium">{payment.payment_method === "COD" ? "Cash on Delivery" : "UPI"}</Text>
+              <Text variant="bodyMedium">{payment.payment_method === "COD" ? "Cash on Delivery" : "Online (Razorpay)"}</Text>
             </View>
             <View style={[styles.itemRow, { marginTop: spacing.sm }]}>
               <Text variant="body" color={colors.textSecondary}>
@@ -101,8 +104,32 @@ export default function OrderDetailsScreen() {
               </Text>
               <StatusBadge presentation={presentPaymentStatus(payment.status)} />
             </View>
+            {payment.payment_method === "UPI" &&
+            order.status === "PENDING" &&
+            ["PROCESSING", "FAILED", "EXPIRED"].includes(payment.status) ? (
+              <>
+                {online.error ? (
+                  <Text variant="bodySmall" color={colors.error} style={{ marginTop: spacing.sm }}>
+                    {online.error}
+                  </Text>
+                ) : null}
+                <Button
+                  label={`${payment.status === "PROCESSING" ? "Complete payment" : "Try paying again"} · ${formatMoney(payment.amount, payment.currency)}`}
+                  onPress={() => online.retryForOrder(orderId)}
+                  loading={online.busy}
+                  fullWidth
+                  style={{ marginTop: spacing.md }}
+                />
+              </>
+            ) : null}
           </SectionCard>
         ) : null}
+
+        <RazorpayCheckout
+          checkout={online.checkout}
+          onSuccess={(response) => online.complete(response)}
+          onDismiss={online.dismiss}
+        />
 
         {order.cancellation_reason ? (
           <SectionCard title="Cancellation">
@@ -153,6 +180,8 @@ const styles = StyleSheet.create({
   content: { padding: spacing.base, paddingBottom: spacing["3xl"] },
   centered: { flex: 1, alignItems: "center", justifyContent: "center" },
   headerRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: spacing.lg },
+  // Order numbers are long - let the title wrap instead of pushing the badge off-screen.
+  headerText: { flex: 1, marginRight: spacing.sm },
   card: {
     backgroundColor: colors.surface,
     borderWidth: 1,

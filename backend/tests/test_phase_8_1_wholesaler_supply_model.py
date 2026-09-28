@@ -564,35 +564,15 @@ def test_17_farms_table_exists(db_session: Session) -> None:
 
 # 18. No Phase 1–8 unrelated tables are changed (26 domain tables + alembic_version)
 def test_18_no_unrelated_tables_changed(db_session: Session) -> None:
-    expected_tables = {
-        "alembic_version",
-        "roles",
-        "users",
-        "user_roles",
-        "addresses",
-        "auth_sessions",
-        "farms",
-        "batches",
-        "quality_checks",
-        "categories",
-        "products",
-        "product_variants",
-        "prices",
-        "product_images",
-        "inventory_locations",
-        "inventory_lots",
-        "stock_movements",
-        "packaging_operations",
-        "packaging_inputs",
-        "packaging_outputs",
-        "carts",
-        "cart_items",
-        "orders",
-        "order_items",
-        "order_addresses",
-        "payments",
-        "payment_transactions",
-    }
+    """The migrated schema holds exactly the tables the ORM models declare
+    (plus Alembic's own bookkeeping table) - no stray/orphaned tables and no
+    model without a migration. Originally a hard-coded Phase 8.1 table list,
+    which every later phase's new tables (ads, suppliers, refunds, ...)
+    legitimately broke; deriving it from the models keeps the invariant."""
+    import app.models  # noqa: F401 - registers every model on Base.metadata
+    from app.db.base import Base
+
+    expected_tables = set(Base.metadata.tables) | {"alembic_version"}
     actual_tables = set(
         db_session.execute(
             text("""

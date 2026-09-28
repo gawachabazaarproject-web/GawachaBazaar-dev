@@ -19,7 +19,11 @@ from app.exceptions.base import BusinessValidationError, ConflictError, NotFound
 from app.models.role import Role
 from app.models.user import User
 from app.models.user_role import UserRole
-from app.schemas.staff import CreateStaffRequest, StaffDetailResponse, StaffListItemResponse
+from app.schemas.staff import (
+    CreateStaffRequest,
+    StaffDetailResponse,
+    StaffListItemResponse,
+)
 from app.services.admin_audit import AdminAuditService
 
 

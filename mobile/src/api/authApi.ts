@@ -1,12 +1,8 @@
 import { apiClient } from "./client";
 import {
-  ForgotPasswordResponse,
   LoginPayload,
-  LoginResult,
   RefreshTokenResponse,
   RegisterPayload,
-  ResetPasswordPayload,
-  ResetPasswordResponse,
   TokenResponse,
   UserResponse,
 } from "@/types/api";
@@ -16,12 +12,7 @@ export const authApi = {
     apiClient.post<TokenResponse>("/auth/register", payload).then((r) => r.data),
 
   login: (payload: LoginPayload) =>
-    apiClient.post<LoginResult>("/auth/login", payload).then((r) => r.data),
-
-  verifyLoginOtp: (challengeToken: string, code: string) =>
-    apiClient
-      .post<TokenResponse>("/auth/login/verify-otp", { challenge_token: challengeToken, code })
-      .then((r) => r.data),
+    apiClient.post<TokenResponse>("/auth/login", payload).then((r) => r.data),
 
   refresh: (refreshToken: string) =>
     apiClient
@@ -32,14 +23,4 @@ export const authApi = {
     apiClient.post("/auth/logout", { refresh_token: refreshToken }).then((r) => r.data),
 
   me: () => apiClient.get<UserResponse>("/auth/me").then((r) => r.data),
-
-  forgotPassword: (email: string) =>
-    apiClient
-      .post<ForgotPasswordResponse>("/auth/forgot-password", { email })
-      .then((r) => r.data),
-
-  resetPassword: (payload: ResetPasswordPayload) =>
-    apiClient
-      .post<ResetPasswordResponse>("/auth/reset-password", payload)
-      .then((r) => r.data),
 };

@@ -911,15 +911,13 @@ class InventoryService:
         if data.notes:
             remarks += f" notes={data.notes}"
 
-        if difference == 0:
-            movement = None
-        elif difference > 0:
-            movement = self.apply_movement(
+        if difference > 0:
+            self.apply_movement(
                 lot, "ADJUSTMENT_IN", difference, admin_user_id,
                 reference_type="reconciliation", remarks=remarks,
             )
-        else:
-            movement = self.apply_movement(
+        elif difference < 0:
+            self.apply_movement(
                 lot, "ADJUSTMENT_OUT", abs(difference), admin_user_id,
                 reference_type="reconciliation", remarks=remarks,
             )

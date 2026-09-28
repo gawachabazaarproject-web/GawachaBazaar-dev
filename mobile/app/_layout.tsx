@@ -30,6 +30,7 @@ import { useAuthStore } from "@/store/authStore";
 import { ToastHost } from "@/components/ToastHost";
 import { CartBar } from "@/components/CartBar";
 import { BulkRequestBar } from "@/components/home/BulkRequestBar";
+import { RazorpaySheetHost } from "@/components/payment/RazorpaySheetHost";
 import { AppGate } from "@/navigation/AppGate";
 import { useRealtimeSync } from "@/features/orders/useRealtimeSync";
 
@@ -114,6 +115,7 @@ export default function RootLayout() {
             </Stack>
             <CartBar />
             <BulkRequestBar />
+            <RazorpaySheetHost />
             <ToastHost />
           </AppGate>
         </QueryClientProvider>

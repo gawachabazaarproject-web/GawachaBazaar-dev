@@ -14,10 +14,11 @@ import {
   fetchAdminRefunds,
   PaymentsApiError,
   processRefund,
+  syncRefund,
   refundActionsFor,
   rejectRefund,
 } from "@/lib/payments";
-import { formatDateTime, formatMoney } from "@/lib/format";
+import { formatDateTime, formatMoney, formatPaymentMethod } from "@/lib/format";
 import { PageHeader } from "@/components/PageHeader";
 import { EmptyState } from "@/components/EmptyState";
 import { ErrorState } from "@/components/ErrorState";
@@ -215,7 +216,7 @@ function PaymentRow({ payment, onClick }: { payment: AdminPaymentListItem; onCli
         <p className="text-neutral-800">{payment.customer_name}</p>
         <p className="text-xs text-neutral-500">{payment.customer_email}</p>
       </td>
-      <td className="px-4 py-3 text-neutral-600">{payment.payment_method === "COD" ? "Cash on Delivery" : payment.payment_method}</td>
+      <td className="px-4 py-3 text-neutral-600">{formatPaymentMethod(payment.payment_method)}</td>
       <td className="px-4 py-3 font-medium text-neutral-800">{formatMoney(payment.amount, payment.currency)}</td>
       <td className="px-4 py-3">
         <StatusBadge status={payment.status} />
@@ -284,15 +285,27 @@ function RefundsTab({ canManage }: { canManage: boolean }) {
       await processRefund(token, refund.id);
       await load();
     } catch (err) {
-      // A NotImplementedError from the still-unwired PNB gateway surfaces
-      // here as a plain 500 - see docs/architecture/PHASE_14_PAYMENTS.md.
-      // The refund itself is safely left in PROCESSING either way (never
-      // silently marked FAILED for an unknown-outcome gateway error).
+      // Razorpay errors come back as a 502 with a readable message. An
+      // unknown-outcome error (timeout) leaves the refund PROCESSING, never
+      // silently FAILED - check Razorpay before retrying.
       setActionError(
-        err instanceof PaymentsApiError
-          ? err.message
-          : "The payment gateway integration is not yet available - see PHASE_14_PAYMENTS.md.",
+        err instanceof PaymentsApiError ? err.message : "Could not reach the server to process this refund.",
       );
+    } finally {
+      setActingId(null);
+      await load();
+    }
+  };
+
+  const handleSync = async (refund: AdminRefund) => {
+    const token = getAccessToken();
+    if (!token) return;
+    setActingId(refund.id);
+    setActionError(null);
+    try {
+      await syncRefund(token, refund.id);
+    } catch (err) {
+      setActionError(err instanceof PaymentsApiError ? err.message : "Could not check this refund with Razorpay.");
     } finally {
       setActingId(null);
       await load();
@@ -410,7 +423,16 @@ function RefundsTab({ canManage }: { canManage: boolean }) {
                                   {busy ? "Working..." : "Process"}
                                 </button>
                               )}
-                              {!actions.approve && !actions.reject && !actions.process && (
+                              {actions.sync && (
+                                <button
+                                  disabled={busy}
+                                  onClick={() => handleSync(refund)}
+                                  className="rounded border border-primary-700/40 px-2.5 py-1 text-xs font-semibold text-primary-800 hover:bg-primary-50 disabled:opacity-50"
+                                >
+                                  {busy ? "Checking..." : "Check status"}
+                                </button>
+                              )}
+                              {!actions.approve && !actions.reject && !actions.process && !actions.sync && (
                                 <span className="text-xs text-neutral-400">No action available</span>
                               )}
                             </div>

@@ -201,7 +201,10 @@ const styles = StyleSheet.create({
   deptCardSelected: { borderColor: colors.primary, borderWidth: 2 },
   deptImage: { width: "100%", height: 96, backgroundColor: colors.divider },
   deptInfo: { padding: spacing.sm },
-  productGrid: { flexDirection: "row", flexWrap: "wrap", gap: spacing.xs },
+  // No column gap: 2 x 49.5% + a fixed gap overflows the row on phones
+  // under ~400dp and every card wrapped into a single column. The 1% left
+  // over by space-between is the seam instead.
+  productGrid: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", rowGap: spacing.xs },
   // 49.5% (was 47%) - matches ProductGrid's own tightened two-column
   // math so cards read the same width whether reached via Search or here.
   productGridItem: { width: "49.5%" },

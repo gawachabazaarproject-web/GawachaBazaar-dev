@@ -14,7 +14,6 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 _KNOWN_PLACEHOLDER_SECRETS = {
     "dev-secret-key-replace-in-production-min-32-chars",
     "dev-container-secret-key-32chars-min",
-    "dev-pnb-webhook-secret-placeholder-min-32-chars",
 }
 
 
@@ -45,35 +44,25 @@ class Settings(BaseSettings):
         "postgresql+psycopg://postgres:postgres@localhost:5432/gawachabazaar"
     )
 
-    # PNB payment gateway (Phase 14) - placeholder values only. No real PNB
-    # merchant integration specification exists yet; see
-    # docs/architecture/PHASE_14_PAYMENTS.md - PNB Integration Boundary.
-    # PNBGateway.initiate_payment/query_status raise NotImplementedError
-    # regardless of these values until rewritten against the real contract.
-    PNB_MERCHANT_ID: str = "dev-pnb-merchant-id-placeholder"
-    PNB_WEBHOOK_SECRET: str = "dev-pnb-webhook-secret-placeholder-min-32-chars"
-    PNB_BASE_URL: str = "https://pnb-uat.example.invalid"
-    PNB_TIMEOUT_SECONDS: float = 10.0
+    # Razorpay (online payments - UPI, cards, netbanking, wallets via
+    # Standard Checkout; see app/services/razorpay_gateway.py). Empty key
+    # id means "not configured": online payment is refused with a clear
+    # 503 and Cash on Delivery keeps working. KEY_SECRET and WEBHOOK_SECRET
+    # never leave the server; KEY_ID is public (sent to Checkout).
+    RAZORPAY_KEY_ID: str = ""
+    RAZORPAY_KEY_SECRET: str = ""
+    RAZORPAY_WEBHOOK_SECRET: str = ""
+    RAZORPAY_BASE_URL: str = "https://api.razorpay.com/v1"
+    RAZORPAY_TIMEOUT_SECONDS: float = 10.0
 
     # Cloudinary (image uploads). Empty string means "not configured" -
     # ImageUploadService raises a clear, honest error rather than silently
     # failing if an upload route is ever called before these are set,
     # same "don't fabricate a working integration" precedent as
-    # PaymentGateway/NotificationGateway.
+    # PaymentGateway.
     CLOUDINARY_CLOUD_NAME: str = ""
     CLOUDINARY_API_KEY: str = ""
     CLOUDINARY_API_SECRET: str = ""
-
-    # Resend (transactional email - OTP codes). Empty API key means "not
-    # configured" - NotificationGateway falls back to logging the code
-    # server-side (ConsoleNotificationGateway) rather than fabricating a
-    # sent email, same honest-boundary precedent as Cloudinary/PNBGateway.
-    # RESEND_FROM_EMAIL defaults to Resend's own sandbox sender, which
-    # works with no domain verification - fine for early testing, but
-    # only delivers to the Resend account's own verified/test addresses
-    # until a real sending domain is verified.
-    RESEND_API_KEY: str = ""
-    RESEND_FROM_EMAIL: str = "Gawacha Bazaar <onboarding@resend.dev>"
 
     # CORS
     ALLOWED_ORIGINS: list[str] = ["http://localhost:3000", "http://localhost:5173"]
@@ -118,8 +107,12 @@ class Settings(BaseSettings):
         problems: list[str] = []
         if self.JWT_SECRET_KEY in _KNOWN_PLACEHOLDER_SECRETS or len(self.JWT_SECRET_KEY) < 32:
             problems.append("JWT_SECRET_KEY is a known placeholder or shorter than 32 characters")
-        if self.PNB_WEBHOOK_SECRET in _KNOWN_PLACEHOLDER_SECRETS or len(self.PNB_WEBHOOK_SECRET) < 32:
-            problems.append("PNB_WEBHOOK_SECRET is a known placeholder or shorter than 32 characters")
+        if self.RAZORPAY_KEY_ID and not (self.RAZORPAY_KEY_SECRET and self.RAZORPAY_WEBHOOK_SECRET):
+            # Half-configured Razorpay would accept payments whose webhooks
+            # can never be verified (or can't call the API at all).
+            problems.append(
+                "RAZORPAY_KEY_ID is set but RAZORPAY_KEY_SECRET and/or RAZORPAY_WEBHOOK_SECRET is empty"
+            )
         if problems:
             raise ValueError(
                 "Refusing to start with APP_ENV=production: " + "; ".join(problems) + ". "

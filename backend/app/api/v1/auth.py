@@ -8,19 +8,13 @@ from app.dependencies.auth import get_current_user
 from app.dependencies.database import get_db
 from app.models.user import User
 from app.schemas.auth import (
-    ForgotPasswordRequest,
-    ForgotPasswordResponse,
     LoginRequest,
     LogoutResponse,
-    OtpChallengeResponse,
     RefreshTokenRequest,
     RefreshTokenResponse,
     RegisterRequest,
-    ResetPasswordRequest,
-    ResetPasswordResponse,
     TokenResponse,
     UserResponse,
-    VerifyLoginOtpRequest,
 )
 from app.services.auth import AuthService
 
@@ -56,76 +50,20 @@ def register(
 
 @router.post(
     "/login",
-    response_model=TokenResponse | OtpChallengeResponse,
+    response_model=TokenResponse,
     status_code=status.HTTP_200_OK,
     summary="User Login",
-    description=(
-        "Authenticates by email or phone with Argon2id and enumeration protection. "
-        "Staff accounts (Admin panel) get a session immediately; CUSTOMER/WHOLESALER "
-        "accounts instead get an email-OTP challenge - see POST /auth/login/verify-otp."
-    ),
+    description="Authenticates by email or phone with Argon2id and enumeration protection, returning a new session.",
 )
 @limiter.limit("5/minute")
 def login(
     payload: LoginRequest,
     request: Request,
     db: Session = Depends(get_db),
-) -> TokenResponse | OtpChallengeResponse:
-    auth_service = AuthService(db)
-    client_meta = _extract_client_meta(request)
-    return auth_service.authenticate(payload, client_meta=client_meta)
-
-
-@router.post(
-    "/login/verify-otp",
-    response_model=TokenResponse,
-    status_code=status.HTTP_200_OK,
-    summary="Verify Login OTP",
-    description="Completes a CUSTOMER/WHOLESALER login by submitting the 6-digit email code, returning a new session.",
-)
-@limiter.limit("10/minute")
-def verify_login_otp(
-    payload: VerifyLoginOtpRequest,
-    request: Request,
-    db: Session = Depends(get_db),
 ) -> TokenResponse:
     auth_service = AuthService(db)
     client_meta = _extract_client_meta(request)
-    return auth_service.verify_login_otp(payload, client_meta=client_meta)
-
-
-@router.post(
-    "/forgot-password",
-    response_model=ForgotPasswordResponse,
-    status_code=status.HTTP_200_OK,
-    summary="Request Password Reset Code",
-    description="Step 1 of password reset: emails a 6-digit code if the address is registered. "
-    "Always returns the same generic response either way.",
-)
-@limiter.limit("5/minute")
-def forgot_password(
-    payload: ForgotPasswordRequest,
-    request: Request,
-    db: Session = Depends(get_db),
-) -> ForgotPasswordResponse:
-    return AuthService(db).forgot_password(payload)
-
-
-@router.post(
-    "/reset-password",
-    response_model=ResetPasswordResponse,
-    status_code=status.HTTP_200_OK,
-    summary="Reset Password",
-    description="Step 2 of password reset: verifies the emailed code and sets the new password, "
-    "revoking every existing session for the account.",
-)
-@limiter.limit("10/minute")
-def reset_password(
-    payload: ResetPasswordRequest,
-    request: Request,
-    db: Session = Depends(get_db),
-) -> ResetPasswordResponse:
-    return AuthService(db).reset_password(payload)
+    return auth_service.authenticate(payload, client_meta=client_meta)
 
 
 @router.post(

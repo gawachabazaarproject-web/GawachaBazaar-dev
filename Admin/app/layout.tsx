@@ -37,7 +37,11 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en">
+      {/* suppressHydrationWarning: browser extensions (e.g. ColorZilla's
+          cz-shortcut-listen) add attributes to <body> before React hydrates.
+          Only this element's own attributes are exempt, not its children. */}
       <body
+        suppressHydrationWarning
         className={`${bodoni.variable} ${instrument.variable} ${jakarta.variable} font-sans bg-neutral-100 text-primary-900 antialiased`}
       >
         <AuthProvider>

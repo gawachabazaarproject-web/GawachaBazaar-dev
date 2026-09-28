@@ -51,6 +51,7 @@ const CUSTOMER_PERMISSIONS = [
   "customers.manage_status",
   "customers.notes",
   "customers.manage_contact",
+  "customers.reset_password",
 ] as const;
 const DELIVERY_PERMISSIONS = ["delivery.read", "delivery.assign", "delivery.fulfill"] as const;
 const REPORT_PERMISSIONS = ["reports.read"] as const;
