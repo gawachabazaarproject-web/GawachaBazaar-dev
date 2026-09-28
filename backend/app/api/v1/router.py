@@ -8,12 +8,14 @@ will be registered here as each phase is implemented.
 from fastapi import APIRouter
 
 from app.api.v1.addresses import router as addresses_router
+from app.api.v1.ads import router as ads_router
 from app.api.v1.auth import router as auth_router
 from app.api.v1.bulk_orders import admin_router as bulk_orders_admin_router
 from app.api.v1.bulk_orders import customer_router as bulk_orders_customer_router
 from app.api.v1.cart import router as cart_router
 from app.api.v1.catalog import router as catalog_router
 from app.api.v1.customers import router as customers_router
+from app.api.v1.dashboard import router as dashboard_router
 from app.api.v1.fulfillments import router as fulfillments_router
 from app.api.v1.inventory import router as inventory_router
 from app.api.v1.orders import admin_router as orders_admin_router
@@ -25,6 +27,7 @@ from app.api.v1.payments import router as payments_router
 from app.api.v1.payments import webhook_router as payments_webhook_router
 from app.api.v1.promotions import router as promotions_router
 from app.api.v1.realtime import router as realtime_router
+from app.api.v1.staff import router as staff_router
 from app.api.v1.suppliers import router as suppliers_router
 from app.schemas.base import PingResponse
 
@@ -110,6 +113,19 @@ api_router.include_router(promotions_router, prefix="/promotions", tags=["promot
 # permissions). A "customer" is an existing User with the CUSTOMER role -
 # no separate identity system.
 api_router.include_router(customers_router, prefix="/customers", tags=["customers"])
+
+# Admin panel home - live operational snapshot (reports.read).
+api_router.include_router(dashboard_router, prefix="/dashboard", tags=["dashboard"])
+
+# Staff/employee management routes (ADMIN-only; gated by staff.*
+# permissions). A "staff member" is an existing User holding at least one
+# of ADMIN/HUB_STAFF/OPERATIONS/DELIVERY_PARTNER/SUPPORT - no separate
+# identity system, same convention as Customer Management above.
+api_router.include_router(staff_router, prefix="/staff", tags=["staff"])
+
+# Brand-advertising creatives (public read for the mobile ads carousel;
+# ADMIN-gated management for everything else - gated by ads.* permissions).
+api_router.include_router(ads_router, prefix="/ads", tags=["ads"])
 
 # Live order/fulfillment/payment/refund status events (WebSocket). See
 # app/core/realtime.py for the in-process connection registry and message

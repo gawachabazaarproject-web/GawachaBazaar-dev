@@ -1065,27 +1065,44 @@ def test_32_delivery_partner_list_is_scoped_to_own_assignments(
 # ---------------------------------------------------------------------------
 
 
-def test_33_cod_can_be_delivered_while_payment_still_pending(
+def test_33_cod_cash_is_collected_at_delivery(
     client: TestClient, db_session: Session
 ) -> None:
+    import json
+
     from app.models.payment import Payment
+    from app.models.payment_transaction import PaymentTransaction
 
     order, fulfillment_id, ops_headers, _lot, _oq = _full_cod_ready_for_delivery(
         db_session=db_session, client=client, tag="T33"
     )
     payment = db_session.query(Payment).filter_by(order_id=order["id"]).one()
-    assert payment.status == "PENDING"  # COD payment collected later, never required PAID
+    assert payment.status == "PENDING"  # nothing collected before the door
 
-    _partner, partner_headers = _assign_and_dispatch(client, db_session, ops_headers, fulfillment_id, "T33")
+    partner, partner_headers = _assign_and_dispatch(client, db_session, ops_headers, fulfillment_id, "T33")
     response = client.post(f"/api/v1/fulfillments/{fulfillment_id}/deliver", headers=partner_headers)
     assert response.status_code == 200
     assert response.json()["status"] == "DELIVERED"
 
     db_session.expire_all()
     assert db_session.get(Order, order["id"]).status == "COMPLETED"
-    # Payment is untouched by delivery - COD collection/reconciliation is
-    # explicitly out of scope for both Phase 14 and Phase 16.
-    assert db_session.get(Payment, payment.id).status == "PENDING"
+    collected = db_session.get(Payment, payment.id)
+    assert collected.status == "PAID"
+    assert collected.paid_at is not None
+    [txn] = db_session.query(PaymentTransaction).filter_by(payment_id=payment.id).all()
+    assert txn.status == "SUCCESS"
+    assert txn.transaction_type == "PAYMENT"
+    assert txn.amount == collected.amount
+    assert json.loads(txn.gateway_response) == {
+        "method": "CASH_ON_DELIVERY",
+        "collected_by_user_id": partner.id,
+    }
+
+    # Re-sending "delivered" is an idempotent no-op - cash is never recorded twice.
+    again = client.post(f"/api/v1/fulfillments/{fulfillment_id}/deliver", headers=partner_headers)
+    assert again.status_code == 200
+    db_session.expire_all()
+    assert db_session.query(PaymentTransaction).filter_by(payment_id=payment.id).count() == 1
 
 
 def test_34_upi_order_completes_normally_after_paid_confirmation(
@@ -1118,6 +1135,15 @@ def test_34_upi_order_completes_normally_after_paid_confirmation(
     db_session.expire_all()
     assert db_session.get(Order, order["id"]).status == "COMPLETED"
     assert db_session.get(InventoryLot, lot.id).quantity == original_quantity - Decimal("2.000")
+    # An online payment is already PAID - delivery must not add a COD collection row.
+    from app.models.payment_transaction import PaymentTransaction
+
+    assert (
+        db_session.query(PaymentTransaction)
+        .filter(PaymentTransaction.gateway_response.like("%CASH_ON_DELIVERY%"))
+        .count()
+        == 0
+    )
 
 
 # ---------------------------------------------------------------------------

@@ -22,20 +22,15 @@ from datetime import UTC, datetime, timedelta
 from decimal import ROUND_HALF_UP, Decimal
 
 from sqlalchemy import Select, case, func, or_
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.roles import CUSTOMER
-from app.core.security import (
-    generate_verification_code,
-    hash_verification_code,
-    normalize_email,
-    normalize_phone,
-)
+from app.core.security import hash_password, normalize_email, normalize_phone
 from app.exceptions.base import BusinessValidationError, ConflictError, NotFoundError
 from app.models.address import Address
 from app.models.auth_session import AuthSession
 from app.models.bulk_customer_profile import BulkCustomerProfile
-from app.models.contact_change_request import ContactChangeRequest
 from app.models.customer_note import CustomerNote
 from app.models.order import Order
 from app.models.promotion import Promotion
@@ -45,10 +40,10 @@ from app.models.user import User
 from app.models.user_role import UserRole
 from app.schemas.address import AddressResponse
 from app.schemas.admin_customer import (
+    CUSTOMER_ACCOUNT_STATUSES,
     AdminCustomerDetailResponse,
     AdminCustomerListItemResponse,
     AdminCustomerListResponse,
-    ConfirmContactChangeRequest,
     CreateCustomerNoteRequest,
     CustomerNoteListResponse,
     CustomerNoteResponse,
@@ -58,24 +53,16 @@ from app.schemas.admin_customer import (
     CustomersDashboardResponse,
     CustomerTimelineEventResponse,
     CustomerTimelineResponse,
-    PendingContactChangeResponse,
-    RequestContactChangeRequest,
+    ResetCustomerPasswordRequest,
+    UpdateCustomerContactRequest,
     UpdateCustomerNoteRequest,
-    CUSTOMER_ACCOUNT_STATUSES,
 )
 from app.services.admin_audit import AdminAuditService
-from app.services.notification_gateway import ConsoleNotificationGateway, NotificationGateway
 
 # UI-display heuristic only (mirrors Inventory's LOW_STOCK_THRESHOLD
 # convention) - "new"/"recently active"/"inactive" are a documented display
 # window, never a stored business rule or eligibility condition.
 ACTIVITY_WINDOW_DAYS = 30
-
-# Real security parameters (not a display heuristic): how long a
-# verification code stays valid and how many wrong guesses are tolerated
-# before the request must be re-issued.
-CONTACT_CHANGE_CODE_TTL_MINUTES = 15
-CONTACT_CHANGE_MAX_ATTEMPTS = 5
 
 _CENTS = Decimal("0.01")
 
@@ -107,12 +94,8 @@ class _CustomerListFilters:
 
 
 class CustomerService:
-    def __init__(self, db: Session, notification_gateway: NotificationGateway | None = None) -> None:
+    def __init__(self, db: Session) -> None:
         self.db = db
-        # Only the contact-change methods use this - defaulted so every
-        # other route (read endpoints, notes, status changes) can keep
-        # constructing CustomerService(db) exactly as before.
-        self._notification_gateway = notification_gateway or ConsoleNotificationGateway()
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -410,8 +393,6 @@ class CustomerService:
             is_bulk_customer=is_bulk_customer,
             created_at=user.created_at,
             updated_at=user.updated_at,
-            pending_email_change=self._pending_contact_change(user.id, "EMAIL"),
-            pending_phone_change=self._pending_contact_change(user.id, "PHONE"),
             summary=CustomerOrderSummaryResponse(
                 total_orders=total_orders,
                 completed_orders=completed,
@@ -679,36 +660,18 @@ class CustomerService:
         return self.admin_get_customer_detail(user.id, view_sensitive=True)
 
     # ------------------------------------------------------------------
-    # Contact change (verification-backed email/phone edit)
+    # Contact details and password (admin-assisted)
     #
-    # Never a raw PATCH of users.email/phone: the new value only lands on
-    # the User row once whoever controls it proves that by returning the
-    # code sent there. This is what makes it safe for Admin to change a
-    # customer's login identity at all - see
-    # app/services/notification_gateway.py for why the "send" step is an
-    # honestly-labeled dev/console placeholder rather than a real email/SMS
-    # integration this backend does not have.
+    # There is no email/SMS channel in this codebase to verify a new
+    # address or deliver a reset code, so an ADMIN makes these changes
+    # directly after confirming the customer's identity out-of-band (e.g.
+    # by phone). Both are gated by their own permission and always leave an
+    # admin_action_logs row.
     # ------------------------------------------------------------------
 
-    def _pending_contact_change(self, user_id: int, field: str) -> PendingContactChangeResponse | None:
-        row = (
-            self.db.query(ContactChangeRequest)
-            .filter(
-                ContactChangeRequest.user_id == user_id,
-                ContactChangeRequest.field == field,
-                ContactChangeRequest.status == "PENDING",
-            )
-            .first()
-        )
-        if row is None or row.expires_at <= datetime.now(UTC):
-            return None
-        return PendingContactChangeResponse(
-            field=row.field, new_value=row.new_value, expires_at=row.expires_at, attempts=row.attempts
-        )
-
-    def request_contact_change(
-        self, user_id: int, data: RequestContactChangeRequest, admin_user_id: int
-    ) -> PendingContactChangeResponse:
+    def admin_update_contact(
+        self, user_id: int, data: UpdateCustomerContactRequest, admin_user_id: int
+    ) -> AdminCustomerDetailResponse:
         field = data.field.upper()
         if field not in ("EMAIL", "PHONE"):
             raise BusinessValidationError("field must be EMAIL or PHONE.")
@@ -719,8 +682,8 @@ class CustomerService:
         except ValueError as exc:
             raise BusinessValidationError(str(exc)) from exc
 
-        current_value = user.email if field == "EMAIL" else user.phone
-        if normalized == current_value:
+        previous_value = user.email if field == "EMAIL" else user.phone
+        if normalized == previous_value:
             raise BusinessValidationError(f"That is already this customer's current {field.lower()}.")
 
         column = User.email if field == "EMAIL" else User.phone
@@ -730,113 +693,10 @@ class CustomerService:
         if taken_by_other:
             raise ConflictError(f"Another account already uses this {field.lower()}.")
 
-        # Superseding an existing pending request for the same field (not
-        # stacking) - only one live code per user+field at a time, matching
-        # the DB's own partial unique index as a second, defense-in-depth
-        # layer beyond just relying on the constraint to reject a second
-        # insert.
-        existing = (
-            self.db.query(ContactChangeRequest)
-            .filter(
-                ContactChangeRequest.user_id == user_id,
-                ContactChangeRequest.field == field,
-                ContactChangeRequest.status == "PENDING",
-            )
-            .first()
-        )
-        if existing is not None:
-            existing.status = "CANCELLED"
-            self.db.flush()
-
-        code = generate_verification_code()
-        now = datetime.now(UTC)
-        request = ContactChangeRequest(
-            user_id=user_id,
-            field=field,
-            new_value=normalized,
-            code_hash=hash_verification_code(code),
-            status="PENDING",
-            requested_by_admin_user_id=admin_user_id,
-            expires_at=now + timedelta(minutes=CONTACT_CHANGE_CODE_TTL_MINUTES),
-        )
-        self.db.add(request)
-
-        AdminAuditService(self.db).record(
-            admin_user_id=admin_user_id,
-            action="customer.contact_change_requested",
-            resource_type="customer",
-            resource_id=user_id,
-            reason=f"{field} change requested",
-        )
-        self.db.commit()
-        self.db.refresh(request)
-
-        # Sent to the NEW destination - proving control of it is the entire
-        # point. A channel mismatch (SMS to an email, say) is impossible
-        # here since `field` IS the channel.
-        self._notification_gateway.send_verification_code(
-            channel=field, destination=normalized, code=code
-        )
-
-        return PendingContactChangeResponse(
-            field=field, new_value=normalized, expires_at=request.expires_at, attempts=0
-        )
-
-    def confirm_contact_change(
-        self, user_id: int, data: ConfirmContactChangeRequest, admin_user_id: int
-    ) -> AdminCustomerDetailResponse:
-        field = data.field.upper()
-        user = self.get_customer_or_404(user_id)
-
-        request = (
-            self.db.query(ContactChangeRequest)
-            .filter(
-                ContactChangeRequest.user_id == user_id,
-                ContactChangeRequest.field == field,
-                ContactChangeRequest.status == "PENDING",
-            )
-            .with_for_update()
-            .first()
-        )
-        if request is None:
-            raise NotFoundError("No pending change request for this field.")
-
-        now = datetime.now(UTC)
-        if request.expires_at <= now:
-            request.status = "EXPIRED"
-            self.db.commit()
-            raise BusinessValidationError("This verification code has expired. Request a new change.")
-
-        if request.attempts >= CONTACT_CHANGE_MAX_ATTEMPTS:
-            request.status = "EXPIRED"
-            self.db.commit()
-            raise BusinessValidationError("Too many incorrect attempts. Request a new change.")
-
-        if hash_verification_code(data.code) != request.code_hash:
-            request.attempts += 1
-            self.db.commit()
-            remaining = CONTACT_CHANGE_MAX_ATTEMPTS - request.attempts
-            raise BusinessValidationError(f"Incorrect verification code. {remaining} attempt(s) remaining.")
-
-        # Re-check uniqueness at confirmation time too - someone else could
-        # have taken this email/phone in the window since the code was
-        # requested.
-        column = User.email if field == "EMAIL" else User.phone
-        taken_by_other = (
-            self.db.query(User.id).filter(column == request.new_value, User.id != user_id).first() is not None
-        )
-        if taken_by_other:
-            request.status = "EXPIRED"
-            self.db.commit()
-            raise ConflictError(f"Another account claimed this {field.lower()} in the meantime.")
-
-        previous_value = user.email if field == "EMAIL" else user.phone
         if field == "EMAIL":
-            user.email = request.new_value
+            user.email = normalized
         else:
-            user.phone = request.new_value
-        request.status = "VERIFIED"
-        request.verified_at = now
+            user.phone = normalized
 
         AdminAuditService(self.db).record(
             admin_user_id=admin_user_id,
@@ -844,32 +704,40 @@ class CustomerService:
             resource_type="customer",
             resource_id=user_id,
             previous_state=previous_value[:50],
-            new_state=request.new_value[:50],
+            new_state=normalized[:50],
+            reason=data.reason,
         )
-        self.db.commit()
+        try:
+            self.db.commit()
+        except IntegrityError as exc:
+            # Lost a race with another account claiming the same value
+            # between the check above and this commit.
+            self.db.rollback()
+            raise ConflictError(f"Another account already uses this {field.lower()}.") from exc
         self.db.refresh(user)
         return self.admin_get_customer_detail(user_id, view_sensitive=True)
 
-    def cancel_contact_change(self, user_id: int, field: str, admin_user_id: int) -> None:
-        field = field.upper()
-        self.get_customer_or_404(user_id)
-        request = (
-            self.db.query(ContactChangeRequest)
-            .filter(
-                ContactChangeRequest.user_id == user_id,
-                ContactChangeRequest.field == field,
-                ContactChangeRequest.status == "PENDING",
-            )
-            .first()
-        )
-        if request is None:
-            raise NotFoundError("No pending change request for this field.")
-        request.status = "CANCELLED"
+    def admin_reset_password(
+        self, user_id: int, data: ResetCustomerPasswordRequest, admin_user_id: int
+    ) -> None:
+        if user_id == admin_user_id:
+            raise BusinessValidationError("You cannot reset your own password here.")
+        user = self.get_customer_or_404(user_id)
+
+        user.password_hash = hash_password(data.new_password)
+        # Sign the customer out everywhere - whoever held a session before
+        # the reset (possibly not the real owner) must not keep it. Same
+        # revoke-not-delete precedent as admin_set_account_status.
+        now = datetime.now(UTC)
+        self.db.query(AuthSession).filter(
+            AuthSession.user_id == user.id, AuthSession.revoked_at.is_(None)
+        ).update({"revoked_at": now}, synchronize_session=False)
+
         AdminAuditService(self.db).record(
             admin_user_id=admin_user_id,
-            action="customer.contact_change_cancelled",
+            action="customer.password_reset",
             resource_type="customer",
             resource_id=user_id,
-            reason=f"{field} change cancelled",
+            reason=data.reason,
         )
         self.db.commit()

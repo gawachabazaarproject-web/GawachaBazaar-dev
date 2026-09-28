@@ -27,24 +27,6 @@ export interface TokenResponse {
   user: UserResponse;
 }
 
-/** Returned from POST /auth/login instead of TokenResponse for every
- * CUSTOMER/WHOLESALER account (staff/Admin-panel logins are unaffected -
- * see backend/app/core/roles.py STAFF_ROLES). No session exists yet; call
- * authApi.verifyLoginOtp with `challenge_token` and the 6-digit code
- * emailed to `masked_email`. */
-export interface OtpChallengeResponse {
-  otp_required: true;
-  challenge_token: string;
-  masked_email: string;
-  expires_in_seconds: number;
-}
-
-export type LoginResult = TokenResponse | OtpChallengeResponse;
-
-export function isOtpChallenge(result: LoginResult): result is OtpChallengeResponse {
-  return "otp_required" in result;
-}
-
 export interface RefreshTokenResponse {
   access_token: string;
   refresh_token: string;
@@ -330,6 +312,49 @@ export interface PaymentInitiationResponse extends PaymentResponse {
 export interface CreatePaymentPayload {
   order_id: number;
   payment_method: PaymentMethod;
+}
+
+/** GET /payments/{id}/checkout - everything Razorpay Checkout needs to open
+ * for an online payment still awaiting the customer. `key_id` is the
+ * gateway's PUBLIC key; no secret ever reaches the app. */
+export interface PaymentCheckoutResponse {
+  payment_id: number;
+  order_id: number;
+  gateway: string;
+  key_id: string;
+  gateway_order_id: string;
+  amount: string;
+  amount_minor: number;
+  currency: string;
+  merchant_name: string;
+  description: string;
+  customer_name: string;
+  customer_email: string;
+  customer_phone: string;
+  test_mode: boolean;
+}
+
+/** Exactly what Razorpay Checkout's success handler returns - passed to
+ * POST /payments/{id}/confirm unchanged. The backend verifies the signature
+ * and re-checks the order with Razorpay; this alone never marks a payment
+ * paid. */
+export interface RazorpaySuccessPayload {
+  razorpay_order_id: string;
+  razorpay_payment_id: string;
+  razorpay_signature: string;
+}
+
+// ---------------------------------------------------------------------------
+// Ads (brand-advertising creatives, admin-managed - see
+// backend/app/models/ad.py. Distinct from Promotion: pure display/link
+// content, no pricing/redemption logic.)
+// ---------------------------------------------------------------------------
+
+export interface AdResponse {
+  id: number;
+  brand_name: string;
+  image_url: string;
+  link_url: string | null;
 }
 
 // ---------------------------------------------------------------------------

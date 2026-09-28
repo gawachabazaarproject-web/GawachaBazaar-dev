@@ -167,6 +167,23 @@ def test_2_public_category_detail_404_for_inactive(
     assert response.json()["code"] == "NOT_FOUND"
 
 
+def test_2b_public_category_detail_returns_image_and_active_children(
+    client: TestClient, db_session: Session
+) -> None:
+    parent = _create_category(db_session, name="Dairy", slug="dairy")
+    parent.image_url = "https://res.cloudinary.com/demo/image/upload/dairy.jpg"
+    db_session.commit()
+    _create_category(db_session, name="Milk", slug="milk", parent_id=parent.id)
+    _create_category(db_session, name="Old Milk", slug="old-milk", status="INACTIVE", parent_id=parent.id)
+
+    response = client.get(f"/api/v1/catalog/categories/{parent.id}")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["image_url"] == "https://res.cloudinary.com/demo/image/upload/dairy.jpg"
+    assert [child["name"] for child in body["children"]] == ["Milk"]
+
+
 def test_3_public_product_list_active_only_and_category_filter(
     client: TestClient, db_session: Session
 ) -> None:

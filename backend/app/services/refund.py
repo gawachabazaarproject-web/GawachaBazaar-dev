@@ -316,6 +316,114 @@ class RefundService:
 
         return self._persist_gateway_result(refund.id, transaction.id, result)
 
+    # ------------------------------------------------------------------
+    # Asynchronous resolution: a gateway may accept a refund as "pending"
+    # and only decide it later (Razorpay: pending -> processed/failed).
+    # Two ways that later verdict arrives - a signed refund webhook
+    # (automatic) or an admin "check status" sync (manual fallback) - both
+    # land in `_resolve_processing_refund`.
+    # ------------------------------------------------------------------
+
+    def sync_with_gateway(self, refund_id: int, admin_user_id: int) -> AdminRefundResponse:
+        """Admin fallback for a refund stuck in PROCESSING: ask the gateway
+        for its current verdict and apply it. The row lock is released
+        before the network call, same rule as process_refund."""
+        if self.gateway is None:
+            raise ConflictError("No payment gateway configured for refund processing.")
+        refund = self._lock_refund(refund_id)
+        if RefundStatus(refund.status) != RefundStatus.PROCESSING:
+            raise ConflictError(f"Only a PROCESSING refund can be checked (this one is {refund.status}).")
+        transaction = self._latest_refund_transaction(refund.id)
+        if transaction is None or not transaction.gateway_transaction_id:
+            raise ConflictError(
+                "The last refund attempt never got a reference back from the gateway, "
+                "so there is nothing to check. Look the payment up in the gateway dashboard."
+            )
+        gateway_refund_id = transaction.gateway_transaction_id
+        transaction_id = transaction.id
+        self.db.commit()  # release the lock before the network call
+
+        result = self.gateway.query_refund(gateway_refund_id=gateway_refund_id)
+
+        refund = self._lock_refund(refund_id)
+        transaction = self.db.query(PaymentTransaction).filter(PaymentTransaction.id == transaction_id).first()
+        change = self._resolve_processing_refund(refund, transaction, result.status, result.failure_reason)
+        AdminAuditService(self.db).record(
+            admin_user_id=admin_user_id,
+            action="refund.sync",
+            resource_type="refund",
+            resource_id=refund.id,
+            previous_state=RefundStatus.PROCESSING.value,
+            new_state=refund.status,
+            reason=f"gateway refund {gateway_refund_id} reported {result.status.value}",
+        )
+        self.db.commit()
+        self.db.refresh(refund)
+        if change is not None:
+            self._notify_refund_event(refund, new_status=change[1], previous_status=change[0])
+        return self._to_admin_response(refund)
+
+    def apply_webhook_update(
+        self, *, gateway_refund_id: str, status: TransactionStatus
+    ) -> tuple[Refund, tuple[str, str] | None] | None:
+        """Called inside PaymentService.process_webhook's transaction (the
+        caller commits and then notifies). Returns None for a refund id we
+        never issued, else (refund, (previous, new) or None if unchanged)."""
+        transaction = (
+            self.db.query(PaymentTransaction)
+            .filter(
+                PaymentTransaction.transaction_type == _REFUND_TRANSACTION_TYPE,
+                PaymentTransaction.gateway_transaction_id == gateway_refund_id,
+            )
+            .order_by(PaymentTransaction.id.desc())
+            .first()
+        )
+        if transaction is None or transaction.refund_id is None:
+            return None
+        refund = self._lock_refund(transaction.refund_id)
+        return refund, self._resolve_processing_refund(refund, transaction, status, None)
+
+    def _resolve_processing_refund(
+        self,
+        refund: Refund,
+        transaction: PaymentTransaction,
+        status: TransactionStatus,
+        failure_reason: str | None,
+    ) -> tuple[str, str] | None:
+        """Caller holds the refund lock. Applies a terminal gateway verdict
+        to a PROCESSING refund; anything else (still pending, a duplicate,
+        a late verdict for an already-resolved refund) is a logged no-op.
+        Returns (previous_status, new_status) when something changed."""
+        if status not in (TransactionStatus.SUCCESS, TransactionStatus.FAILED):
+            return None
+        if RefundStatus(refund.status) != RefundStatus.PROCESSING:
+            logger.info(
+                "REFUND_GATEWAY_UPDATE_NOOP: refund_id=%s status=%s incoming=%s",
+                refund.id, refund.status, status.value,
+            )
+            return None
+        now = datetime.now(UTC)
+        transaction.status = status
+        transaction.completed_at = now
+        if status == TransactionStatus.SUCCESS:
+            self._apply_transition(refund, RefundStatus.REFUNDED)
+            refund.processed_at = now
+        else:
+            transaction.failure_reason = (failure_reason or "Refund failed at the gateway.")[:2000]
+            self._apply_transition(refund, RefundStatus.FAILED)
+        return RefundStatus.PROCESSING.value, refund.status
+
+    def _latest_refund_transaction(self, refund_id: int) -> PaymentTransaction | None:
+        return (
+            self.db.query(PaymentTransaction)
+            .filter(
+                PaymentTransaction.refund_id == refund_id,
+                PaymentTransaction.transaction_type == _REFUND_TRANSACTION_TYPE,
+            )
+            .order_by(PaymentTransaction.id.desc())
+            .first()
+        )
+
     def _persist_gateway_result(
         self, refund_id: int, transaction_id: int, result: GatewayRefundResult
     ) -> AdminRefundResponse:

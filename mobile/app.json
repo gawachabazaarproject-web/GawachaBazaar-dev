@@ -18,6 +18,7 @@
     },
     "android": {
       "package": "com.gawachabazaar.customer",
+      "versionCode": 1,
       "adaptiveIcon": {
         "backgroundColor": "#000F08",
         "foregroundImage": "./assets/android-icon-foreground.png",
@@ -31,6 +32,7 @@
       "bundler": "metro"
     },
     "plugins": [
+      "./plugins/withAndroidRelease",
       "expo-router",
       [
         "expo-splash-screen",

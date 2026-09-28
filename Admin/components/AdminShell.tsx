@@ -30,6 +30,8 @@ const NAV_ITEMS: NavItem[] = [
   { label: "Content", href: "/content", icon: "file-text", permission: "promotions.read" },
   { label: "Settings", href: "/settings", icon: "settings", permission: "settings.manage" },
   { label: "Audit Log", href: "/audit-log", icon: "shield", permission: "audit.read" },
+  { label: "Staff", href: "/staff", icon: "users", permission: "staff.read" },
+  { label: "Ads", href: "/ads", icon: "megaphone", permission: "ads.read" },
 ];
 
 export function AdminShell({ children }: { children: React.ReactNode }) {

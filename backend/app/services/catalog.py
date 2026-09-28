@@ -110,6 +110,7 @@ class CatalogService:
             name=category.name,
             slug=category.slug,
             description=category.description,
+            image_url=category.image_url,
             parent_id=category.parent_id,
             status=category.status,
             created_at=category.created_at,

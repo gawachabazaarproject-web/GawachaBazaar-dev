@@ -134,3 +134,14 @@ docker compose logs -f backend
 ```
 
 > **Port Conflict Note**: To prevent collisions with any local PostgreSQL instance already running on host port `5432`, the containerized PostgreSQL binds to host port `5433` by default (`POSTGRES_HOST_PORT=5433`). Within Docker network, the backend connects directly via `db:5432`.
+
+## Production Deployment (Contabo VPS)
+
+Production runs as a single Docker Compose stack behind Caddy (automatic HTTPS):
+`docker-compose.prod.yml` + `.env.production` (from `.env.production.example`).
+Migrations run automatically on every deploy, the database is backed up nightly,
+and only ports 80/443 are exposed.
+
+See **[deploy/README.md](deploy/README.md)** for the full runbook: server bootstrap,
+first deploy, creating the first admin, updates, backups/restore, and the
+go-live checklist.

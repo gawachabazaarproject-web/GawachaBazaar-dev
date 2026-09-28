@@ -47,9 +47,13 @@ from app.schemas.promotion import (
     PromotionTargetResponse,
     UpdatePromotionRequest,
 )
-from app.services.pricing import get_current_prices_for_variants
 from app.services.admin_audit import AdminAuditService
-from app.services.promotion_state import PromotionLike, compute_effective_status, is_currently_redeemable
+from app.services.pricing import get_current_prices_for_variants
+from app.services.promotion_state import (
+    PromotionLike,
+    compute_effective_status,
+    is_currently_redeemable,
+)
 
 _CENTS = Decimal("0.01")
 

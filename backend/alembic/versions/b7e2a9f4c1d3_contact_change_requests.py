@@ -23,8 +23,9 @@ race between two admins requesting a change for the same field can't leave
 two live codes with unrelated attempt counters.
 """
 
-from alembic import op
 import sqlalchemy as sa
+
+from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = "b7e2a9f4c1d3"

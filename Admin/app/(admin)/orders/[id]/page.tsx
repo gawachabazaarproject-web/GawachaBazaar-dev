@@ -12,7 +12,7 @@ import {
   isOrderCancellable,
   OrdersApiError,
 } from "@/lib/orders";
-import { formatDateTime, formatMoney } from "@/lib/format";
+import { formatDateTime, formatMoney, formatPaymentMethod } from "@/lib/format";
 import { ErrorState } from "@/components/ErrorState";
 import { StatusBadge } from "@/components/StatusBadge";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
@@ -174,7 +174,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
 
       {order.payment && (
         <Section title="Payment">
-          <Row label="Method" value={order.payment.payment_method === "COD" ? "Cash on Delivery" : order.payment.payment_method} />
+          <Row label="Method" value={formatPaymentMethod(order.payment.payment_method)} />
           <div className="flex items-center justify-between py-1.5 text-sm">
             <span className="text-neutral-500">Status</span>
             <StatusBadge status={order.payment.status} />

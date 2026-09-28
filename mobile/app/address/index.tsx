@@ -98,7 +98,7 @@ const styles = StyleSheet.create({
     borderColor: colors.divider,
   },
   cardHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  defaultBadge: { backgroundColor: colors.primaryLight, paddingHorizontal: spacing.sm, paddingVertical: 2, borderRadius: radius.none },
+  defaultBadge: { backgroundColor: colors.primaryLight, paddingHorizontal: spacing.sm, paddingVertical: 2, borderRadius: radius.card },
   addressText: { marginTop: spacing.xs },
   actions: { flexDirection: "row", gap: spacing.lg, marginTop: spacing.md },
   actionButton: { flexDirection: "row", alignItems: "center", gap: spacing.xs },

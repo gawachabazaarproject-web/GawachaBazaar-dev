@@ -386,6 +386,50 @@ class InventoryReservationService:
         """
         self._release_locked(reservation, target=ReservationStatus.EXPIRED, now=now)
 
+    def sweep_expired_reservations(self, *, now: datetime, limit: int = 500) -> int:
+        """Proactively expire every ACTIVE reservation past `expires_at`,
+        independent of any request ever touching that specific order.
+
+        Every other expiry path (`commit_reservation_for_order`,
+        `expire_reservation_for_order`) is lazy - it only fires when
+        something happens to read or act on that one reservation. A
+        reservation nobody ever GETs, pays for, or explicitly expires via
+        the ops endpoint holds its `reserved_quantity` against the lot
+        forever, understating real available stock with no way to
+        reclaim it. This is the proactive counterpart, meant to be called
+        periodically (see the background loop in app/main.py) - one call
+        per matching order via the same locked, idempotent
+        `expire_reservation_for_order` path used everywhere else, so it
+        gets the identical lock-ordering and double-expiry safety for
+        free. Bounded by `limit` per call so one tick can't hold an
+        unbounded number of row locks; the caller loops on ticks, not on
+        a single call draining everything.
+        """
+        order_ids = [
+            row[0]
+            for row in (
+                self.db.query(InventoryReservation.order_id)
+                .filter(
+                    InventoryReservation.status == ReservationStatus.ACTIVE.value,
+                    InventoryReservation.expires_at <= now,
+                )
+                .limit(limit)
+                .all()
+            )
+        ]
+        expired_count = 0
+        for order_id in order_ids:
+            try:
+                self.expire_reservation_for_order(order_id, now=now)
+                self.db.commit()
+                expired_count += 1
+            except Exception:
+                self.db.rollback()
+                logger.exception(
+                    "INVENTORY_RESERVATION_SWEEP_FAILED: order_id=%s", order_id
+                )
+        return expired_count
+
     def release_reservation_for_order(
         self, order_id: int, *, now: datetime, reason: str = "manual_release"
     ) -> InventoryReservation:

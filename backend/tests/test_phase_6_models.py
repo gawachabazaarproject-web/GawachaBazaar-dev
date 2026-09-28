@@ -133,6 +133,7 @@ def _create_order(
         order_number=order_number,
         status=status,
         total_amount=total_amount,
+        subtotal_amount=total_amount,
         currency=currency,
         placed_at=placed_at,
         cart_id=cart_id,
@@ -465,6 +466,7 @@ class TestOrderModel:
                 order_number="ORD-INV-STAT",
                 status=invalid_status,
                 total_amount=Decimal("100.00"),
+                subtotal_amount=Decimal("100.00"),
                 currency="INR",
                 placed_at=datetime.now(UTC),
             )
@@ -486,6 +488,11 @@ class TestOrderModel:
                 order_number="ORD-NEG-AMT",
                 status="PENDING",
                 total_amount=Decimal("-0.01"),
+                # Kept non-negative (unlike total_amount) so this trips only
+                # ck_orders_total_amount, not ck_orders_discount_not_exceeding_subtotal
+                # (discount_amount defaults to 0, which would itself exceed a
+                # negative subtotal_amount and mask the constraint under test).
+                subtotal_amount=Decimal("100.00"),
                 currency="INR",
                 placed_at=datetime.now(UTC),
             )
@@ -501,6 +508,7 @@ class TestOrderModel:
                 order_number="ORD-NO-USER",
                 status="PENDING",
                 total_amount=Decimal("100.00"),
+                subtotal_amount=Decimal("100.00"),
                 currency="INR",
                 placed_at=datetime.now(UTC),
             )
@@ -561,6 +569,7 @@ class TestOrderModel:
                 order_number="ORD-FK-FAIL",
                 status="PENDING",
                 total_amount=Decimal("100.00"),
+                subtotal_amount=Decimal("100.00"),
                 currency="INR",
                 placed_at=datetime.now(UTC),
                 cart_id=999999,

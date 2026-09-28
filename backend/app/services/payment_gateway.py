@@ -1,5 +1,11 @@
 """Payment gateway interface and the PNB adapter boundary.
 
+PRODUCTION uses RazorpayGateway (app/services/razorpay_gateway.py) - see
+app/dependencies/payments.py. PNBGateway below is no longer wired into the
+app; it remains only as the structural base the payment test suite's fake
+gateway builds on (its placeholder webhook scheme exercises the shared
+webhook pipeline).
+
 PNBGateway is a deliberately incomplete, clearly-labeled adapter: no PNB
 merchant integration specification exists anywhere in this repository (a
 full-repository search found none before this phase began). Per the
@@ -39,6 +45,13 @@ from app.services.payment_state import TransactionStatus
 
 class WebhookParseError(Exception):
     """Raised when a webhook body cannot be parsed into a GatewayWebhookEvent."""
+
+
+class WebhookEventIgnored(Exception):
+    """A correctly-signed webhook for an event type this integration does
+    not act on (e.g. refund.* or dispute.* events a gateway account may be
+    subscribed to). Acknowledged with 200 so the gateway doesn't keep
+    retrying it, but never touches payment state."""
 
 
 class GatewayError(Exception):
@@ -116,12 +129,31 @@ class GatewayWebhookEvent:
     raw_response: dict | None = None
 
 
+@dataclass(frozen=True)
+class GatewayRefundEvent:
+    """A signed webhook about a REFUND's outcome (not a payment). Refunds
+    can resolve asynchronously - Razorpay reports a new refund as
+    `pending` and only later as `processed`/`failed` - so this is how a
+    PROCESSING refund eventually reaches REFUNDED/FAILED without anyone
+    polling. Handled by RefundService, never the payment state machine."""
+
+    event_id: str
+    event_type: str
+    gateway_refund_id: str
+    status: TransactionStatus
+    raw_response: dict | None = None
+
+
 class PaymentGateway(Protocol):
     """The one boundary PaymentService depends on. Kept deliberately small -
     no factory-of-factories, no generic gateway framework.
     """
 
     gateway_name: str
+
+    # False when the gateway has no credentials - online payments are then
+    # refused up front (503) instead of creating a doomed attempt.
+    is_configured: bool
 
     def initiate_payment(
         self,
@@ -130,6 +162,7 @@ class PaymentGateway(Protocol):
         amount: Decimal,
         currency: str,
         idempotency_key: str,
+        existing_gateway_order_id: str | None = None,
     ) -> GatewayInitiateResult: ...
 
     def query_status(
@@ -149,13 +182,15 @@ class PaymentGateway(Protocol):
         idempotency_key: str,
     ) -> GatewayRefundResult: ...
 
+    def query_refund(self, *, gateway_refund_id: str) -> GatewayRefundResult: ...
+
     def verify_webhook_signature(
         self, *, raw_body: bytes, headers: Mapping[str, str]
     ) -> bool: ...
 
     def parse_webhook_event(
         self, *, raw_body: bytes, headers: Mapping[str, str]
-    ) -> GatewayWebhookEvent: ...
+    ) -> GatewayWebhookEvent | GatewayRefundEvent: ...
 
 
 _NOT_IMPLEMENTED_MESSAGE = (
@@ -176,6 +211,7 @@ class PNBGateway:
     """
 
     gateway_name = "PNB"
+    is_configured = True  # structural placeholder - calls raise NotImplementedError
 
     def __init__(
         self,
@@ -197,6 +233,7 @@ class PNBGateway:
         amount: Decimal,
         currency: str,
         idempotency_key: str,
+        existing_gateway_order_id: str | None = None,
     ) -> GatewayInitiateResult:
         raise NotImplementedError(
             _NOT_IMPLEMENTED_MESSAGE.format(operation="initiate_payment")
@@ -228,6 +265,11 @@ class PNBGateway:
         """
         raise NotImplementedError(
             _NOT_IMPLEMENTED_MESSAGE.format(operation="refund_payment")
+        )
+
+    def query_refund(self, *, gateway_refund_id: str) -> GatewayRefundResult:
+        raise NotImplementedError(
+            _NOT_IMPLEMENTED_MESSAGE.format(operation="query_refund")
         )
 
     def verify_webhook_signature(

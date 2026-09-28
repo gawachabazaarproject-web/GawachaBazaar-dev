@@ -127,7 +127,7 @@ export function QuantityStepper({
 const styles = StyleSheet.create({
   fullWidth: { width: "100%" },
   addButton: {
-    borderRadius: radius.none,
+    borderRadius: radius.card,
     borderWidth: 1,
     borderColor: colors.primary,
     paddingHorizontal: 20,
@@ -139,7 +139,7 @@ const styles = StyleSheet.create({
   stepper: {
     flexDirection: "row",
     alignItems: "center",
-    borderRadius: radius.none,
+    borderRadius: radius.card,
     backgroundColor: colors.primary,
     minWidth: 88,
     justifyContent: "space-between",

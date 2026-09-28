@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { useOrderEvents } from "@/lib/realtime-context";
 import { AdminOrderListItem, AdminOrderListResponse, fetchAdminOrders, OrdersApiError } from "@/lib/orders";
-import { formatDateTime, formatMoney } from "@/lib/format";
+import { formatDateTime, formatMoney, formatPaymentMethod } from "@/lib/format";
 import { PageHeader } from "@/components/PageHeader";
 import { EmptyState } from "@/components/EmptyState";
 import { ErrorState } from "@/components/ErrorState";
@@ -206,7 +206,7 @@ function OrderRow({ order, onClick }: { order: AdminOrderListItem; onClick: () =
         {order.payment_status ? (
           <div>
             <StatusBadge status={order.payment_status} />
-            <p className="mt-0.5 text-xs text-neutral-500">{order.payment_method}</p>
+            <p className="mt-0.5 text-xs text-neutral-500">{formatPaymentMethod(order.payment_method)}</p>
           </div>
         ) : (
           <span className="text-neutral-400">—</span>

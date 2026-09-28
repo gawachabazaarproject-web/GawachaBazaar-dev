@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from "react-native";
-import { Link, useRouter } from "expo-router";
+import { Link } from "expo-router";
 import { Screen } from "@/components/Screen";
 import { Text } from "@/components/Text";
 import { TextField } from "@/components/TextField";
@@ -14,7 +14,6 @@ import { validateLoginIdentifier, validatePassword } from "@/utils/validation";
 type FieldErrors = { identifier?: string; password?: string };
 
 export default function LoginScreen() {
-  const router = useRouter();
   const login = useAuthStore((s) => s.login);
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
@@ -33,14 +32,7 @@ export default function LoginScreen() {
 
     setLoading(true);
     try {
-      const outcome = await login(identifier.trim(), password);
-      if (outcome.otpRequired) {
-        router.push({
-          pathname: "/(auth)/verify-otp",
-          params: { challengeToken: outcome.challengeToken, maskedEmail: outcome.maskedEmail },
-        });
-        return;
-      }
+      await login(identifier.trim(), password);
       // AppGate handles the redirect once `status` flips to authenticated.
     } catch (err) {
       setError(toApiError(err).message);
@@ -93,11 +85,12 @@ export default function LoginScreen() {
               onSubmitEditing={handleLogin}
               error={fieldErrors.password}
             />
-            <Link href="/(auth)/forgot-password" asChild>
-              <Text variant="bodySmall" color={colors.primary} style={styles.forgotLink}>
-                Forgot password?
-              </Text>
-            </Link>
+            {/* No email/SMS channel exists to deliver a reset code - support
+                resets the password from the Admin panel after confirming
+                who the customer is. */}
+            <Text variant="bodySmall" color={colors.textSecondary} style={styles.forgotHint}>
+              Forgot your password? Contact GawachaBazaar support and we'll reset it for you.
+            </Text>
             {error ? (
               <Text variant="bodySmall" color={colors.error} style={styles.error}>
                 {error}
@@ -128,7 +121,7 @@ const styles = StyleSheet.create({
   header: { marginBottom: spacing["3xl"], alignItems: "center" },
   subtitle: { marginTop: spacing.sm, textAlign: "center" },
   form: {},
-  forgotLink: { alignSelf: "flex-end", marginTop: spacing.sm },
+  forgotHint: { marginTop: spacing.sm },
   error: { marginTop: spacing.md },
   footer: { flexDirection: "row", justifyContent: "center", marginTop: spacing["2xl"] },
 });

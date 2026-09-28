@@ -15,7 +15,9 @@ from decimal import Decimal
 from pydantic import Field
 
 from app.schemas.address import AddressResponse
-from app.schemas.admin_order import AdminOrderListResponse as CustomerOrderListResponse  # noqa: F401
+from app.schemas.admin_order import (
+    AdminOrderListResponse as CustomerOrderListResponse,  # noqa: F401
+)
 from app.schemas.base import BaseSchema
 
 MAX_PAGE_SIZE = 100
@@ -104,17 +106,6 @@ class CustomerOrderSummaryResponse(BaseSchema):
     promotion_redemptions_count: int
 
 
-class PendingContactChangeResponse(BaseSchema):
-    """Surfaced on the customer detail response so the admin UI can show
-    "verification pending" instead of a blank edit form - never exposes the
-    code itself, only what was requested and when it expires."""
-
-    field: str
-    new_value: str
-    expires_at: datetime
-    attempts: int
-
-
 class AdminCustomerDetailResponse(BaseSchema):
     id: int
     name: str
@@ -127,8 +118,6 @@ class AdminCustomerDetailResponse(BaseSchema):
     updated_at: datetime
     summary: CustomerOrderSummaryResponse
     addresses: list[AddressResponse]
-    pending_email_change: PendingContactChangeResponse | None = None
-    pending_phone_change: PendingContactChangeResponse | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -214,15 +203,18 @@ class UpdateCustomerStatusRequest(BaseSchema):
 
 
 # ---------------------------------------------------------------------------
-# Contact change (verification-backed email/phone edit)
+# Contact details and password (admin-assisted - there is no email/SMS
+# channel to verify a new address or deliver a reset code, so an ADMIN with
+# the matching permission makes the change directly, always audit-logged)
 # ---------------------------------------------------------------------------
 
 
-class RequestContactChangeRequest(BaseSchema):
+class UpdateCustomerContactRequest(BaseSchema):
     field: str = Field(..., description="EMAIL or PHONE")
     new_value: str = Field(..., min_length=3, max_length=255)
+    reason: str | None = Field(default=None, max_length=500)
 
 
-class ConfirmContactChangeRequest(BaseSchema):
-    field: str = Field(..., description="EMAIL or PHONE")
-    code: str = Field(..., min_length=6, max_length=6)
+class ResetCustomerPasswordRequest(BaseSchema):
+    new_password: str = Field(..., min_length=8, max_length=128)
+    reason: str | None = Field(default=None, max_length=500)

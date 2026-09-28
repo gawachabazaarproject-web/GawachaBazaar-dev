@@ -21,11 +21,11 @@ from app.dependencies.payments import get_payment_gateway
 from app.exceptions.base import NotFoundError
 from app.models.order import Order
 from app.models.user import User
+from app.schemas.admin_order import MAX_PAGE_SIZE as ADMIN_MAX_PAGE_SIZE
 from app.schemas.admin_order import (
     AdminOrderDetailResponse,
     AdminOrderListResponse,
 )
-from app.schemas.admin_order import MAX_PAGE_SIZE as ADMIN_MAX_PAGE_SIZE
 from app.schemas.fulfillment import CustomerFulfillmentResponse
 from app.schemas.inventory_reservation import InventoryReservationResponse
 from app.schemas.order import (

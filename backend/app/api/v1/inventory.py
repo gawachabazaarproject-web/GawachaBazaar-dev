@@ -13,6 +13,7 @@ from app.core.roles import ADMIN, HUB_STAFF, OPERATIONS
 from app.dependencies.auth import get_current_user, require_permission, require_roles
 from app.dependencies.database import get_db
 from app.models.user import User
+from app.schemas.admin_inventory import MAX_PAGE_SIZE as ADMIN_MAX_PAGE_SIZE
 from app.schemas.admin_inventory import (
     AdminInventoryLotDetailResponse,
     AdminInventoryLotListItemResponse,
@@ -23,7 +24,6 @@ from app.schemas.admin_inventory import (
     TransferStockRequest,
     TransferStockResponse,
 )
-from app.schemas.admin_inventory import MAX_PAGE_SIZE as ADMIN_MAX_PAGE_SIZE
 from app.schemas.inventory import (
     MAX_PAGE_SIZE,
     BatchListResponse,

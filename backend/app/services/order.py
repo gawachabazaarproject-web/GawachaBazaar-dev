@@ -605,6 +605,14 @@ class OrderService:
                 "Could not complete checkout due to a conflicting update."
             ) from exc
 
+        notify_status_event(
+            resource="order",
+            order_id=order.id,
+            user_id=order.user_id,
+            new_status="PENDING",
+            previous_status=None,
+        )
+
         return self._to_order_detail(order), True
 
     # ------------------------------------------------------------------

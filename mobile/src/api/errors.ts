@@ -41,6 +41,23 @@ const FRIENDLY_BY_STATUS: Record<number, string> = {
   503: "GawachaBazaar is temporarily unavailable. Please try again shortly.",
 };
 
+/** 5xx responses whose backend message was written for customers - the
+ * payment-availability outcomes from backend payment.py/handlers.py.
+ * Shown as-is; every other 5xx keeps the generic mapping above. */
+const CUSTOMER_SAFE_5XX_CODES = new Set([
+  "ONLINE_PAYMENTS_NOT_CONFIGURED",
+  "PAYMENT_GATEWAY_UNAVAILABLE",
+  "PAYMENT_GATEWAY_ERROR",
+]);
+
+/** Codes whose backend message is accurate but not customer-friendly
+ * (a gateway rejection carries Razorpay's own wording, e.g.
+ * "Authentication failed", which means nothing to a shopper). */
+const FRIENDLY_BY_CODE: Record<string, string> = {
+  PAYMENT_GATEWAY_REJECTED:
+    "Online payment couldn't be started right now. Please try again, or choose Cash on Delivery.",
+};
+
 /** Maps a raw backend/network failure into a safe, user-facing ApiError.
  * Never surfaces a raw "500 Internal Server Error" or stack trace. */
 export function toApiError(error: unknown): ApiError {
@@ -63,14 +80,18 @@ export function toApiError(error: unknown): ApiError {
     const status = axiosError.response.status;
     const body = axiosError.response.data;
     const backendMessage = typeof body?.message === "string" ? body.message : undefined;
+    const code = typeof body?.code === "string" ? body.code : undefined;
+    const backendMessageIsSafe = status < 500 || (!!code && CUSTOMER_SAFE_5XX_CODES.has(code));
     return new ApiError({
       // Prefer the backend's own message for 4xx (it's already
-      // customer-safe per the backend's exception contract); fall back to
-      // a generic mapping for anything else or if the body is malformed.
+      // customer-safe per the backend's exception contract) and for the
+      // allow-listed payment 5xx codes; fall back to a generic mapping for
+      // anything else or if the body is malformed.
       message:
-        status < 500 && backendMessage
+        (code && FRIENDLY_BY_CODE[code]) ??
+        (backendMessageIsSafe && backendMessage
           ? backendMessage
-          : FRIENDLY_BY_STATUS[status] ?? "Something went wrong. Please try again.",
+          : FRIENDLY_BY_STATUS[status] ?? "Something went wrong. Please try again."),
       code: body?.code ?? `HTTP_${status}`,
       status,
       details: body?.details,

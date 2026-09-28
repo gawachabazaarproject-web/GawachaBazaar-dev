@@ -16,3 +16,11 @@ export function formatDateTime(iso: string): string {
 export function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
 }
+
+/** Payment method codes as shown to staff. "UPI" is the backend's code for
+ * an online payment through Razorpay (UPI, card, netbanking or wallet). */
+export function formatPaymentMethod(method: string | null | undefined): string {
+  if (method === "COD") return "Cash on Delivery";
+  if (method === "UPI") return "Online (Razorpay)";
+  return method ?? "—";
+}

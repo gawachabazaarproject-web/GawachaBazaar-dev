@@ -26,8 +26,9 @@ column in this codebase (`orders.cancelled_by_user_id`,
 account is never deleted out from under their own history.
 """
 
-from alembic import op
 import sqlalchemy as sa
+
+from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = "5d80e9e84ddb"

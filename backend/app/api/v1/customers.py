@@ -27,7 +27,6 @@ from app.schemas.admin_customer import (
     MAX_PAGE_SIZE,
     AdminCustomerDetailResponse,
     AdminCustomerListResponse,
-    ConfirmContactChangeRequest,
     CreateCustomerNoteRequest,
     CustomerNoteListResponse,
     CustomerNoteResponse,
@@ -35,8 +34,8 @@ from app.schemas.admin_customer import (
     CustomerPromotionRedemptionListResponse,
     CustomersDashboardResponse,
     CustomerTimelineResponse,
-    PendingContactChangeResponse,
-    RequestContactChangeRequest,
+    ResetCustomerPasswordRequest,
+    UpdateCustomerContactRequest,
     UpdateCustomerNoteRequest,
     UpdateCustomerStatusRequest,
 )
@@ -231,47 +230,32 @@ def set_customer_status(
     )
 
 
-@router.post(
-    "/{user_id}/contact-change",
-    response_model=PendingContactChangeResponse,
-    status_code=status.HTTP_201_CREATED,
-    summary="Request an email/phone change - sends a verification code to the NEW address/number",
-)
-def request_contact_change(
-    user_id: int,
-    payload: RequestContactChangeRequest,
-    current_user: User = Depends(require_permission("customers.manage_contact")),
-    db: Session = Depends(get_db),
-) -> PendingContactChangeResponse:
-    return CustomerService(db).request_contact_change(user_id, payload, current_user.id)
-
-
-@router.post(
-    "/{user_id}/contact-change/confirm",
+@router.patch(
+    "/{user_id}/contact",
     response_model=AdminCustomerDetailResponse,
-    summary="Confirm a pending email/phone change with the code sent to the new address/number",
+    summary="Change a customer's email or phone (admin-verified, audit-logged)",
 )
-def confirm_contact_change(
+def update_customer_contact(
     user_id: int,
-    payload: ConfirmContactChangeRequest,
+    payload: UpdateCustomerContactRequest,
     current_user: User = Depends(require_permission("customers.manage_contact")),
     db: Session = Depends(get_db),
 ) -> AdminCustomerDetailResponse:
-    return CustomerService(db).confirm_contact_change(user_id, payload, current_user.id)
+    return CustomerService(db).admin_update_contact(user_id, payload, current_user.id)
 
 
-@router.delete(
-    "/{user_id}/contact-change/{field}",
+@router.post(
+    "/{user_id}/password",
     status_code=status.HTTP_204_NO_CONTENT,
-    summary="Cancel a pending email/phone change request",
+    summary="Set a new password for a customer and sign them out everywhere",
 )
-def cancel_contact_change(
+def reset_customer_password(
     user_id: int,
-    field: str,
-    current_user: User = Depends(require_permission("customers.manage_contact")),
+    payload: ResetCustomerPasswordRequest,
+    current_user: User = Depends(require_permission("customers.reset_password")),
     db: Session = Depends(get_db),
 ) -> None:
-    CustomerService(db).cancel_contact_change(user_id, field, current_user.id)
+    CustomerService(db).admin_reset_password(user_id, payload, current_user.id)
 
 
 def _has_permission(current_user: User, db: Session, permission: str) -> bool:

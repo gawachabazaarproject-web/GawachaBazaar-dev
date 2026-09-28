@@ -125,7 +125,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: spacing.md,
     padding: spacing.md,
-    borderRadius: radius.none,
+    borderRadius: radius.card,
     borderWidth: 1.5,
     borderColor: colors.border,
   },

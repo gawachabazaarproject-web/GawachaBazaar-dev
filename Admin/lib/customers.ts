@@ -76,13 +76,6 @@ export interface CustomerAddress {
   updated_at: string;
 }
 
-export interface PendingContactChange {
-  field: string;
-  new_value: string;
-  expires_at: string;
-  attempts: number;
-}
-
 export interface AdminCustomerDetail {
   id: number;
   name: string;
@@ -95,8 +88,6 @@ export interface AdminCustomerDetail {
   updated_at: string;
   summary: CustomerOrderSummary;
   addresses: CustomerAddress[];
-  pending_email_change: PendingContactChange | null;
-  pending_phone_change: PendingContactChange | null;
 }
 
 // Reuses the exact Orders-module row shape (backend/app/schemas/admin_order.py)
@@ -280,34 +271,30 @@ export async function setCustomerStatus(
   });
 }
 
-export async function requestContactChange(
+/** Direct email/phone change - an admin confirms the customer's identity
+ * out-of-band first (there is no email/SMS channel to verify the new value). */
+export async function updateCustomerContact(
   accessToken: string,
   id: number,
   field: "EMAIL" | "PHONE",
   newValue: string,
-): Promise<PendingContactChange> {
-  return request(accessToken, `/customers/${id}/contact-change`, {
-    method: "POST",
-    body: JSON.stringify({ field, new_value: newValue }),
-  });
-}
-
-export async function confirmContactChange(
-  accessToken: string,
-  id: number,
-  field: "EMAIL" | "PHONE",
-  code: string,
+  reason?: string,
 ): Promise<AdminCustomerDetail> {
-  return request(accessToken, `/customers/${id}/contact-change/confirm`, {
-    method: "POST",
-    body: JSON.stringify({ field, code }),
+  return request(accessToken, `/customers/${id}/contact`, {
+    method: "PATCH",
+    body: JSON.stringify({ field, new_value: newValue, reason: reason || undefined }),
   });
 }
 
-export async function cancelContactChange(
+/** Sets a new password and signs the customer out of every device. */
+export async function resetCustomerPassword(
   accessToken: string,
   id: number,
-  field: "EMAIL" | "PHONE",
+  newPassword: string,
+  reason?: string,
 ): Promise<void> {
-  await request(accessToken, `/customers/${id}/contact-change/${field}`, { method: "DELETE" });
+  await request(accessToken, `/customers/${id}/password`, {
+    method: "POST",
+    body: JSON.stringify({ new_password: newPassword, reason: reason || undefined }),
+  });
 }

@@ -127,7 +127,7 @@ export function WholesaleProductCard({ product, onPress }: WholesaleProductCardP
 
 const styles = StyleSheet.create({
   card: { flex: 1, ...shadows.card },
-  surface: { borderRadius: radius.xs, overflow: "hidden", backgroundColor: colors.surface },
+  surface: { borderRadius: radius.card, overflow: "hidden", backgroundColor: colors.surface },
   imageWrap: {
     width: "100%",
     aspectRatio: 0.82,
@@ -155,7 +155,7 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: radius.none,
+    borderRadius: radius.card,
     paddingHorizontal: spacing.sm,
     height: 38,
   },
@@ -167,7 +167,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: radius.none,
+    borderRadius: radius.card,
   },
   unitChipActive: { backgroundColor: colors.primary, borderColor: colors.primary },
   addButton: {
@@ -177,7 +177,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     borderWidth: 1,
     borderColor: colors.primary,
-    borderRadius: radius.none,
+    borderRadius: radius.card,
   },
   removeButton: {
     marginTop: spacing.md,
@@ -186,6 +186,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     borderWidth: 1,
     borderColor: colors.error,
-    borderRadius: radius.none,
+    borderRadius: radius.card,
   },
 });

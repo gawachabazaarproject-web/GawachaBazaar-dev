@@ -107,19 +107,21 @@ PROMOTION_PERMISSIONS = {
 # app/services/customer.py. `customers.view` is plain read (list/detail/
 # orders/promotions/addresses/timeline, phone masked) and is the only one of
 # these granted to the read-only SUPPORT role below; everything else
-# (`view_sensitive`, `manage_status`, `notes`, `manage_contact`) stays
-# ADMIN-only, same precedent as Promotions/Refunds - customer PII, account-
-# status changes, and identity (email/phone) changes are at least as
-# sensitive as a discount rule. `manage_contact` gates the verification-
-# backed email/phone change workflow (see app/services/contact_change.py) -
-# kept separate from `manage_status` because it is a different, higher-
-# stakes capability (changing login identity, not just enable/disable).
+# (`view_sensitive`, `manage_status`, `notes`, `manage_contact`,
+# `reset_password`) stays ADMIN-only, same precedent as Promotions/Refunds -
+# customer PII, account-status changes, and identity changes are at least as
+# sensitive as a discount rule. `manage_contact` gates the direct email/phone
+# edit and `reset_password` the admin-assisted password reset (see
+# CustomerService.admin_update_contact/admin_reset_password) - both kept
+# separate from `manage_status` because they change how the customer logs
+# in, not just whether they can.
 CUSTOMER_PERMISSIONS = {
     "customers.view",
     "customers.view_sensitive",
     "customers.manage_status",
     "customers.notes",
     "customers.manage_contact",
+    "customers.reset_password",
 }
 
 # Delivery - matches fulfillments.py. `delivery.read` mirrors the 4-role GET
@@ -154,6 +156,24 @@ AUDIT_PERMISSIONS = {
     "audit.read",
 }
 
+# Staff/employee management - creating internal accounts and assigning the
+# operational roles that gate the rest of this admin panel. ADMIN-only, same
+# precedent as Refunds/Promotions: who can act as staff (including who can
+# grant ADMIN itself) is at least as sensitive as a discount rule.
+STAFF_PERMISSIONS = {
+    "staff.read",
+    "staff.manage",
+}
+
+# Brand-advertising creatives shown in the mobile app's ads carousel -
+# display/link content, no pricing or redemption logic (see app/models/ad.py,
+# distinct from Promotion). ADMIN-only for now, same precedent as
+# Promotions: customer-facing content a brand is paying to show.
+AD_PERMISSIONS = {
+    "ads.read",
+    "ads.manage",
+}
+
 ALL_PERMISSIONS: frozenset[str] = frozenset(
     CATALOG_PERMISSIONS
     | INVENTORY_PERMISSIONS
@@ -166,6 +186,8 @@ ALL_PERMISSIONS: frozenset[str] = frozenset(
     | REPORT_PERMISSIONS
     | SETTINGS_PERMISSIONS
     | AUDIT_PERMISSIONS
+    | STAFF_PERMISSIONS
+    | AD_PERMISSIONS
 )
 
 # ADMIN is the top role until a dedicated SUPER_ADMIN role is introduced

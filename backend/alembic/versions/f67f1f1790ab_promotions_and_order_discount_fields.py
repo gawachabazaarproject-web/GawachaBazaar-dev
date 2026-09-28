@@ -51,8 +51,9 @@ ORDERS TABLE (additive columns, backward-compatible):
   computes the value going into that same column from now on.
 """
 
-from alembic import op
 import sqlalchemy as sa
+
+from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = "f67f1f1790ab"
