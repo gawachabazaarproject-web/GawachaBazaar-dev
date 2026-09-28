@@ -43,6 +43,7 @@ they depend on data (not just role membership):
     `assign_delivery_partner`).
 """
 
+import json
 from datetime import UTC, datetime
 
 from sqlalchemy.exc import IntegrityError
@@ -60,6 +61,7 @@ from app.models.order import Order
 from app.models.order_address import OrderAddress
 from app.models.order_item import OrderItem
 from app.models.payment import Payment
+from app.models.payment_transaction import PaymentTransaction
 from app.models.role import Role
 from app.models.user import User
 from app.models.user_role import UserRole
@@ -76,6 +78,12 @@ from app.services.fulfillment_state import (
     transition_fulfillment_status,
 )
 from app.services.inventory import InventoryService
+from app.services.payment_state import (
+    IllegalTransitionError,
+    PaymentStatus,
+    TransactionStatus,
+    transition_payment_status,
+)
 from app.services.reservation_state import ReservationStatus
 
 _DELIVERY_MOVEMENT_TYPE = "DISPATCH"
@@ -550,6 +558,17 @@ class FulfillmentService:
             )
             lot.reserved_quantity = lot.reserved_quantity - item.quantity
 
+        # Order is already locked above, so Payment is locked second -
+        # the same Order -> Payment order PaymentService uses everywhere.
+        payment = (
+            self.db.query(Payment)
+            .filter(Payment.order_id == order.id)
+            .populate_existing()
+            .with_for_update()
+            .first()
+        )
+        cod_previous_status = self._collect_cod_payment(payment, current_user)
+
         previous_fulfillment_status = fulfillment.status
         fulfillment.status = FulfillmentStatus.DELIVERED
         fulfillment.delivered_at = datetime.now(UTC)
@@ -583,7 +602,61 @@ class FulfillmentService:
             new_status="COMPLETED",
             previous_status="CONFIRMED",
         )
+        if cod_previous_status is not None:
+            notify_status_event(
+                resource="payment",
+                order_id=order.id,
+                user_id=order.user_id,
+                new_status=PaymentStatus.PAID.value,
+                previous_status=cod_previous_status,
+            )
         return FulfillmentResponse.model_validate(fulfillment)
+
+    def _collect_cod_payment(self, payment: Payment | None, collected_by: User) -> str | None:
+        """Cash on Delivery is collected at the door, so confirming the
+        delivery IS the collection event: the COD payment moves
+        PENDING -> PAID in the same transaction, with a SUCCESS transaction
+        row recording who collected it. Caller must hold the payment row
+        lock. Returns the previous status if the payment changed, else
+        None (not COD, already PAID, or an illegal transition - the last
+        is logged, never allowed to block the delivery itself)."""
+        if payment is None or payment.payment_method != "COD":
+            return None
+        if payment.status == PaymentStatus.PAID:
+            return None
+        previous = PaymentStatus(payment.status)
+        try:
+            transition_payment_status(previous, PaymentStatus.PAID)
+        except IllegalTransitionError:
+            logger.error(
+                "PAYMENT_RECONCILIATION: payment_id=%s COD payment in status %s at "
+                "delivery - cash collection not recorded",
+                payment.id, payment.status,
+            )
+            return None
+
+        now = datetime.now(UTC)
+        payment.status = PaymentStatus.PAID
+        payment.paid_at = now
+        self.db.add(
+            PaymentTransaction(
+                payment_id=payment.id,
+                transaction_type="PAYMENT",
+                status=TransactionStatus.SUCCESS,
+                amount=payment.amount,
+                currency=payment.currency,
+                gateway_response=json.dumps(
+                    {"method": "CASH_ON_DELIVERY", "collected_by_user_id": collected_by.id}
+                ),
+                initiated_at=now,
+                completed_at=now,
+            )
+        )
+        logger.info(
+            "PAYMENT_COD_COLLECTED: payment_id=%s order_id=%s collected_by_user_id=%s",
+            payment.id, payment.order_id, collected_by.id,
+        )
+        return previous.value
 
     # ------------------------------------------------------------------
     # Locking helpers

@@ -61,7 +61,7 @@ const styles = StyleSheet.create({
   panel: {
     width: PANEL_WIDTH,
     height: PANEL_HEIGHT,
-    borderRadius: radius.xs,
+    borderRadius: radius.card,
     // Clips the absolutely-positioned image/gradient to the rounded shape
     // above - without this, they'd stay square and visibly poke out past
     // the panel's rounded corners.
@@ -79,7 +79,7 @@ const styles = StyleSheet.create({
   arrow: {
     width: 26,
     height: 26,
-    borderRadius: radius.none,
+    borderRadius: radius.card,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.5)",
     alignItems: "center",

@@ -673,6 +673,78 @@ def test_16_ops_can_manually_expire_and_it_is_idempotent(
     assert db_session.get(Order, order["id"]).status == "EXPIRED"
 
 
+def test_reservation_sweep_expires_reservation_nobody_ever_reads_or_pays(
+    client: TestClient, db_session: Session
+) -> None:
+    """Regression test for a business-logic audit finding: every existing
+    expiry path (commit_reservation_for_order, expire_reservation_for_order,
+    the customer GET route) is lazy - it only fires when something happens
+    to read or act on that ONE reservation. Without a proactive sweep, a
+    reservation nobody ever touches again holds its reserved_quantity
+    against the lot forever. This exercises
+    InventoryReservationService.sweep_expired_reservations directly (the
+    function the background loop in app/main.py calls periodically),
+    without any GET/payment/manual-expire ever touching this specific order.
+    """
+    from app.services.inventory_reservation import InventoryReservationService
+
+    _user, headers, variant, address, lot = _ready_customer(db_session, "SWEEP1")
+    order = _checkout(client, headers, variant, address, qty="2")
+
+    reservation = db_session.query(InventoryReservation).filter_by(order_id=order["id"]).one()
+    reservation.expires_at = datetime.now(UTC) - timedelta(minutes=1)
+    db_session.commit()
+
+    expired_count = InventoryReservationService(db_session).sweep_expired_reservations(
+        now=datetime.now(UTC)
+    )
+    assert expired_count == 1
+
+    db_session.expire_all()
+    refreshed_reservation = db_session.get(InventoryReservation, reservation.id)
+    assert refreshed_reservation.status == "EXPIRED"
+    refreshed_lot = db_session.get(InventoryLot, lot.id)
+    assert refreshed_lot.reserved_quantity == Decimal("0.000")
+    assert db_session.get(Order, order["id"]).status == "EXPIRED"
+
+
+def test_reservation_sweep_leaves_active_unexpired_and_terminal_reservations_alone(
+    client: TestClient, db_session: Session
+) -> None:
+    """The sweep must only touch ACTIVE reservations past expires_at - not
+    a still-valid ACTIVE reservation, and not one already COMMITTED (which
+    would be a serious bug: silently un-reserving fulfilled/paid stock).
+    """
+    from app.services.inventory_reservation import InventoryReservationService
+
+    _user_a, headers_a, variant_a, address_a, _lot_a = _ready_customer(db_session, "SWEEP2A")
+    still_valid_order = _checkout(client, headers_a, variant_a, address_a, qty="1")
+
+    _user_b, headers_b, variant_b, address_b, lot_b = _ready_customer(db_session, "SWEEP2B")
+    committed_order = _checkout(client, headers_b, variant_b, address_b, qty="1")
+    client.post(
+        "/api/v1/payments",
+        json={"order_id": committed_order["id"], "payment_method": "COD"},
+        headers=headers_b,
+    )
+
+    expired_count = InventoryReservationService(db_session).sweep_expired_reservations(
+        now=datetime.now(UTC)
+    )
+    assert expired_count == 0
+
+    db_session.expire_all()
+    still_valid_reservation = (
+        db_session.query(InventoryReservation).filter_by(order_id=still_valid_order["id"]).one()
+    )
+    assert still_valid_reservation.status == "ACTIVE"
+    committed_reservation = (
+        db_session.query(InventoryReservation).filter_by(order_id=committed_order["id"]).one()
+    )
+    assert committed_reservation.status == "COMMITTED"
+    assert db_session.get(InventoryLot, lot_b.id).reserved_quantity == Decimal("1.000")
+
+
 def test_17_customer_cannot_access_ops_reservation_endpoints(
     client: TestClient, db_session: Session
 ) -> None:

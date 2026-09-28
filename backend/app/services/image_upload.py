@@ -7,8 +7,7 @@ of those same fields, not a change to how they're used downstream.
 
 CLOUDINARY_* being unset is treated as "not configured", failing with a
 clear 503 rather than silently no-op-ing or fabricating a fake URL - the
-same honest-placeholder precedent as PaymentGateway/NotificationGateway
-elsewhere in this codebase for a capability that depends on a
+same honest-placeholder precedent as PaymentGateway elsewhere in this codebase for a capability that depends on a
 third-party account this repo doesn't control.
 """
 

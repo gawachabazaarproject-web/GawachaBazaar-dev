@@ -1,0 +1,59 @@
+# Gawacha Bazaar - reverse proxy + automatic HTTPS (Let's Encrypt).
+# Domains/email come from the caddy service's environment in
+# docker-compose.prod.yml (sourced from .env.production). Each domain's
+# DNS A/AAAA record must point at the Contabo server before first start,
+# or certificate issuance fails.
+#
+# Caddy replaces any client-sent X-Forwarded-For with the real peer IP
+# (no trusted_proxies configured), so the backend's per-IP rate limiting
+# can't be spoofed by a client setting that header itself.
+#
+# No access log on purpose: the realtime WebSocket carries the access
+# token as ?token=..., and the backend already logs method/path/status.
+# Caddy's error log still records the request URI when proxying fails
+# (e.g. while the backend restarts), so the default logger redacts it.
+{
+	email {$ACME_EMAIL}
+	log default {
+		format filter {
+			wrap json
+			request>uri query {
+				replace token REDACTED
+			}
+		}
+	}
+}
+
+(common) {
+	encode zstd gzip
+	header {
+		Strict-Transport-Security "max-age=63072000; includeSubDomains"
+		-Server
+	}
+}
+
+www.{$SITE_DOMAIN} {
+	redir https://{$SITE_DOMAIN}{uri} permanent
+}
+
+{$SITE_DOMAIN} {
+	import common
+	reverse_proxy website:3000
+}
+
+{$ADMIN_DOMAIN} {
+	import common
+	reverse_proxy admin:3001
+}
+
+{$API_DOMAIN} {
+	import common
+	# Image uploads are capped at 8 MB in app/services/image_upload.py -
+	# leave headroom for multipart overhead, reject anything far larger
+	# at the edge before it ties up a backend thread.
+	request_body {
+		max_size 10MB
+	}
+	# WebSocket upgrades (/api/v1/ws/events) are proxied transparently.
+	reverse_proxy backend:8000
+}

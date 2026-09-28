@@ -19,6 +19,7 @@ import { ProductRail } from "@/components/home/ProductRail";
 import { VillageStory } from "@/components/home/VillageStory";
 import { ClosingCTA } from "@/components/home/ClosingCTA";
 import { WholesaleToggle } from "@/components/home/WholesaleToggle";
+import { BrandAdsCarousel } from "@/components/home/BrandAdsCarousel";
 import { WholesaleProductCard } from "@/components/home/WholesaleProductCard";
 import { useCategories, useProducts } from "@/features/catalog/useCatalog";
 import { useAddresses } from "@/features/address/useAddresses";
@@ -89,6 +90,7 @@ export default function HomeScreen() {
         </View>
 
         <WholesaleToggle mode={mode} onChange={setMode} />
+        <BrandAdsCarousel />
         {mode === "wholesale" ? (
           <View style={styles.wholesaleIntro}>
             <Text variant="eyebrow" color={colors.accentDark}>
@@ -225,7 +227,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.divider,
-    borderRadius: radius.none,
+    borderRadius: radius.card,
     paddingHorizontal: spacing.md,
     height: 48,
   },

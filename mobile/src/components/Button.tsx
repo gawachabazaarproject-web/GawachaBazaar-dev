@@ -112,7 +112,7 @@ const SIZE_STYLES: Record<Size, ViewStyle> = {
 
 const styles = StyleSheet.create({
   base: {
-    borderRadius: radius.none,
+    borderRadius: radius.card,
     alignItems: "center",
     justifyContent: "center",
   },

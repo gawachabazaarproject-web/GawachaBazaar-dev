@@ -45,9 +45,11 @@ from sqlalchemy import or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.core.logging import logger
 from app.core.realtime import notify_status_event
 from app.exceptions.base import (
+    AppException,
     AuthenticationError,
     BusinessValidationError,
     ConflictError,
@@ -66,7 +68,9 @@ from app.schemas.admin_payment import (
     PaymentTransactionResponse,
 )
 from app.schemas.payment import (
+    ConfirmCheckoutRequest,
     CreatePaymentRequest,
+    PaymentCheckoutResponse,
     PaymentInitiationResponse,
     PaymentResponse,
 )
@@ -76,10 +80,12 @@ from app.services.payment_gateway import (
     GatewayConnectionError,
     GatewayError,
     GatewayInitiateResult,
+    GatewayRefundEvent,
     GatewayRejectedError,
     GatewayTimeoutError,
     GatewayWebhookEvent,
     PaymentGateway,
+    WebhookEventIgnored,
     WebhookParseError,
 )
 from app.services.payment_state import (
@@ -91,6 +97,7 @@ from app.services.payment_state import (
     is_transaction_terminal,
     transition_payment_status,
 )
+from app.services.razorpay_gateway import to_paise
 from app.services.refund import RefundService
 
 _GATEWAY_TO_PAYMENT_STATUS: dict[TransactionStatus, PaymentStatus] = {
@@ -103,6 +110,15 @@ _GATEWAY_TO_PAYMENT_STATUS: dict[TransactionStatus, PaymentStatus] = {
 }
 
 
+class OnlinePaymentsUnavailableError(AppException):
+    def __init__(self) -> None:
+        super().__init__(
+            "Online payment is not available right now. Please choose Cash on Delivery.",
+            status_code=503,
+            code="ONLINE_PAYMENTS_NOT_CONFIGURED",
+        )
+
+
 class PaymentService:
     def __init__(self, db: Session, gateway: PaymentGateway | None = None) -> None:
         """`gateway` is optional (mirrors RefundService's identical
@@ -113,6 +129,12 @@ class PaymentService:
         """
         self.db = db
         self.gateway = gateway
+        # Realtime events are queued here and only ever flushed by
+        # `_flush_pending_realtime_events()` after the enclosing
+        # `db.commit()` has actually succeeded - see that method's
+        # docstring for why (a client must never be told about a
+        # transition that then rolls back).
+        self._pending_realtime_events: list[dict] = []
 
     # ------------------------------------------------------------------
     # Customer-facing
@@ -146,6 +168,9 @@ class PaymentService:
 
         if order.status != "PENDING":
             raise ConflictError(f"Order is not payable in status {order.status}.")
+
+        if data.payment_method == "UPI":
+            self._require_online_payments()
 
         payment = Payment(
             order_id=order.id,
@@ -198,6 +223,7 @@ class PaymentService:
             )
         if not can_retry_payment(PaymentStatus(payment.status)):
             raise ConflictError(f"Cannot retry a payment in status {payment.status}.")
+        self._require_online_payments()
 
         # Lock is carried through into _initiate_upi's own commit below -
         # tighter protection against a concurrent second retry than
@@ -244,7 +270,21 @@ class PaymentService:
             self.db.commit()
             raise
 
+        if (
+            result.status == TransactionStatus.SUCCESS
+            and result.amount is not None
+            and result.amount != payment.amount
+        ):
+            logger.error(
+                "PAYMENT_RECONCILIATION: payment_id=%s amount mismatch on verify "
+                "gateway=%s ours=%s", payment.id, result.amount, payment.amount,
+            )
+            self.db.commit()
+            return PaymentResponse.model_validate(payment)
+
         if latest_transaction is not None:
+            if result.gateway_transaction_id and not latest_transaction.gateway_transaction_id:
+                latest_transaction.gateway_transaction_id = result.gateway_transaction_id
             applied = self._apply_transaction_status(
                 payment, latest_transaction, TransactionStatus(result.status),
                 source="verify", order_user_id=order.user_id,
@@ -259,9 +299,78 @@ class PaymentService:
             raise ConflictError(
                 "Could not verify payment due to a conflicting update."
             ) from exc
+        self._flush_pending_realtime_events()
 
         self.db.refresh(payment)
         return PaymentResponse.model_validate(payment)
+
+    def get_checkout(self, user_id: int, payment_id: int) -> PaymentCheckoutResponse:
+        """Details for (re)opening the gateway's hosted checkout for an
+        online payment that is still awaiting the customer - e.g. after the
+        customer closed the checkout sheet. Read-only; no gateway call."""
+        payment = self._get_owned_payment(user_id, payment_id)
+        if payment.payment_method != "UPI":
+            raise ConflictError("Only online payments have a checkout.")
+        if payment.status == PaymentStatus.PAID:
+            raise ConflictError("This order has already been paid.")
+        if payment.status != PaymentStatus.PROCESSING or not payment.gateway_order_id:
+            raise ConflictError(
+                f"This payment is {payment.status} - start a new attempt with "
+                "POST /payments/{id}/retry."
+            )
+        order = self.db.query(Order).filter(Order.id == payment.order_id).first()
+        if order.status != "PENDING":
+            # Its reservation expired or it was cancelled - never invite a
+            # payment for an order that can no longer be confirmed.
+            raise ConflictError(
+                f"This order is {order.status.lower()} and can no longer be paid. "
+                "Please place a new order."
+            )
+        key_id = getattr(self.gateway, "checkout_key_id", None)
+        if not key_id or not self.gateway.is_configured:
+            raise OnlinePaymentsUnavailableError()
+        user = self.db.query(User).filter(User.id == user_id).first()
+        return PaymentCheckoutResponse(
+            payment_id=payment.id,
+            order_id=payment.order_id,
+            gateway=self.gateway.gateway_name,
+            key_id=key_id,
+            gateway_order_id=payment.gateway_order_id,
+            amount=payment.amount,
+            amount_minor=to_paise(payment.amount),
+            currency=payment.currency,
+            merchant_name=settings.APP_NAME,
+            description=f"Order {order.order_number}",
+            customer_name=user.name,
+            customer_email=user.email,
+            customer_phone=user.phone,
+            test_mode=bool(getattr(self.gateway, "is_test_mode", False)),
+        )
+
+    def confirm_checkout(
+        self, user_id: int, payment_id: int, data: ConfirmCheckoutRequest
+    ) -> PaymentResponse:
+        """Client hand-off after the hosted checkout reports success. The
+        signature proves Razorpay issued this payment id for THIS order;
+        the status itself still comes from `verify_payment`, which asks the
+        gateway - so a forged or replayed claim can never mark it PAID."""
+        payment = self._get_owned_payment(user_id, payment_id)
+        if payment.payment_method != "UPI" or not payment.gateway_order_id:
+            raise ConflictError("This payment has no online checkout to confirm.")
+        if data.razorpay_order_id != payment.gateway_order_id:
+            raise BusinessValidationError("Checkout does not belong to this payment.")
+        verify_signature = getattr(self.gateway, "verify_checkout_signature", None)
+        if verify_signature is None or not verify_signature(
+            gateway_order_id=data.razorpay_order_id,
+            gateway_payment_id=data.razorpay_payment_id,
+            signature=data.razorpay_signature,
+        ):
+            logger.warning(
+                "PAYMENT_CHECKOUT_BAD_SIGNATURE: payment_id=%s gateway_order_id=%s",
+                payment.id, data.razorpay_order_id,
+            )
+            raise BusinessValidationError("Payment signature verification failed.")
+        return self.verify_payment(user_id, payment_id)
 
     # ------------------------------------------------------------------
     # Admin reads (Phase 19) - unscoped by owner, gated by
@@ -398,6 +507,12 @@ class PaymentService:
 
         try:
             event = self.gateway.parse_webhook_event(raw_body=raw_body, headers=headers)
+        except WebhookEventIgnored as exc:
+            logger.info(
+                "PAYMENT_WEBHOOK_IGNORED: gateway=%s event_type=%s",
+                self.gateway.gateway_name, exc,
+            )
+            return
         except WebhookParseError as exc:
             logger.warning(
                 "PAYMENT_WEBHOOK_MALFORMED: gateway=%s error=%s",
@@ -430,7 +545,39 @@ class PaymentService:
             )
             return
 
+        if isinstance(event, GatewayRefundEvent):
+            self._process_refund_webhook_event(webhook_event, event)
+            return
         self._process_new_webhook_event(webhook_event, event)
+
+    def _process_refund_webhook_event(
+        self, webhook_event: PaymentWebhookEvent, event: GatewayRefundEvent
+    ) -> None:
+        """A refund's asynchronous outcome (see GatewayRefundEvent). Same
+        one-transaction shape as payment events: dedup row + refund change
+        commit together, realtime notification only after the commit."""
+        refund_service = RefundService(self.db, self.gateway)
+        outcome = refund_service.apply_webhook_update(
+            gateway_refund_id=event.gateway_refund_id, status=event.status
+        )
+        webhook_event.processed_at = datetime.now(UTC)
+        if outcome is None:
+            webhook_event.status = "FAILED"
+            logger.warning(
+                "PAYMENT_WEBHOOK_UNKNOWN_REFUND: gateway=%s event_id=%s gateway_refund_id=%s",
+                self.gateway.gateway_name, event.event_id, event.gateway_refund_id,
+            )
+            self.db.commit()
+            return
+        refund, change = outcome
+        webhook_event.status = "PROCESSED"
+        self.db.commit()
+        if change is not None:
+            refund_service._notify_refund_event(refund, new_status=change[1], previous_status=change[0])
+        logger.info(
+            "PAYMENT_WEBHOOK_REFUND_PROCESSED: gateway=%s event_id=%s refund_id=%s change=%s",
+            self.gateway.gateway_name, event.event_id, refund.id, change,
+        )
 
     def _process_new_webhook_event(
         self, webhook_event: PaymentWebhookEvent, event: GatewayWebhookEvent
@@ -479,6 +626,8 @@ class PaymentService:
             self.db.commit()
             return
 
+        if event.gateway_transaction_id and not transaction.gateway_transaction_id:
+            transaction.gateway_transaction_id = event.gateway_transaction_id
         applied = self._apply_transaction_status(
             payment, transaction, event.status, source="webhook", order_user_id=order.user_id,
         )
@@ -496,6 +645,7 @@ class PaymentService:
             raise ConflictError(
                 "Could not process webhook due to a conflicting update."
             ) from exc
+        self._flush_pending_realtime_events()
 
         logger.info(
             "PAYMENT_WEBHOOK_PROCESSED: gateway=%s event_id=%s payment_id=%s transaction_id=%s",
@@ -624,6 +774,7 @@ class PaymentService:
                 amount=payment.amount,
                 currency=payment.currency,
                 idempotency_key=idempotency_key,
+                existing_gateway_order_id=payment.gateway_order_id,
             )
         except NotImplementedError as exc:
             # No PNB integration contract exists yet - this attempt
@@ -685,6 +836,7 @@ class PaymentService:
             raise ConflictError(
                 "Could not persist payment gateway reference due to a conflicting update."
             ) from exc
+        self._flush_pending_realtime_events()
         self.db.refresh(payment)
         self.db.refresh(transaction)
 
@@ -788,14 +940,31 @@ class PaymentService:
             payment.id, source, result.previous.value, result.current.value,
         )
         if order_user_id is not None:
-            notify_status_event(
-                resource="payment",
-                order_id=payment.order_id,
-                user_id=order_user_id,
-                new_status=result.current.value,
-                previous_status=result.previous.value,
+            self._pending_realtime_events.append(
+                dict(
+                    resource="payment",
+                    order_id=payment.order_id,
+                    user_id=order_user_id,
+                    new_status=result.current.value,
+                    previous_status=result.previous.value,
+                )
             )
         return True
+
+    def _flush_pending_realtime_events(self) -> None:
+        """Fire every realtime event queued by this call. Callers must
+        invoke this ONLY after their enclosing `db.commit()` has actually
+        succeeded - `_apply_transaction_status`/`_confirm_order_if_paid`
+        run before that commit (so an `IntegrityError` there rolls back
+        cleanly), and previously called `notify_status_event` directly at
+        that point, meaning a client could be told "PAID"/"CONFIRMED" for
+        a transition that then failed to commit. Queuing and flushing
+        post-commit matches every other call site in the codebase
+        (fulfillment.py, refund.py, order.py, `_confirm_cod` below).
+        """
+        events, self._pending_realtime_events = self._pending_realtime_events, []
+        for event in events:
+            notify_status_event(**event)
 
     def _confirm_order_if_paid(self, order: Order, payment: Payment) -> None:
         """Caller must already hold the order row lock.
@@ -811,11 +980,13 @@ class PaymentService:
         Phase 18: a payment can also resolve to PAID AFTER its order was
         already cancelled (the customer cancelled while a UPI attempt was
         still PROCESSING). Money was genuinely collected for an order that
-        will never be fulfilled, so this is the second of the two call
-        sites that create refund eligibility (the first being
-        OrderService.cancel_order itself, for the case where the payment
-        was already PAID at cancellation time) - never issuing the refund
-        itself, only making it visible for ADMIN approval.
+        will never be fulfilled, so this is one of three call sites that
+        create refund eligibility (the others being OrderService.cancel_order
+        itself, for the case where the payment was already PAID at
+        cancellation time, and the EXPIRED branch just below, for the case
+        where `commit_reservation_for_order` lazily expires the order
+        right here) - never issuing the refund itself, only making it
+        visible for ADMIN approval.
         """
         if payment.status != PaymentStatus.PAID:
             return
@@ -824,31 +995,57 @@ class PaymentService:
                 self.db
             ).commit_reservation_for_order(order, now=datetime.now(UTC))
             if not committed:
-                logger.error(
-                    "PAYMENT_RESERVATION_MISMATCH: order_id=%s payment_id=%s payment "
-                    "PAID but reservation could not be committed (expired/released) "
-                    "- order left PENDING, not auto-confirmed",
-                    order.id, payment.id,
-                )
+                if order.status == "EXPIRED":
+                    # commit_reservation_for_order's own lazy-expiry path
+                    # (reservation was ACTIVE but past expires_at) just
+                    # moved this order PENDING -> EXPIRED, a terminal
+                    # state it can never leave. Payment is already PAID -
+                    # without this, that money had no refund-eligibility
+                    # record anywhere (unlike the identical-in-substance
+                    # CANCELLED case below), a silent stuck-paid order
+                    # visible only via an ERROR log line.
+                    RefundService(self.db).create_refund_if_eligible(order, payment)
+                    logger.warning(
+                        "PAYMENT_RECONCILIATION: order_id=%s payment_id=%s payment "
+                        "PAID but reservation expired before confirmation - order "
+                        "EXPIRED, refund eligibility created for admin review",
+                        order.id, payment.id,
+                    )
+                else:
+                    logger.error(
+                        "PAYMENT_RESERVATION_MISMATCH: order_id=%s payment_id=%s "
+                        "payment PAID but reservation could not be committed - "
+                        "order left %s, not auto-confirmed",
+                        order.id, payment.id, order.status,
+                    )
                 return
             order.status = "CONFIRMED"
             logger.info(
                 "PAYMENT_ORDER_CONFIRMED: order_id=%s payment_id=%s", order.id, payment.id
             )
-            notify_status_event(
-                resource="order",
-                order_id=order.id,
-                user_id=order.user_id,
-                new_status="CONFIRMED",
-                previous_status="PENDING",
+            self._pending_realtime_events.append(
+                dict(
+                    resource="order",
+                    order_id=order.id,
+                    user_id=order.user_id,
+                    new_status="CONFIRMED",
+                    previous_status="PENDING",
+                )
             )
-        elif order.status == "CANCELLED":
+        elif order.status in ("CANCELLED", "EXPIRED"):
+            # Money arrived for an order that will never be fulfilled - it
+            # was cancelled, or its reservation expired (by the periodic
+            # sweep) before this payment resolved. Online gateways keep
+            # accepting payment on their own order object after ours
+            # expires (a Razorpay order stays payable), so this is a real
+            # path, not a theoretical one: make the refund visible for
+            # ADMIN approval instead of leaving paid money stranded.
             RefundService(self.db).create_refund_if_eligible(order, payment)
             logger.warning(
                 "PAYMENT_RECONCILIATION: order_id=%s payment_id=%s payment resolved "
-                "PAID after the order was already cancelled - refund eligibility "
+                "PAID after the order was already %s - refund eligibility "
                 "created for admin review",
-                order.id, payment.id,
+                order.id, payment.id, order.status,
             )
         elif order.status != "COMPLETED":
             logger.warning(
@@ -923,6 +1120,10 @@ class PaymentService:
             # - never disclose that another user's payment exists.
             raise NotFoundError("Payment not found.")
         return payment
+
+    def _require_online_payments(self) -> None:
+        if not getattr(self.gateway, "is_configured", True):
+            raise OnlinePaymentsUnavailableError()
 
     @staticmethod
     def _new_idempotency_key() -> str:

@@ -26,7 +26,7 @@ const styles = StyleSheet.create({
     height: 32,
     justifyContent: "center",
     paddingHorizontal: spacing.md,
-    borderRadius: radius.none,
+    borderRadius: radius.card,
     backgroundColor: colors.background,
     borderWidth: 1,
     borderColor: colors.borderStrong,

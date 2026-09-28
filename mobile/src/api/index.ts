@@ -8,3 +8,4 @@ export { cartApi } from "./cartApi";
 export { orderApi } from "./orderApi";
 export { paymentApi } from "./paymentApi";
 export { bulkOrderApi } from "./bulkOrderApi";
+export { adsApi } from "./adsApi";

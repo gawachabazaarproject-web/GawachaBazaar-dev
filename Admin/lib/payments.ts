@@ -81,11 +81,19 @@ export interface AdminRefundListResponse {
 /** Mirrors refund_state.py's REFUND lifecycle - the only actions legal
  * from each status. A customer can never move a refund out of
  * PENDING_APPROVAL; only these ADMIN actions do. */
-export function refundActionsFor(status: string): { approve: boolean; reject: boolean; process: boolean } {
+export function refundActionsFor(status: string): {
+  approve: boolean;
+  reject: boolean;
+  process: boolean;
+  sync: boolean;
+} {
   return {
     approve: status === "PENDING_APPROVAL",
     reject: status === "PENDING_APPROVAL",
     process: status === "APPROVED" || status === "FAILED",
+    // Razorpay can accept a refund as "pending" and finish it later; the
+    // refund webhook normally resolves it, this is the manual fallback.
+    sync: status === "PROCESSING",
   };
 }
 
@@ -165,4 +173,9 @@ export async function rejectRefund(accessToken: string, refundId: number, reason
 
 export async function processRefund(accessToken: string, refundId: number): Promise<AdminRefund> {
   return request(accessToken, `/payments/refunds/${refundId}/process`, { method: "POST" });
+}
+
+/** Ask Razorpay for a PROCESSING refund's current outcome and apply it. */
+export async function syncRefund(accessToken: string, refundId: number): Promise<AdminRefund> {
+  return request(accessToken, `/payments/refunds/${refundId}/sync`, { method: "POST" });
 }

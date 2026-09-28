@@ -3,6 +3,7 @@ import { Alert, Pressable, ScrollView, StyleSheet, TextInput, View } from "react
 import { Stack, useRouter } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import { Image } from "expo-image";
+import { toApiError } from "@/api";
 import { Screen } from "@/components/Screen";
 import { Text } from "@/components/Text";
 import { Button } from "@/components/Button";
@@ -14,9 +15,11 @@ import { useCart, useEvaluatePromo } from "@/features/cart/useCart";
 import { useAddresses } from "@/features/address/useAddresses";
 import { usePlaceOrder, PlaceOrderResult } from "@/features/checkout/useCheckout";
 import { useCancelOrder } from "@/features/orders/useOrders";
+import { useOnlinePayment } from "@/features/payment/useOnlinePayment";
+import { RazorpayCheckout } from "@/components/payment/RazorpayCheckout";
 import { formatMoney } from "@/utils/money";
 import { colors, radius, spacing } from "@/theme";
-import { PaymentMethod, PromotionEvaluationResponse } from "@/types/api";
+import { PaymentMethod, PaymentResponse, PromotionEvaluationResponse, RazorpaySuccessPayload } from "@/types/api";
 
 export default function CheckoutScreen() {
   const router = useRouter();
@@ -24,6 +27,7 @@ export default function CheckoutScreen() {
   const { data: addresses } = useAddresses();
   const placeOrder = usePlaceOrder();
   const cancelOrder = useCancelOrder();
+  const online = useOnlinePayment();
 
   const [selectedAddressId, setSelectedAddressId] = useState<number | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("COD");
@@ -49,11 +53,46 @@ export default function CheckoutScreen() {
     }
   }, [addresses, selectedAddressId]);
 
+  // An online (Razorpay) payment comes back PROCESSING - the order only
+  // counts as placed once Razorpay reports the payment, so open Checkout
+  // instead of jumping to the success screen.
+  const awaitingOnlinePayment =
+    !!result && !result.paymentError && result.payment?.payment_method === "UPI" && result.payment.status !== "PAID";
+
   useEffect(() => {
-    if (result && !result.paymentError) {
-      router.replace(`/checkout/success?orderId=${result.order.id}`);
+    if (!result || result.paymentError) return;
+    if (result.payment?.payment_method === "UPI" && result.payment.status !== "PAID") {
+      online.start(result.payment.id);
+      return;
     }
-  }, [result, router]);
+    router.replace(`/checkout/success?orderId=${result.order.id}`);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [result]);
+
+  const handleOnlineSuccess = async (response: RazorpaySuccessPayload) => {
+    if (!result) return;
+    const payment = await online.complete(response);
+    if (payment?.status === "PAID") {
+      router.replace(`/checkout/success?orderId=${result.order.id}`);
+    } else if (payment) {
+      // Paid on Razorpay's side but the capture isn't reported yet - the
+      // webhook finishes it; never tell the customer it failed.
+      Alert.alert("Payment received", "We're confirming it with your bank. Your order will update automatically in a moment.");
+      router.replace(`/order/${result.order.id}`);
+    }
+    // null -> online.error is shown on the "Complete your payment" screen.
+  };
+
+  // Closing the sheet or paying again first re-checks the payment with the
+  // backend - it may already be PAID (e.g. the UPI app took the money but
+  // the callback never reached us).
+  const showSuccessIfPaid = (payment: PaymentResponse | null) => {
+    if (payment?.status === "PAID" && result) router.replace(`/checkout/success?orderId=${result.order.id}`);
+  };
+  const handleOnlineDismiss = async () => showSuccessIfPaid(await online.dismiss());
+  const handlePayAgain = async () => {
+    if (result) showSuccessIfPaid(await online.retryForOrder(result.order.id));
+  };
 
   const handlePlaceOrder = () => {
     if (!selectedAddressId) return;
@@ -84,18 +123,9 @@ export default function CheckoutScreen() {
     ]);
   };
 
-  if (!cart || cart.items.length === 0) {
-    return (
-      <Screen>
-        <Stack.Screen options={{ headerShown: true, title: "Checkout" }} />
-        <View style={styles.centered}>
-          <Text variant="body" color={colors.textSecondary}>
-            Your cart is empty.
-          </Text>
-        </View>
-      </Screen>
-    );
-  }
+  // The two result screens below must come BEFORE the empty-cart check:
+  // placing an order empties the cart, so checking the cart first would
+  // hide the payment outcome (and never mount the Razorpay sheet).
 
   // A payment attempt failed but the order already exists - honest
   // recovery UI rather than pretending nothing happened (brief §28: never
@@ -112,12 +142,27 @@ export default function CheckoutScreen() {
           <Text variant="body" color={colors.textSecondary} align="center" style={styles.errorMessage}>
             {result.paymentError} Your order (#{result.order.order_number}) hasn't been confirmed yet.
           </Text>
+          {online.error && online.error !== result.paymentError ? (
+            <Text variant="bodySmall" color={colors.error} align="center" style={{ marginTop: spacing.md }}>
+              {online.error}
+            </Text>
+          ) : null}
+          {paymentMethod === "UPI" ? (
+            <Button
+              label="Try paying online again"
+              onPress={handlePayAgain}
+              loading={online.busy}
+              fullWidth
+              style={{ marginTop: spacing.xl }}
+            />
+          ) : null}
           <Button
             label="Cancel order and use Cash on Delivery"
+            variant={paymentMethod === "UPI" ? "secondary" : "primary"}
             onPress={handleCancelFailedOrder}
             loading={cancelOrder.isPending}
             fullWidth
-            style={{ marginTop: spacing.xl }}
+            style={{ marginTop: paymentMethod === "UPI" ? spacing.sm : spacing.xl }}
           />
           <Button
             label="View order"
@@ -125,6 +170,57 @@ export default function CheckoutScreen() {
             onPress={() => router.replace(`/order/${result.order.id}`)}
             style={{ marginTop: spacing.sm }}
           />
+        </View>
+        <RazorpayCheckout checkout={online.checkout} onSuccess={handleOnlineSuccess} onDismiss={handleOnlineDismiss} />
+      </Screen>
+    );
+  }
+
+  if (awaitingOnlinePayment && result?.payment) {
+    const payment = result.payment;
+    return (
+      <Screen>
+        <Stack.Screen options={{ headerShown: true, title: "Payment" }} />
+        <View style={styles.centered}>
+          <Feather name="credit-card" size={40} color={colors.primary} />
+          <Text variant="h2" align="center" style={styles.errorTitle}>
+            Complete your payment
+          </Text>
+          <Text variant="body" color={colors.textSecondary} align="center" style={styles.errorMessage}>
+            Order #{result.order.order_number} is reserved for you. Pay securely with Razorpay to confirm it.
+          </Text>
+          {online.error ? (
+            <Text variant="bodySmall" color={colors.error} align="center" style={{ marginTop: spacing.md }}>
+              {online.error}
+            </Text>
+          ) : null}
+          <Button
+            label={`Pay ${formatMoney(payment.amount, payment.currency)}`}
+            onPress={handlePayAgain}
+            loading={online.busy}
+            fullWidth
+            style={{ marginTop: spacing.xl }}
+          />
+          <Button
+            label="Cancel order"
+            variant="ghost"
+            onPress={handleCancelFailedOrder}
+            style={{ marginTop: spacing.sm }}
+          />
+        </View>
+        <RazorpayCheckout checkout={online.checkout} onSuccess={handleOnlineSuccess} onDismiss={handleOnlineDismiss} />
+      </Screen>
+    );
+  }
+
+  if (!cart || cart.items.length === 0) {
+    return (
+      <Screen>
+        <Stack.Screen options={{ headerShown: true, title: "Checkout" }} />
+        <View style={styles.centered}>
+          <Text variant="body" color={colors.textSecondary}>
+            Your cart is empty.
+          </Text>
         </View>
       </Screen>
     );
@@ -204,11 +300,11 @@ export default function CheckoutScreen() {
           <HarvestSlotSelector />
         </CheckoutSection>
 
-        {/* 3. Payment method - real (COD/UPI only, matching Phase 14) */}
+        {/* 3. Payment method - online via Razorpay, or Cash on Delivery */}
         <CheckoutSection number={3} label="Payment" title="Payment Options (पेमेंट)" badge="BANK GRADE SSL">
           <PaymentOption
-            label="UPI"
-            description="Google Pay, PhonePe, Paytm & more"
+            label="Pay online"
+            description="UPI, cards, netbanking & wallets · secured by Razorpay"
             icon="smartphone"
             selected={paymentMethod === "UPI"}
             onPress={() => setPaymentMethod("UPI")}
@@ -298,6 +394,13 @@ export default function CheckoutScreen() {
             Amount to pay on delivery: {formatMoney(total, cart.currency ?? "INR")}
           </Text>
         ) : null}
+        {/* Order creation itself failed (offline, out of stock, ...) - no
+            order exists, so say why instead of silently doing nothing. */}
+        {placeOrder.error ? (
+          <Text variant="caption" color={colors.error} style={styles.footerNote}>
+            {toApiError(placeOrder.error).message}
+          </Text>
+        ) : null}
         <View style={styles.placeOrderBar}>
           <View>
             <Text variant="price" color={colors.textInverse}>
@@ -376,14 +479,14 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.sm,
   },
   trustItem: { flexDirection: "row", alignItems: "center", gap: spacing.xs },
-  trustPill: { backgroundColor: colors.accentLight, borderRadius: radius.none, paddingHorizontal: spacing.xs, paddingVertical: 3 },
+  trustPill: { backgroundColor: colors.accentLight, borderRadius: radius.card, paddingHorizontal: spacing.xs, paddingVertical: 3 },
   content: { padding: spacing.base, paddingBottom: spacing["3xl"] },
   centered: { flex: 1, alignItems: "center", justifyContent: "center", padding: spacing.xl },
   errorTitle: { marginTop: spacing.lg },
   errorMessage: { marginTop: spacing.sm },
   addressOption: { flexDirection: "row", alignItems: "flex-start", gap: spacing.sm, marginBottom: spacing.md },
   addressTitleRow: { flexDirection: "row", alignItems: "center", gap: spacing.xs },
-  primaryBadge: { backgroundColor: colors.primaryLight, borderRadius: radius.none, paddingHorizontal: 4, paddingVertical: 1 },
+  primaryBadge: { backgroundColor: colors.primaryLight, borderRadius: radius.card, paddingHorizontal: 4, paddingVertical: 1 },
   addAddressLink: { flexDirection: "row", alignItems: "center", marginTop: spacing.xs },
   radio: {
     width: 20,
@@ -402,7 +505,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: spacing.md,
     padding: spacing.md,
-    borderRadius: radius.none,
+    borderRadius: radius.card,
     borderWidth: 1.5,
     borderColor: colors.border,
     marginBottom: spacing.sm,
@@ -417,7 +520,7 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
     borderWidth: 1.5,
     borderColor: colors.border,
-    borderRadius: radius.none,
+    borderRadius: radius.card,
     paddingHorizontal: spacing.sm,
   },
   promoInput: { flex: 1, paddingVertical: spacing.sm, fontSize: 14, color: colors.textPrimary },
@@ -425,7 +528,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: colors.accent,
-    borderRadius: radius.none,
+    borderRadius: radius.card,
     paddingHorizontal: spacing.lg,
   },
   promoAppliedRow: {
@@ -436,7 +539,7 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: colors.success,
     backgroundColor: colors.primaryLight,
-    borderRadius: radius.none,
+    borderRadius: radius.card,
   },
   discountSummaryRow: {
     flexDirection: "row",
@@ -452,7 +555,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     backgroundColor: colors.primary,
-    borderRadius: radius.none,
+    borderRadius: radius.card,
     paddingHorizontal: spacing.base,
     height: 56,
   },
@@ -461,7 +564,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: spacing.xs,
     backgroundColor: colors.accent,
-    borderRadius: radius.none,
+    borderRadius: radius.card,
     paddingHorizontal: spacing.lg,
     height: 44,
   },

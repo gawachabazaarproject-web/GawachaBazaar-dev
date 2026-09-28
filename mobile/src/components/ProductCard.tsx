@@ -184,13 +184,16 @@ const styles = StyleSheet.create({
   // itself away (an RN gotcha), so the two responsibilities are split
   // across an outer (shadow) and inner (rounded/clipped) view.
   surface: {
-    borderRadius: radius.xs,
+    borderRadius: radius.card,
     overflow: "hidden",
     backgroundColor: colors.surface,
   },
   imageWrap: {
     width: "100%",
-    aspectRatio: 0.82,
+    // Square (was 0.82 - noticeably taller than wide) - now that cards
+    // are wider, a square image keeps the overall card from stretching
+    // tall the way a portrait image would.
+    aspectRatio: 1,
     overflow: "hidden",
     backgroundColor: colors.background,
   },
@@ -200,7 +203,7 @@ const styles = StyleSheet.create({
     top: spacing.sm,
     left: spacing.sm,
     backgroundColor: colors.accent,
-    borderRadius: radius.none,
+    borderRadius: radius.card,
     paddingHorizontal: spacing.sm,
     paddingVertical: 4,
   },
@@ -214,14 +217,18 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  body: { paddingHorizontal: spacing.sm, paddingBottom: spacing.sm },
-  info: { marginTop: spacing.base, minHeight: 58 },
-  metaRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: spacing.sm },
+  body: { paddingHorizontal: spacing.sm, paddingBottom: spacing.xs },
+  // Tightened (was marginTop: spacing.base / minHeight: 58) - the square
+  // image above already gives the card presence, so the text block below
+  // it no longer needs as much room to keep the whole card from reading
+  // tall.
+  info: { marginTop: spacing.xs, minHeight: 44 },
+  metaRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: spacing.xs },
   origin: { flexShrink: 1 },
   etaFlag: { flexDirection: "row", alignItems: "center", gap: 2 },
   name: { marginBottom: spacing.xs },
   priceRow: {
-    marginTop: spacing.md,
-    marginBottom: spacing.md,
+    marginTop: spacing.xs,
+    marginBottom: spacing.xs,
   },
 });

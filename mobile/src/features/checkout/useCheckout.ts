@@ -6,9 +6,10 @@ export interface PlaceOrderResult {
   order: OrderDetailResponse;
   payment: PaymentInitiationResponse | null;
   /** Set when the order was created successfully but the payment
-   * attempt itself failed (e.g. the intentionally-incomplete UPI
-   * gateway) - the order still exists and is still PENDING/cancellable,
-   * so the UI must not treat this as "nothing happened". */
+   * attempt itself failed (e.g. online payments unavailable, or the
+   * gateway didn't respond) - the order still exists and is still
+   * PENDING/cancellable, so the UI must not treat this as "nothing
+   * happened". */
   paymentError: string | null;
 }
 
@@ -17,11 +18,11 @@ export interface PlaceOrderResult {
  * endpoint (there isn't one - see PHASE_13/14 API docs): first
  * `POST /cart/checkout` creates a PENDING order from the cart, then
  * `POST /payments` attaches a payment obligation to it. COD confirms the
- * order synchronously. UPI initiation currently always fails, honestly,
- * because the PNB gateway adapter is an intentional placeholder (Phase
- * 14) - this hook never hides that failure behind a fake success; it
- * surfaces the already-created order alongside the payment error so the
- * screen can offer retry/cancel without losing the order reference.
+ * order synchronously. Online payment ("UPI" method, via Razorpay) comes
+ * back PROCESSING with a Razorpay order attached - the screen then opens
+ * Razorpay Checkout (see useOnlinePayment). A failed initiation is never
+ * hidden behind a fake success: the already-created order is surfaced
+ * alongside the error so the screen can offer retry/cancel.
  */
 export function usePlaceOrder() {
   const queryClient = useQueryClient();

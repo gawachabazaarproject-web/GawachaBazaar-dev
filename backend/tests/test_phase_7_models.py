@@ -42,6 +42,7 @@ def _create_order(
         order_number=order_number,
         status="PENDING",
         total_amount=total_amount,
+        subtotal_amount=total_amount,
         currency="INR",
         placed_at=datetime.now(UTC),
     )

@@ -11,9 +11,6 @@ import {
   CustomerOrderListItem,
   CustomerPromotionRedemptionRow,
   CustomerTimelineEvent,
-  PendingContactChange,
-  cancelContactChange,
-  confirmContactChange,
   createCustomerNote,
   fetchCustomerAddresses,
   fetchCustomerDetail,
@@ -21,8 +18,9 @@ import {
   fetchCustomerOrders,
   fetchCustomerPromotions,
   fetchCustomerTimeline,
-  requestContactChange,
+  resetCustomerPassword,
   setCustomerStatus,
+  updateCustomerContact,
   updateCustomerNote,
 } from "@/lib/customers";
 import { CustomerAddress } from "@/lib/customers";
@@ -61,6 +59,7 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
   const canManageStatus = user && hasPermission(user.roles, "customers.manage_status");
   const canManageNotes = user && hasPermission(user.roles, "customers.notes");
   const canManageContact = user && hasPermission(user.roles, "customers.manage_contact");
+  const canResetPassword = user && hasPermission(user.roles, "customers.reset_password");
 
   const load = useCallback(async () => {
     const token = getAccessToken();
@@ -308,31 +307,31 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
         </p>
       </Section>
 
-      {/* Account information - verification-backed email/phone change.
-          Never a raw PATCH: the new value only lands once whoever controls
-          it proves that with the code sent there (see
-          app/services/contact_change methods on the backend's
-          CustomerService). */}
-      {canManageContact && (
+      {/* Account information - there is no email/SMS channel to verify a
+          new address or deliver a reset code, so an admin confirms the
+          customer's identity out-of-band (e.g. by phone) and makes the
+          change directly. Every change is audit-logged by the backend. */}
+      {(canManageContact || canResetPassword) && (
         <Section title="Account information">
-          <ContactChangeField
-            field="EMAIL"
-            label="Email"
-            currentValue={customer.email}
-            pending={customer.pending_email_change}
-            customerId={customer.id}
-            onChanged={setCustomer}
-            onCancelled={load}
-          />
-          <ContactChangeField
-            field="PHONE"
-            label="Phone"
-            currentValue={customer.phone}
-            pending={customer.pending_phone_change}
-            customerId={customer.id}
-            onChanged={setCustomer}
-            onCancelled={load}
-          />
+          {canManageContact && (
+            <>
+              <ContactEditField
+                field="EMAIL"
+                label="Email"
+                currentValue={customer.email}
+                customerId={customer.id}
+                onChanged={setCustomer}
+              />
+              <ContactEditField
+                field="PHONE"
+                label="Phone"
+                currentValue={customer.phone}
+                customerId={customer.id}
+                onChanged={setCustomer}
+              />
+            </>
+          )}
+          {canResetPassword && <PasswordResetField customerId={customer.id} />}
         </Section>
       )}
 
@@ -444,95 +443,51 @@ function statusDialogCopy(action: "INACTIVE" | "SUSPENDED" | "ACTIVE" | null) {
 }
 
 /**
- * Self-contained request -> code -> confirm flow for one field (EMAIL or
- * PHONE). The verification code itself is never shown here - in this dev
- * environment there is no real email/SMS gateway, so it's logged
- * server-side (see app/services/notification_gateway.py); a real gateway
- * swap requires no change to this component or the API contract.
+ * Direct email/phone edit. The admin must confirm the customer's identity
+ * before saving - nothing verifies the new value automatically.
  */
-function ContactChangeField({
+function ContactEditField({
   field,
   label,
   currentValue,
-  pending,
   customerId,
   onChanged,
-  onCancelled,
 }: {
   field: "EMAIL" | "PHONE";
   label: string;
   currentValue: string;
-  pending: PendingContactChange | null;
   customerId: number;
   onChanged: (updated: AdminCustomerDetail) => void;
-  onCancelled: () => void;
 }) {
   const { getAccessToken } = useAuth();
-  const [mode, setMode] = useState<"idle" | "request" | "verify">("idle");
+  const [editing, setEditing] = useState(false);
   const [newValue, setNewValue] = useState("");
-  const [code, setCode] = useState("");
+  const [reason, setReason] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const startRequest = () => {
-    setMode("request");
+  const start = () => {
+    setEditing(true);
     setNewValue("");
+    setReason("");
     setError(null);
   };
 
-  const cancel = () => {
-    setMode("idle");
-    setError(null);
-  };
-
-  const handleSendCode = async () => {
+  const handleSave = async () => {
     const token = getAccessToken();
     if (!token || !newValue.trim()) return;
     setLoading(true);
     setError(null);
     try {
-      await requestContactChange(token, customerId, field, newValue.trim());
-      setMode("verify");
-      setCode("");
-    } catch (err) {
-      setError(err instanceof CustomerApiError ? err.message : "Unable to request this change.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleVerify = async () => {
-    const token = getAccessToken();
-    if (!token || code.trim().length !== 6) return;
-    setLoading(true);
-    setError(null);
-    try {
-      const updated = await confirmContactChange(token, customerId, field, code.trim());
+      const updated = await updateCustomerContact(token, customerId, field, newValue.trim(), reason.trim());
       onChanged(updated);
-      setMode("idle");
+      setEditing(false);
     } catch (err) {
-      setError(err instanceof CustomerApiError ? err.message : "Unable to verify this code.");
+      setError(err instanceof CustomerApiError ? err.message : `Unable to change this ${label.toLowerCase()}.`);
     } finally {
       setLoading(false);
     }
   };
-
-  const handleCancelPending = async () => {
-    const token = getAccessToken();
-    if (!token) return;
-    setLoading(true);
-    try {
-      await cancelContactChange(token, customerId, field);
-      onCancelled();
-    } finally {
-      setLoading(false);
-      setMode("idle");
-    }
-  };
-
-  // A pending change already exists (e.g. page was reloaded mid-flow) -
-  // resume straight into the verify step rather than losing that state.
-  const effectiveMode = pending && mode === "idle" ? "verify-existing" : mode;
 
   return (
     <div className="border-b border-neutral-100 py-3 last:border-b-0">
@@ -541,57 +496,157 @@ function ContactChangeField({
           <p className="text-xs font-semibold uppercase tracking-wide text-neutral-500">{label}</p>
           <p className="text-sm text-neutral-800">{currentValue}</p>
         </div>
-        {effectiveMode === "idle" && (
-          <button onClick={startRequest} className="text-sm font-semibold text-primary-700 hover:underline">
+        {!editing && (
+          <button onClick={start} className="text-sm font-semibold text-primary-700 hover:underline">
             Change
           </button>
         )}
       </div>
 
-      {effectiveMode === "request" && (
-        <div className="mt-2 flex gap-2">
-          <input
-            value={newValue}
-            onChange={(e) => setNewValue(e.target.value)}
-            placeholder={field === "EMAIL" ? "new@example.com" : "9876543210"}
-            className="flex-1 rounded border border-neutral-300 px-3 py-1.5 text-sm"
-          />
-          <button
-            onClick={handleSendCode}
-            disabled={!newValue.trim() || loading}
-            className="rounded bg-primary-800 px-3 py-1.5 text-sm font-semibold text-white disabled:opacity-40"
-          >
-            {loading ? "Sending..." : "Send code"}
-          </button>
-          <button onClick={cancel} className="text-sm text-neutral-500 hover:underline">
-            Cancel
-          </button>
+      {editing && (
+        <div className="mt-2 space-y-2">
+          <p className="text-xs text-neutral-500">
+            Confirm you are speaking with the account owner before changing their {label.toLowerCase()} - it is
+            what they sign in with.
+          </p>
+          <div className="flex gap-2">
+            <input
+              value={newValue}
+              onChange={(e) => setNewValue(e.target.value)}
+              placeholder={field === "EMAIL" ? "new@example.com" : "9876543210"}
+              className="flex-1 rounded border border-neutral-300 px-3 py-1.5 text-sm"
+            />
+            <input
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              placeholder="Reason (optional)"
+              className="flex-1 rounded border border-neutral-300 px-3 py-1.5 text-sm"
+            />
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={handleSave}
+              disabled={!newValue.trim() || loading}
+              className="rounded bg-primary-800 px-3 py-1.5 text-sm font-semibold text-white disabled:opacity-40"
+            >
+              {loading ? "Saving..." : "Save"}
+            </button>
+            <button onClick={() => setEditing(false)} disabled={loading} className="text-sm text-neutral-500 hover:underline">
+              Cancel
+            </button>
+          </div>
         </div>
       )}
 
-      {(effectiveMode === "verify" || effectiveMode === "verify-existing") && (
-        <div className="mt-2">
-          <p className="text-xs text-neutral-500">
-            Verification pending for <span className="font-medium text-neutral-700">{pending?.new_value ?? newValue}</span>
-            {pending && `, expires ${formatDateTime(pending.expires_at)}`}. No real email/SMS gateway is configured in
-            this environment - check the backend logs for the code.
+      {error && <p className="mt-2 text-xs text-status-danger">{error}</p>}
+    </div>
+  );
+}
+
+const MIN_PASSWORD_LENGTH = 8;
+
+/** 12 characters from an alphabet without look-alikes (0/O, 1/l/I), easy
+ * to read out over the phone. */
+function generatePassword(): string {
+  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789";
+  const bytes = crypto.getRandomValues(new Uint32Array(12));
+  return Array.from(bytes, (b) => alphabet[b % alphabet.length]).join("");
+}
+
+/**
+ * Admin-assisted password reset - replaces the old emailed-code flow. The
+ * backend signs the customer out of every device; the admin shares the new
+ * password with them directly.
+ */
+function PasswordResetField({ customerId }: { customerId: number }) {
+  const { getAccessToken } = useAuth();
+  const [editing, setEditing] = useState(false);
+  const [password, setPassword] = useState("");
+  const [reason, setReason] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [done, setDone] = useState(false);
+
+  const start = () => {
+    setEditing(true);
+    setDone(false);
+    setPassword(generatePassword());
+    setReason("");
+    setError(null);
+  };
+
+  const handleSave = async () => {
+    const token = getAccessToken();
+    if (!token || password.length < MIN_PASSWORD_LENGTH) return;
+    setLoading(true);
+    setError(null);
+    try {
+      await resetCustomerPassword(token, customerId, password, reason.trim());
+      setEditing(false);
+      setDone(true);
+    } catch (err) {
+      setError(err instanceof CustomerApiError ? err.message : "Unable to reset this password.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="border-b border-neutral-100 py-3 last:border-b-0">
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Password</p>
+          <p className="text-sm text-neutral-800">
+            {done ? "Updated - the customer has been signed out of every device." : "Hidden"}
           </p>
-          <div className="mt-2 flex gap-2">
+        </div>
+        {!editing && (
+          <button onClick={start} className="text-sm font-semibold text-primary-700 hover:underline">
+            Set new password
+          </button>
+        )}
+      </div>
+
+      {editing && (
+        <div className="mt-2 space-y-2">
+          <p className="text-xs text-neutral-500">
+            Confirm you are speaking with the account owner, then share this password with them directly. Saving
+            signs them out of every device.
+          </p>
+          <div className="flex gap-2">
             <input
-              value={code}
-              onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
-              placeholder="6-digit code"
-              className="w-32 rounded border border-neutral-300 px-3 py-1.5 text-sm font-mono"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="flex-1 rounded border border-neutral-300 px-3 py-1.5 font-mono text-sm"
+              aria-label="New password"
             />
             <button
-              onClick={handleVerify}
-              disabled={code.length !== 6 || loading}
+              onClick={() => setPassword(generatePassword())}
+              disabled={loading}
+              className="rounded border border-neutral-300 px-3 py-1.5 text-sm text-neutral-700 hover:bg-neutral-50"
+            >
+              Generate
+            </button>
+          </div>
+          <input
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            placeholder="Reason (optional)"
+            className="w-full rounded border border-neutral-300 px-3 py-1.5 text-sm"
+          />
+          {password.length > 0 && password.length < MIN_PASSWORD_LENGTH && (
+            <p className="text-xs text-status-danger">At least {MIN_PASSWORD_LENGTH} characters.</p>
+          )}
+          <div className="flex gap-2">
+            <button
+              onClick={handleSave}
+              disabled={password.length < MIN_PASSWORD_LENGTH || loading}
               className="rounded bg-primary-800 px-3 py-1.5 text-sm font-semibold text-white disabled:opacity-40"
             >
-              {loading ? "Verifying..." : "Verify"}
+              {loading ? "Saving..." : "Set password"}
             </button>
-            <button onClick={handleCancelPending} disabled={loading} className="text-sm text-status-danger hover:underline">
-              Cancel request
+            <button onClick={() => setEditing(false)} disabled={loading} className="text-sm text-neutral-500 hover:underline">
+              Cancel
             </button>
           </div>
         </div>

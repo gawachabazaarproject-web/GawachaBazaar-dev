@@ -10,6 +10,7 @@ Refund Approval) SQLAlchemy models so that Base.metadata contains all
 table definitions.
 """
 
+from app.models.ad import Ad
 from app.models.address import Address
 from app.models.admin_action_log import AdminActionLog
 from app.models.auth_session import AuthSession
@@ -20,7 +21,6 @@ from app.models.bulk_order_request_item import BulkOrderRequestItem
 from app.models.cart import Cart
 from app.models.cart_item import CartItem
 from app.models.category import Category
-from app.models.contact_change_request import ContactChangeRequest
 from app.models.customer_note import CustomerNote
 from app.models.farm import Farm
 from app.models.fulfillment import Fulfillment
@@ -28,7 +28,6 @@ from app.models.inventory_location import InventoryLocation
 from app.models.inventory_lot import InventoryLot
 from app.models.inventory_reservation import InventoryReservation
 from app.models.inventory_reservation_item import InventoryReservationItem
-from app.models.login_otp_challenge import LoginOtpChallenge
 from app.models.order import Order
 from app.models.order_address import OrderAddress
 from app.models.order_item import OrderItem
@@ -60,6 +59,7 @@ from app.models.user import User
 from app.models.user_role import UserRole
 
 __all__ = [
+    "Ad",
     "Address",
     "AdminActionLog",
     "AuthSession",
@@ -70,7 +70,6 @@ __all__ = [
     "Cart",
     "CartItem",
     "Category",
-    "ContactChangeRequest",
     "CustomerNote",
     "Farm",
     "Fulfillment",
@@ -78,7 +77,6 @@ __all__ = [
     "InventoryLot",
     "InventoryReservation",
     "InventoryReservationItem",
-    "LoginOtpChallenge",
     "Order",
     "OrderAddress",
     "OrderItem",

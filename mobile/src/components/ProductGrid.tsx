@@ -73,10 +73,14 @@ export function ProductGrid({
 }
 
 const styles = StyleSheet.create({
-  content: { padding: spacing.base, paddingBottom: spacing.base + CART_BAR_CLEARANCE, flexGrow: 1 },
-  row: { gap: spacing.md },
-  column: { flex: 1, marginBottom: spacing.md },
-  skeletonGrid: { flexDirection: "row", flexWrap: "wrap", padding: spacing.base, gap: spacing.md },
-  skeletonColumn: { width: "47%" },
+  // Minimal side padding + inter-card gap - the same two columns claim as
+  // much of the screen width each as still leaves a visible seam between
+  // cards and the screen edge.
+  content: { padding: spacing.xs, paddingBottom: spacing.xs + CART_BAR_CLEARANCE, flexGrow: 1 },
+  row: { gap: spacing.xs },
+  column: { flex: 1, marginBottom: spacing.xs },
+  // space-between, not a column gap: 2 x 49.5% + gap overflows narrow phones.
+  skeletonGrid: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", padding: spacing.xs, rowGap: spacing.xs },
+  skeletonColumn: { width: "49.5%" },
   footer: { paddingVertical: spacing.lg },
 });

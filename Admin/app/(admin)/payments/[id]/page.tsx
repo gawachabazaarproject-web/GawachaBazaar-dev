@@ -10,6 +10,7 @@ import {
   fetchAdminPaymentDetail,
   PaymentsApiError,
   processRefund,
+  syncRefund,
   refundActionsFor,
   rejectRefund,
 } from "@/lib/payments";
@@ -79,15 +80,27 @@ export default function PaymentDetailPage({ params }: { params: Promise<{ id: st
     try {
       await processRefund(token, refund.id);
     } catch (err) {
-      // A NotImplementedError from the still-unwired PNB gateway surfaces
-      // as a plain 500 - see docs/architecture/PHASE_14_PAYMENTS.md. The
-      // refund is safely left in PROCESSING regardless (never silently
-      // marked FAILED for an unknown-outcome gateway error).
+      // Razorpay errors come back as a 502 with a readable message. An
+      // unknown-outcome error (timeout) leaves the refund PROCESSING, never
+      // silently FAILED - check Razorpay before retrying.
       setActionError(
-        err instanceof PaymentsApiError
-          ? err.message
-          : "The payment gateway integration is not yet available - see PHASE_14_PAYMENTS.md.",
+        err instanceof PaymentsApiError ? err.message : "Could not reach the server to process this refund.",
       );
+    } finally {
+      setActing(false);
+      await load();
+    }
+  };
+
+  const handleSync = async () => {
+    const token = getAccessToken();
+    if (!token || !refund) return;
+    setActing(true);
+    setActionError(null);
+    try {
+      await syncRefund(token, refund.id);
+    } catch (err) {
+      setActionError(err instanceof PaymentsApiError ? err.message : "Could not check this refund with Razorpay.");
     } finally {
       setActing(false);
       await load();
@@ -222,6 +235,15 @@ export default function PaymentDetailPage({ params }: { params: Promise<{ id: st
                   className="rounded border border-primary-700/40 px-3 py-1.5 text-sm font-semibold text-primary-800 hover:bg-primary-50 disabled:opacity-50"
                 >
                   {acting ? "Working..." : "Process refund"}
+                </button>
+              )}
+              {actions.sync && (
+                <button
+                  disabled={acting}
+                  onClick={handleSync}
+                  className="rounded border border-primary-700/40 px-3 py-1.5 text-sm font-semibold text-primary-800 hover:bg-primary-50 disabled:opacity-50"
+                >
+                  {acting ? "Checking..." : "Check status with Razorpay"}
                 </button>
               )}
             </div>

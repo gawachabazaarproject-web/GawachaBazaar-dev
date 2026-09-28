@@ -260,7 +260,7 @@ const styles = StyleSheet.create({
   dot: {
     height: 3,
     width: 16,
-    borderRadius: radius.none,
+    borderRadius: radius.card,
     backgroundColor: "rgba(255,255,255,0.3)",
     overflow: "hidden",
   },
