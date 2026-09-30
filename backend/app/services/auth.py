@@ -160,9 +160,16 @@ class AuthService:
             logger.info(
                 "AUTH_REGISTRATION_CONFLICT: duplicate email or phone attempted"
             )
-            raise ConflictError(
-                "User with this email or phone already exists."
-            ) from exc
+            # Name the clashing field so the customer knows what to change -
+            # a combined "email or phone" message reads as an email problem
+            # when it's the mobile number that's taken.
+            if self.db.query(User.id).filter(User.email == data.email).first():
+                message = "An account with this email already exists."
+            elif self.db.query(User.id).filter(User.phone == data.phone).first():
+                message = "This mobile number is already registered."
+            else:
+                message = "User with this email or phone already exists."
+            raise ConflictError(message) from exc
 
         return TokenResponse(
             access_token=access_token,

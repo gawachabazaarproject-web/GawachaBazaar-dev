@@ -113,6 +113,7 @@ def test_registration_duplicate_email_and_phone_conflict(client: TestClient) -> 
     r2 = client.post("/api/v1/auth/register", json=payload_dup_email)
     assert r2.status_code == 409
     assert r2.json()["code"] == "CONFLICT_ERROR"
+    assert r2.json()["message"] == "An account with this email already exists."
 
     # Duplicate phone (normalized)
     payload_dup_phone = {
@@ -124,6 +125,7 @@ def test_registration_duplicate_email_and_phone_conflict(client: TestClient) -> 
     r3 = client.post("/api/v1/auth/register", json=payload_dup_phone)
     assert r3.status_code == 409
     assert r3.json()["code"] == "CONFLICT_ERROR"
+    assert r3.json()["message"] == "This mobile number is already registered."
 
 
 def test_phone_and_email_normalization_utilities() -> None:

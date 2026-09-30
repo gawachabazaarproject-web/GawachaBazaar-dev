@@ -26,6 +26,12 @@
       "port": 8000
     },
     {
+      "name": "gawacha-backend-lan",
+      "runtimeExecutable": "backend/venv/Scripts/python.exe",
+      "runtimeArgs": ["-m", "uvicorn", "app.main:app", "--app-dir", "backend", "--env-file", "backend/.env", "--reload", "--reload-dir", "backend/app", "--host", "0.0.0.0", "--port", "8000"],
+      "port": 8000
+    },
+    {
       "name": "gawacha-backend-8001",
       "runtimeExecutable": "backend/venv/Scripts/python.exe",
       "runtimeArgs": ["-m", "uvicorn", "app.main:app", "--app-dir", "backend", "--env-file", "backend/.env", "--reload", "--reload-dir", "backend/app", "--host", "127.0.0.1", "--port", "8001"],

@@ -21,6 +21,11 @@
  *    smaller. It also lets the APK run on x86 test emulators via ARM
  *    translation: uncompressed in-APK libs make SoLoader look for lib/x86_64
  *    and crash on launch.
+ *
+ * 5. Cleartext HTTP for LAN test builds. Release builds block http:// by
+ *    default (Expo only allows it in the debug manifest). A standalone test
+ *    APK pointed at a dev backend (EXPO_PUBLIC_API_BASE_URL=http://<LAN IP>
+ *    :8000/api/v1) needs it; an https:// production URL leaves it off.
  */
 const { withAndroidManifest, withAppBuildGradle, withGradleProperties } = require("expo/config-plugins");
 
@@ -73,6 +78,14 @@ function withUpiQueries(config) {
   });
 }
 
+function withLanCleartext(config) {
+  if (!(process.env.EXPO_PUBLIC_API_BASE_URL ?? "").startsWith("http://")) return config;
+  return withAndroidManifest(config, (cfg) => {
+    cfg.modResults.manifest.application[0].$["android:usesCleartextTraffic"] = "true";
+    return cfg;
+  });
+}
+
 function setGradleProperty(props, key, value) {
   const existing = props.find((p) => p.type === "property" && p.key === key);
   if (existing) existing.value = value;
@@ -87,4 +100,5 @@ function withBuildProperties(config) {
   });
 }
 
-module.exports = (config) => withBuildProperties(withUpiQueries(withReleaseSigning(config)));
+module.exports = (config) =>
+  withLanCleartext(withBuildProperties(withUpiQueries(withReleaseSigning(config))));
