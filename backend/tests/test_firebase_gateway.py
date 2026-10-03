@@ -71,3 +71,21 @@ def test_write_operations_translate_auth_errors_to_unavailable(monkeypatch):
     with patch("firebase_admin.auth.delete_user", side_effect=UnavailableError("network error")):
         with pytest.raises(FirebaseUnavailableError, match="Could not reach Firebase or credentials are not configured"):
             gateway.delete_user("uid-123")
+
+
+def test_token_verification_works_without_a_service_account(monkeypatch):
+    """No service account and no ADC (e.g. Render): a bad token must be
+    rejected as invalid, not crash with DefaultCredentialsError."""
+    import firebase_admin
+
+    from app.core.firebase import FirebaseTokenError
+
+    monkeypatch.delenv("GOOGLE_APPLICATION_CREDENTIALS", raising=False)
+    monkeypatch.setattr(settings, "FIREBASE_PROJECT_ID", "test-project")
+    monkeypatch.setattr(settings, "FIREBASE_SERVICE_ACCOUNT_JSON", "")
+    gateway = FirebaseAdminGateway()
+    try:
+        with pytest.raises(FirebaseTokenError):
+            gateway.verify_id_token("not.a.token")
+    finally:
+        firebase_admin.delete_app(gateway._get_app())

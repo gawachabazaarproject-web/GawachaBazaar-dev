@@ -94,6 +94,18 @@ class FirebaseGateway:
         raise NotImplementedError
 
 
+def _anonymous_credential():
+    """A firebase_admin credential that carries no identity (see _get_app)."""
+    from firebase_admin import credentials
+    from google.auth.credentials import AnonymousCredentials
+
+    class _Anonymous(credentials.Base):
+        def get_credential(self):
+            return AnonymousCredentials()
+
+    return _Anonymous()
+
+
 class FirebaseAdminGateway(FirebaseGateway):
     """Real implementation backed by the `firebase_admin` package."""
 
@@ -145,8 +157,19 @@ class FirebaseAdminGateway(FirebaseGateway):
                             "FIREBASE_SERVICE_ACCOUNT_JSON certificate is invalid."
                         ) from exc
 
-            # credential=None -> Application Default Credentials, loaded
-            # lazily; token verification alone works without any.
+            # No service account: firebase_admin would fall back to
+            # Application Default Credentials and raise DefaultCredentialsError
+            # on the first verify_id_token when none exist (any host that is
+            # not Google Cloud). Token verification only needs Google's public
+            # certificates, so use anonymous credentials instead - sign-in
+            # keeps working and admin operations fail as "unavailable".
+            if credential is None and not os.environ.get("GOOGLE_APPLICATION_CREDENTIALS"):
+                logger.warning(
+                    "FIREBASE_SERVICE_ACCOUNT_JSON is not set: ID tokens are verified, "
+                    "but staff creation, password resets and legacy migration are unavailable."
+                )
+                credential = _anonymous_credential()
+
             try:
                 self._app = firebase_admin.initialize_app(
                     credential,
@@ -159,6 +182,7 @@ class FirebaseAdminGateway(FirebaseGateway):
 
     def verify_id_token(self, token: str) -> FirebaseIdentity:
         from firebase_admin import auth
+        from google.auth import exceptions as google_auth_exceptions
 
         app = self._get_app()
         try:
@@ -172,6 +196,9 @@ class FirebaseAdminGateway(FirebaseGateway):
             raise FirebaseUnavailableError("Could not reach Firebase.") from exc
         except (auth.InvalidIdTokenError, ValueError) as exc:
             raise FirebaseTokenError("invalid") from exc
+        except google_auth_exceptions.GoogleAuthError as exc:
+            logger.error("FIREBASE_VERIFY_CREDENTIALS_FAILED: %s", type(exc).__name__)
+            raise FirebaseUnavailableError("Firebase credentials are not configured.") from exc
 
         firebase_claims = claims.get("firebase") or {}
         return FirebaseIdentity(
