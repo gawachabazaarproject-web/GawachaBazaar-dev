@@ -22,6 +22,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 RUN useradd --create-home --uid 1000 appuser
 
 COPY --chown=appuser:appuser . .
+RUN chmod +x start.sh
 
 USER appuser
 
@@ -48,9 +49,5 @@ HEALTHCHECK --interval=15s --timeout=5s --start-period=20s --retries=3 \
 #   noise. The realtime socket's ?token=<JWT> is kept out of uvicorn's
 #   WebSocket handshake lines by RedactTokenQueryFilter (app/core/logging.py)
 #   - those are logged on uvicorn.error, which this flag does not silence.
-CMD ["uvicorn", "app.main:app", \
-     "--host", "0.0.0.0", "--port", "8000", \
-     "--workers", "1", \
-     "--proxy-headers", "--forwarded-allow-ips", "*", \
-     "--no-access-log", \
-     "--timeout-graceful-shutdown", "20"]
+# Production entrypoint runs database migrations and starts uvicorn on $PORT
+CMD ["./start.sh"]
