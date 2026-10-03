@@ -1,26 +1,18 @@
 import { apiClient } from "./client";
-import {
-  LoginPayload,
-  RefreshTokenResponse,
-  RegisterPayload,
-  TokenResponse,
-  UserResponse,
-} from "@/types/api";
+import { AuthUserResponse, LegacyMigrationResponse, SyncUserPayload } from "@/types/api";
 
 export const authApi = {
-  register: (payload: RegisterPayload) =>
-    apiClient.post<TokenResponse>("/auth/register", payload).then((r) => r.data),
+  /** After every Firebase sign-in: find/link/create the app user for the
+   * verified Firebase identity. Identity comes only from the token. */
+  sync: (payload: SyncUserPayload = {}) =>
+    apiClient.post<AuthUserResponse>("/auth/sync", payload).then((r) => r.data),
 
-  login: (payload: LoginPayload) =>
-    apiClient.post<TokenResponse>("/auth/login", payload).then((r) => r.data),
+  me: () => apiClient.get<AuthUserResponse>("/auth/me").then((r) => r.data),
 
-  refresh: (refreshToken: string) =>
+  /** One-time move of an account created before Firebase (see backend
+   * AuthService.migrate_legacy_account). */
+  legacyMigrate: (identifier: string, password: string) =>
     apiClient
-      .post<RefreshTokenResponse>("/auth/refresh", { refresh_token: refreshToken })
+      .post<LegacyMigrationResponse>("/auth/legacy-migrate", { identifier, password })
       .then((r) => r.data),
-
-  logout: (refreshToken: string) =>
-    apiClient.post("/auth/logout", { refresh_token: refreshToken }).then((r) => r.data),
-
-  me: () => apiClient.get<UserResponse>("/auth/me").then((r) => r.data),
 };

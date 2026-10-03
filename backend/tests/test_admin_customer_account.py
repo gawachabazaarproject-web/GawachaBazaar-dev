@@ -12,19 +12,16 @@ lacking the permission (SUPPORT is the interesting case - it can view
 customers but not change them).
 """
 
-import secrets
-from datetime import UTC, datetime, timedelta
-
 from sqlalchemy.orm import Session
 from starlette.testclient import TestClient
 
 from app.core.roles import ADMIN, CUSTOMER, HUB_STAFF, SUPPORT
-from app.core.security import create_access_token, hash_password
+from app.core.security import hash_password, verify_password
 from app.models.admin_action_log import AdminActionLog
-from app.models.auth_session import AuthSession
 from app.models.role import Role
 from app.models.user import User
 from app.models.user_role import UserRole
+from tests.firebase_fake import auth_headers_for, fake_firebase
 
 CUSTOMER_PASSWORD = "CustomerPass123"
 
@@ -56,16 +53,7 @@ def _user(db_session: Session, role_name: str, email: str, phone: str) -> User:
 
 
 def _headers(db_session: Session, user: User) -> dict[str, str]:
-    session = AuthSession(
-        user_id=user.id,
-        refresh_token_hash=f"dummy-hash-{user.id}-{secrets.token_hex(8)}",
-        expires_at=datetime.now(UTC) + timedelta(days=30),
-    )
-    db_session.add(session)
-    db_session.commit()
-    db_session.refresh(session)
-    token = create_access_token(user_id=user.id, session_id=session.id)
-    return {"Authorization": f"Bearer {token}"}
+    return auth_headers_for(db_session, user)
 
 
 def _setup(db_session: Session) -> tuple[User, dict[str, str], User, dict[str, str]]:
@@ -94,13 +82,6 @@ def test_admin_changes_customer_email_directly(client: TestClient, db_session: S
     )
     assert resp.status_code == 200, resp.text
     assert resp.json()["email"] == "new.address@example.com"
-
-    # The customer logs in with the new address straight away.
-    login = client.post(
-        "/api/v1/auth/login",
-        json={"identifier": "new.address@example.com", "password": CUSTOMER_PASSWORD},
-    )
-    assert login.status_code == 200
 
     [log] = _audit(db_session, "customer.email_changed")
     assert log.admin_user_id == admin.id
@@ -181,22 +162,9 @@ def test_admin_resets_customer_password_and_signs_them_out(
     )
     assert resp.status_code == 204, resp.text
 
-    # Every existing session is revoked (not deleted - kept for the record).
-    assert client.get("/api/v1/auth/me", headers=customer_h).status_code == 401
-    db_session.expire_all()
-    sessions = db_session.query(AuthSession).filter_by(user_id=customer.id).all()
-    assert sessions and all(s.revoked_at is not None for s in sessions)
-
-    old = client.post(
-        "/api/v1/auth/login",
-        json={"identifier": "customer-acct@example.com", "password": CUSTOMER_PASSWORD},
-    )
-    assert old.status_code == 401
-    new = client.post(
-        "/api/v1/auth/login",
-        json={"identifier": "customer-acct@example.com", "password": "BrandNewPass456"},
-    )
-    assert new.status_code == 200
+    # Firebase holds the new credential and every device is signed out.
+    assert fake_firebase.users[customer.firebase_uid]["password"] == "BrandNewPass456"
+    assert customer.firebase_uid in fake_firebase.revoked
 
     [log] = _audit(db_session, "customer.password_reset")
     assert log.admin_user_id == admin.id
@@ -235,9 +203,30 @@ def test_password_reset_forbidden_without_permission(client: TestClient, db_sess
     assert client.post(url, json=body, headers=_headers(db_session, support)).status_code == 403
     assert client.post(url, json=body, headers=customer_h).status_code == 403
     assert client.post(url, json=body).status_code == 401
-    db_session.expire_all()
-    login = client.post(
-        "/api/v1/auth/login",
-        json={"identifier": "customer-acct@example.com", "password": CUSTOMER_PASSWORD},
+    assert customer.firebase_uid not in fake_firebase.users  # credential untouched
+
+
+def test_admin_reset_of_unmigrated_customer_updates_legacy_password(
+    client: TestClient, db_session: Session
+) -> None:
+    """A customer who has not signed in since the Firebase cutover has no
+    Firebase user yet - the reset sets the password their one-time
+    migration will be checked against."""
+    admin = _user(db_session, ADMIN, "admin-legacy@example.com", "+919800000011")
+    admin_h = _headers(db_session, admin)
+    customer = _user(db_session, CUSTOMER, "legacy-reset@example.com", "+919800000012")
+
+    resp = client.post(
+        f"/api/v1/customers/{customer.id}/password",
+        json={"new_password": "LegacyNewPass789"},
+        headers=admin_h,
     )
-    assert login.status_code == 200
+    assert resp.status_code == 204, resp.text
+    db_session.expire_all()
+    assert verify_password("LegacyNewPass789", db_session.get(User, customer.id).password_hash)
+
+    migrated = client.post(
+        "/api/v1/auth/legacy-migrate",
+        json={"identifier": "legacy-reset@example.com", "password": "LegacyNewPass789"},
+    )
+    assert migrated.status_code == 200, migrated.text

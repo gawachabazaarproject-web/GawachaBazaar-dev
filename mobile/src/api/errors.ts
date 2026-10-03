@@ -48,6 +48,7 @@ const CUSTOMER_SAFE_5XX_CODES = new Set([
   "ONLINE_PAYMENTS_NOT_CONFIGURED",
   "PAYMENT_GATEWAY_UNAVAILABLE",
   "PAYMENT_GATEWAY_ERROR",
+  "AUTH_UNAVAILABLE",
 ]);
 
 /** Codes whose backend message is accurate but not customer-friendly

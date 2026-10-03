@@ -17,8 +17,8 @@ from app.schemas.base import BaseSchema
 class StaffListItemResponse(BaseSchema):
     id: int
     name: str
-    email: str
-    phone: str
+    email: str | None = None
+    phone: str | None = None
     status: str
     roles: list[str]
     created_at: datetime

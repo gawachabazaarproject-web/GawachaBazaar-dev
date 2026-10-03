@@ -50,10 +50,18 @@
         {
           "locationWhenInUsePermission": "GawachaBazaar uses your location to prefill your delivery address. You can always enter it manually instead."
         }
-      ]
+      ],
+      "@react-native-firebase/app",
+      "@react-native-firebase/auth",
+      "@react-native-google-signin/google-signin"
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "eas": {
+        "projectId": "a8785aaa-4389-4f27-9e5a-4df1ec26f31c"
+      }
     }
   }
 }

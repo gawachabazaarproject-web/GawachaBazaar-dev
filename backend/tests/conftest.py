@@ -6,9 +6,11 @@ from sqlalchemy.orm import Session, sessionmaker
 from starlette.testclient import TestClient
 
 from app.core.config import settings
+from app.core.firebase import set_firebase
 from app.core.rate_limit import limiter
 from app.dependencies.database import get_db
 from app.main import app
+from tests.firebase_fake import fake_firebase
 
 # Explicitly isolate test database: gawachabazaar_test
 TEST_DATABASE_URL = settings.DATABASE_URL.replace(
@@ -25,6 +27,16 @@ def test_engine():
     engine = create_engine(TEST_DATABASE_URL, pool_pre_ping=True)
     yield engine
     engine.dispose()
+
+
+@pytest.fixture(autouse=True)
+def firebase_fake():
+    """Every test runs against the in-memory Firebase fake - never the
+    real Admin SDK (no network, no service account)."""
+    fake_firebase.reset()
+    set_firebase(fake_firebase)
+    yield fake_firebase
+    set_firebase(None)
 
 
 @pytest.fixture(autouse=True)
@@ -52,7 +64,7 @@ def db_session(test_engine) -> Generator[Session, None, None]:
     # Clean test tables before each test in dependency order
     session.execute(
         text(
-            "TRUNCATE TABLE auth_sessions, "
+            "TRUNCATE TABLE "
             "customer_notes, admin_action_logs, payment_webhook_events, "
             "payment_transactions, refunds, payments, "
             "promotion_redemptions, promotion_targets, promotion_eligible_customers, promotions, "

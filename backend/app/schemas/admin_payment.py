@@ -45,7 +45,7 @@ class AdminPaymentListItemResponse(BaseSchema):
     order_number: str
     customer_id: int
     customer_name: str
-    customer_email: str
+    customer_email: str | None = None
     payment_method: str
     status: str
     amount: Decimal

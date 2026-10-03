@@ -26,8 +26,21 @@
  *    default (Expo only allows it in the debug manifest). A standalone test
  *    APK pointed at a dev backend (EXPO_PUBLIC_API_BASE_URL=http://<LAN IP>
  *    :8000/api/v1) needs it; an https:// production URL leaves it off.
+ *
+ * 6. Short CMake build directories. Native libraries build under
+ *    node_modules/<lib>/android/.cxx/..., and on Windows (260-character
+ *    path limit unless LongPathsEnabled) a generated prefab path for
+ *    react-native-reanimated lands at 261 characters - ninja then cannot
+ *    see the file and loops on "Re-running CMake" until the build fails.
+ *    Moving every library's CMake staging directory to android/.cxx/<lib>
+ *    keeps those paths under the limit.
  */
-const { withAndroidManifest, withAppBuildGradle, withGradleProperties } = require("expo/config-plugins");
+const {
+  withAndroidManifest,
+  withAppBuildGradle,
+  withGradleProperties,
+  withProjectBuildGradle,
+} = require("expo/config-plugins");
 
 const GRADLE_JVM_ARGS = "-Xmx4096m -XX:MaxMetaspaceSize=1024m";
 
@@ -86,6 +99,25 @@ function withLanCleartext(config) {
   });
 }
 
+const SHORT_CXX_DIRS = `
+// withAndroidRelease: keep CMake build paths under the Windows 260-char limit.
+subprojects { sub ->
+  sub.plugins.withId('com.android.library') {
+    sub.android.externalNativeBuild.cmake.buildStagingDirectory =
+        new File(rootDir, ".cxx/\${sub.name.replace('react-native-', 'rn-')}")
+  }
+}
+`;
+
+function withShortNativeBuildDirs(config) {
+  return withProjectBuildGradle(config, (cfg) => {
+    if (!cfg.modResults.contents.includes("withAndroidRelease: keep CMake build paths")) {
+      cfg.modResults.contents += SHORT_CXX_DIRS;
+    }
+    return cfg;
+  });
+}
+
 function setGradleProperty(props, key, value) {
   const existing = props.find((p) => p.type === "property" && p.key === key);
   if (existing) existing.value = value;
@@ -101,4 +133,4 @@ function withBuildProperties(config) {
 }
 
 module.exports = (config) =>
-  withLanCleartext(withBuildProperties(withUpiQueries(withReleaseSigning(config))));
+  withShortNativeBuildDirs(withLanCleartext(withBuildProperties(withUpiQueries(withReleaseSigning(config)))));

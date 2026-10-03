@@ -52,7 +52,8 @@ harden SSH by setting `PasswordAuthentication no` and `PermitRootLogin no` in
 ```bash
 git clone <repo-url> /opt/gawachabazaar && cd /opt/gawachabazaar
 cp .env.production.example .env.production && chmod 600 .env.production
-openssl rand -hex 32   # run twice: POSTGRES_PASSWORD, JWT_SECRET_KEY
+openssl rand -hex 32   # for POSTGRES_PASSWORD
+# FIREBASE_PROJECT_ID + FIREBASE_SERVICE_ACCOUNT_JSON: see deploy/FIREBASE_AUTH.md
 nano .env.production
 ```
 

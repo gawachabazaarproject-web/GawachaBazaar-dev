@@ -64,8 +64,8 @@ class PaymentCheckoutResponse(BaseSchema):
     merchant_name: str
     description: str
     customer_name: str
-    customer_email: str
-    customer_phone: str
+    customer_email: str | None = None
+    customer_phone: str | None = None
     test_mode: bool
 
 

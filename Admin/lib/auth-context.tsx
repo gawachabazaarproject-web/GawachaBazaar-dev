@@ -1,14 +1,22 @@
 "use client";
 
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
-import { ApiError, fetchMe, login as apiLogin, logout as apiLogout, refreshSession, UserProfile } from "./api";
+import {
+  onIdTokenChanged,
+  sendEmailVerification,
+  sendPasswordResetEmail,
+  signInWithEmailAndPassword,
+  signOut,
+  User as FirebaseUser,
+} from "firebase/auth";
+import { ApiError, fetchMe, migrateLegacyAccount, UserProfile } from "./api";
+import { firebaseAuth, missingFirebaseConfig } from "./firebase";
+import { firebaseErrorCode, firebaseErrorMessage, NOT_IN_FIREBASE_CODES } from "./firebase-errors";
 import { canOpenAdminPanel } from "./permissions";
-
-const REFRESH_TOKEN_KEY = "gawacha_admin.refresh_token";
 
 interface AuthState {
   user: UserProfile | null;
-  /** null = still resolving the initial session on page load. */
+  /** "loading" while Firebase restores a persisted session on page load. */
   status: "loading" | "authenticated" | "unauthenticated";
   error: string | null;
 }
@@ -16,96 +24,133 @@ interface AuthState {
 interface AuthContextValue extends AuthState {
   login: (identifier: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
-  /** For modules that need to call the API directly with a fresh token. */
+  /** Sends a Firebase password-reset email. Resolves even for unknown
+   * addresses (no account enumeration). */
+  forgotPassword: (email: string) => Promise<void>;
+  /** Current Firebase ID token for API calls. Kept fresh by the SDK. */
   getAccessToken: () => string | null;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
+const NO_ACCESS = "This account does not have access to the Gawacha Bazaar admin panel.";
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<AuthState>({ user: null, status: "loading", error: null });
-  const accessTokenRef = useRef<string | null>(null);
+  const tokenRef = useRef<string | null>(null);
+  const profileUidRef = useRef<string | null>(null);
+  const verificationSentRef = useRef(false);
 
-  const clearSession = useCallback(() => {
-    accessTokenRef.current = null;
-    localStorage.removeItem(REFRESH_TOKEN_KEY);
-    setState({ user: null, status: "unauthenticated", error: null });
+  const rejectSession = useCallback(async (error: string | null) => {
+    tokenRef.current = null;
+    profileUidRef.current = null;
+    setState({ user: null, status: "unauthenticated", error });
+    await signOut(firebaseAuth()).catch(() => undefined);
   }, []);
+
+  // One listener drives the whole session: restores it on reload, reacts to
+  // sign-in/sign-out, and receives every refreshed ID token (the SDK renews
+  // it before its 1h expiry while a listener is attached), so
+  // getAccessToken() never hands out a stale token.
+  useEffect(() => {
+    if (missingFirebaseConfig.length) {
+      setState({ user: null, status: "unauthenticated", error: "Sign-in is not configured for this deployment." });
+      return;
+    }
+    const auth = firebaseAuth();
+    return onIdTokenChanged(auth, async (fbUser: FirebaseUser | null) => {
+      if (!fbUser) {
+        tokenRef.current = null;
+        profileUidRef.current = null;
+        setState((s) => ({ user: null, status: "unauthenticated", error: s.error }));
+        return;
+      }
+      const token = await fbUser.getIdToken();
+      tokenRef.current = token;
+      if (profileUidRef.current === fbUser.uid) return; // token refresh only
+
+      try {
+        const profile = await fetchMe(token);
+        if (!canOpenAdminPanel(profile.roles)) {
+          await rejectSession(NO_ACCESS);
+          return;
+        }
+        if (!profile.email_verified && profile.sign_in_provider === "password") {
+          if (!verificationSentRef.current) {
+            verificationSentRef.current = true;
+            await sendEmailVerification(fbUser).catch(() => undefined);
+          }
+          await rejectSession(
+            "Verify your email address first - we sent a link to your inbox. Then sign in again.",
+          );
+          return;
+        }
+        profileUidRef.current = fbUser.uid;
+        setState({ user: profile, status: "authenticated", error: null });
+      } catch (err) {
+        const noAppUser = err instanceof ApiError && err.code === "ACCOUNT_NOT_REGISTERED";
+        await rejectSession(
+          noAppUser ? NO_ACCESS : err instanceof ApiError ? err.message : "Unable to sign in. Please try again.",
+        );
+      }
+    });
+  }, [rejectSession]);
 
   const login = useCallback(async (identifier: string, password: string) => {
     setState((s) => ({ ...s, error: null }));
+    const auth = firebaseAuth();
+    const trimmed = identifier.trim();
+    const isEmail = trimmed.includes("@");
+
     try {
-      const result = await apiLogin(identifier, password);
-      if (!canOpenAdminPanel(result.user.roles)) {
-        // Deliberately do not store any tokens for a user who cannot open
-        // the admin panel at all - this is a real customer/wholesaler
-        // account, not a staff account, and should never see this app.
-        setState({
-          user: null,
-          status: "unauthenticated",
-          error: "This account does not have access to the Gawacha Bazaar admin panel.",
-        });
+      if (isEmail) {
+        try {
+          await signInWithEmailAndPassword(auth, trimmed, password);
+          return; // onIdTokenChanged takes it from here
+        } catch (err) {
+          if (!NOT_IN_FIREBASE_CODES.has(firebaseErrorCode(err) ?? "")) throw err;
+        }
+      }
+      // Not a Firebase user (yet), or a phone number was entered: an account
+      // from before the Firebase cutover moves over once, keeping its password.
+      const { email } = await migrateLegacyAccount(trimmed, password);
+      await signInWithEmailAndPassword(auth, email, password);
+    } catch (err) {
+      if (err instanceof ApiError) {
+        if (err.code === "PASSWORD_RESET_REQUIRED") {
+          const email = (err.details as { email?: string } | null)?.email;
+          if (email) await sendPasswordResetEmail(auth, email).catch(() => undefined);
+          setState({ user: null, status: "unauthenticated", error: err.message });
+          return;
+        }
+        const message = err.status === 401 ? "Incorrect email or password." : err.message;
+        setState({ user: null, status: "unauthenticated", error: message });
         return;
       }
-      accessTokenRef.current = result.access_token;
-      localStorage.setItem(REFRESH_TOKEN_KEY, result.refresh_token);
-      setState({ user: result.user, status: "authenticated", error: null });
-    } catch (err) {
-      const message = err instanceof ApiError ? err.message : "Unable to sign in. Please try again.";
-      setState({ user: null, status: "unauthenticated", error: message });
+      setState({ user: null, status: "unauthenticated", error: firebaseErrorMessage(err, "Unable to sign in. Please try again.") });
     }
   }, []);
 
   const logout = useCallback(async () => {
-    const refreshToken = localStorage.getItem(REFRESH_TOKEN_KEY);
-    if (refreshToken) await apiLogout(refreshToken);
-    clearSession();
-  }, [clearSession]);
+    await rejectSession(null);
+  }, [rejectSession]);
 
-  const getAccessToken = useCallback(() => accessTokenRef.current, []);
-
-  // On first load, silently re-establish the session from the stored
-  // refresh token (survives a page reload without asking for a password
-  // again) - mirrors the pattern already used by the mobile app.
-  //
-  // Guarded by a ref, not just the effect's own lifecycle: React Strict
-  // Mode (on by default in Next dev) deliberately double-invokes effects,
-  // and refresh-token rotation makes that fatal here - the second call
-  // would present the OLD (now-invalidated-by-the-first-call) refresh
-  // token, get rejected, and wipe out the session the first call just
-  // legitimately established. This ref makes the refresh a true
-  // once-per-mount action regardless of how many times the effect body
-  // itself runs.
-  const hasAttemptedRefresh = useRef(false);
-  useEffect(() => {
-    if (hasAttemptedRefresh.current) return;
-    hasAttemptedRefresh.current = true;
-
-    const storedRefreshToken = localStorage.getItem(REFRESH_TOKEN_KEY);
-    if (!storedRefreshToken) {
-      setState({ user: null, status: "unauthenticated", error: null });
-      return;
-    }
-    (async () => {
-      try {
-        const tokens = await refreshSession(storedRefreshToken);
-        accessTokenRef.current = tokens.access_token;
-        localStorage.setItem(REFRESH_TOKEN_KEY, tokens.refresh_token);
-        const profile = await fetchMe(tokens.access_token);
-        if (!canOpenAdminPanel(profile.roles)) {
-          clearSession();
-          return;
-        }
-        setState({ user: profile, status: "authenticated", error: null });
-      } catch {
-        clearSession();
+  const forgotPassword = useCallback(async (email: string) => {
+    try {
+      await sendPasswordResetEmail(firebaseAuth(), email.trim());
+    } catch (err) {
+      // Only surface actionable errors; "user not found" stays silent.
+      const code = firebaseErrorCode(err);
+      if (code === "auth/invalid-email" || code === "auth/too-many-requests" || code === "auth/network-request-failed") {
+        throw new Error(firebaseErrorMessage(err));
       }
-    })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }
   }, []);
 
+  const getAccessToken = useCallback(() => tokenRef.current, []);
+
   return (
-    <AuthContext.Provider value={{ ...state, login, logout, getAccessToken }}>
+    <AuthContext.Provider value={{ ...state, login, logout, forgotPassword, getAccessToken }}>
       {children}
     </AuthContext.Provider>
   );

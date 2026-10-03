@@ -13,7 +13,6 @@ table definitions.
 from app.models.ad import Ad
 from app.models.address import Address
 from app.models.admin_action_log import AdminActionLog
-from app.models.auth_session import AuthSession
 from app.models.batch import Batch
 from app.models.bulk_customer_profile import BulkCustomerProfile
 from app.models.bulk_order_request import BulkOrderRequest
@@ -62,7 +61,6 @@ __all__ = [
     "Ad",
     "Address",
     "AdminActionLog",
-    "AuthSession",
     "Batch",
     "BulkCustomerProfile",
     "BulkOrderRequest",

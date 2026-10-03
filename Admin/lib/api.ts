@@ -12,22 +12,14 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8
 export interface UserProfile {
   id: number;
   name: string;
-  email: string;
-  phone: string;
+  email: string | null;
+  phone: string | null;
   status: string;
   created_at: string;
   roles: string[];
-}
-
-export interface TokenPair {
-  access_token: string;
-  refresh_token: string;
-  token_type: string;
-  expires_in: number;
-}
-
-export interface LoginResponse extends TokenPair {
-  user: UserProfile;
+  /** From the verified Firebase ID token. */
+  email_verified: boolean;
+  sign_in_provider: string | null;
 }
 
 export class ApiError extends Error {
@@ -57,21 +49,16 @@ async function parseErrorResponse(response: Response): Promise<ApiError> {
   }
 }
 
-export async function login(identifier: string, password: string): Promise<LoginResponse> {
-  const response = await fetch(`${API_BASE_URL}/auth/login`, {
+/**
+ * One-time move of a pre-Firebase account: the backend checks the old
+ * password, creates the Firebase user with it, and returns the email to
+ * sign in with. Only called after Firebase rejected the credentials.
+ */
+export async function migrateLegacyAccount(identifier: string, password: string): Promise<{ email: string }> {
+  const response = await fetch(`${API_BASE_URL}/auth/legacy-migrate`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ identifier, password }),
-  });
-  if (!response.ok) throw await parseErrorResponse(response);
-  return response.json();
-}
-
-export async function refreshSession(refreshToken: string): Promise<TokenPair> {
-  const response = await fetch(`${API_BASE_URL}/auth/refresh`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ refresh_token: refreshToken }),
   });
   if (!response.ok) throw await parseErrorResponse(response);
   return response.json();
@@ -85,19 +72,11 @@ export async function fetchMe(accessToken: string): Promise<UserProfile> {
   return response.json();
 }
 
-export async function logout(refreshToken: string): Promise<void> {
-  await fetch(`${API_BASE_URL}/auth/logout`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ refresh_token: refreshToken }),
-  }).catch(() => undefined);
-}
-
 /**
- * Authenticated fetch used by every admin module. Attaches the bearer
- * token; the caller is responsible for handling a 401 by triggering a
- * refresh (see `lib/auth-context.tsx`) since only that context holds the
- * refresh token.
+ * Authenticated fetch used by every admin module. Attaches the Firebase ID
+ * token as the bearer token. The Firebase SDK refreshes that token before
+ * it expires (see `lib/auth-context.tsx`), so callers just pass the
+ * current value from `getAccessToken()`.
  */
 export async function apiFetch(
   path: string,

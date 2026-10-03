@@ -1,124 +1,83 @@
-from typing import Any
+"""Authentication endpoints.
+
+Sign-up, sign-in, sign-out, email verification, password reset, Google
+and phone OTP all happen client-side against Firebase Auth. The backend
+only needs to (a) turn a verified Firebase identity into an application
+user and (b) migrate pre-Firebase accounts once.
+"""
 
 from fastapi import APIRouter, Depends, Request, status
+from fastapi.security import HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 
 from app.core.rate_limit import limiter
-from app.dependencies.auth import get_current_user
+from app.dependencies.auth import bearer_scheme, bearer_token, get_auth_context
 from app.dependencies.database import get_db
-from app.models.user import User
 from app.schemas.auth import (
-    LoginRequest,
-    LogoutResponse,
-    RefreshTokenRequest,
-    RefreshTokenResponse,
-    RegisterRequest,
-    TokenResponse,
-    UserResponse,
+    AuthUserResponse,
+    LegacyMigrationRequest,
+    LegacyMigrationResponse,
+    SyncUserRequest,
 )
-from app.services.auth import AuthService
+from app.services.auth import AuthContext, AuthService
 
 router = APIRouter()
 
 
-def _extract_client_meta(request: Request) -> dict[str, Any]:
-    """Extract non-sensitive client metadata for server session tracking."""
-    return {
-        "ip_address": request.client.host if request.client else None,
-        "user_agent": request.headers.get("user-agent"),
-        "device_name": request.headers.get("x-device-name"),
-    }
-
-
 @router.post(
-    "/register",
-    response_model=TokenResponse,
-    status_code=status.HTTP_201_CREATED,
-    summary="Register Customer Account",
-    description="Registers a new customer account, assigns the default CUSTOMER role, and returns an authenticated session.",
-)
-@limiter.limit("5/minute")
-def register(
-    payload: RegisterRequest,
-    request: Request,
-    db: Session = Depends(get_db),
-) -> TokenResponse:
-    auth_service = AuthService(db)
-    client_meta = _extract_client_meta(request)
-    return auth_service.register_user(payload, client_meta=client_meta)
-
-
-@router.post(
-    "/login",
-    response_model=TokenResponse,
+    "/sync",
+    response_model=AuthUserResponse,
     status_code=status.HTTP_200_OK,
-    summary="User Login",
-    description="Authenticates by email or phone with Argon2id and enumeration protection, returning a new session.",
-)
-@limiter.limit("5/minute")
-def login(
-    payload: LoginRequest,
-    request: Request,
-    db: Session = Depends(get_db),
-) -> TokenResponse:
-    auth_service = AuthService(db)
-    client_meta = _extract_client_meta(request)
-    return auth_service.authenticate(payload, client_meta=client_meta)
-
-
-@router.post(
-    "/refresh",
-    response_model=RefreshTokenResponse,
-    status_code=status.HTTP_200_OK,
-    summary="Rotate Refresh Token",
-    description="Rotates opaque refresh token and issues a new access token under row-level database lock.",
+    summary="Synchronize Firebase User",
+    description=(
+        "Call after every Firebase sign-in/sign-up with the Firebase ID token as Bearer. "
+        "Finds, links, or creates the application user for the verified identity. "
+        "Idempotent; identity comes only from the token, never from the body."
+    ),
 )
 @limiter.limit("20/minute")
-def refresh(
-    payload: RefreshTokenRequest,
+def sync_user(
     request: Request,
+    payload: SyncUserRequest | None = None,
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
     db: Session = Depends(get_db),
-) -> RefreshTokenResponse:
-    auth_service = AuthService(db)
-    client_meta = _extract_client_meta(request)
-    return auth_service.refresh_session(
-        payload.refresh_token,
-        client_meta=client_meta,
-    )
+) -> AuthUserResponse:
+    return AuthService(db).sync_user(bearer_token(credentials), payload or SyncUserRequest())
 
 
 @router.post(
-    "/logout",
-    response_model=LogoutResponse,
+    "/legacy-migrate",
+    response_model=LegacyMigrationResponse,
     status_code=status.HTTP_200_OK,
-    summary="User Logout",
-    description="Revokes the server-side authentication session identified by the refresh token. Safe to repeat.",
+    summary="Upgrade Pre-Firebase Account",
+    description=(
+        "One-time move of an account created before Firebase: verifies the old password, "
+        "creates the Firebase user with it, and erases the stored hash. Call only after "
+        "Firebase rejected an email/password sign-in."
+    ),
 )
-def logout(
-    payload: RefreshTokenRequest,
+@limiter.limit("5/minute")
+def legacy_migrate(
+    payload: LegacyMigrationRequest,
+    request: Request,
     db: Session = Depends(get_db),
-) -> LogoutResponse:
-    auth_service = AuthService(db)
-    return auth_service.logout(payload.refresh_token)
+) -> LegacyMigrationResponse:
+    return AuthService(db).migrate_legacy_account(payload)
 
 
 @router.get(
     "/me",
-    response_model=UserResponse,
+    response_model=AuthUserResponse,
     status_code=status.HTTP_200_OK,
     summary="Current Authenticated User",
-    description="Returns the profile of the currently authenticated user. Never exposes sensitive fields.",
+    description=(
+        "Profile of the signed-in user plus `email_verified`. Reachable before email "
+        "verification so the app can show the verify screen; every other protected "
+        "route requires it for email/password sign-ins."
+    ),
 )
 def get_me(
-    current_user: User = Depends(get_current_user),
+    ctx: AuthContext = Depends(get_auth_context),
     db: Session = Depends(get_db),
-) -> UserResponse:
-    return UserResponse(
-        id=current_user.id,
-        name=current_user.name,
-        email=current_user.email,
-        phone=current_user.phone,
-        status=current_user.status,
-        created_at=current_user.created_at,
-        roles=AuthService(db).get_role_names(current_user.id),
-    )
+) -> AuthUserResponse:
+    return AuthService(db).to_auth_user_response(ctx)

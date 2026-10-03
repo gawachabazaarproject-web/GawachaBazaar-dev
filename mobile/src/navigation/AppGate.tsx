@@ -3,6 +3,7 @@ import { useRouter, useSegments } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
 import { useAuthStore } from "@/store/authStore";
 import { addressApi } from "@/api";
+import { firebaseConfigured } from "@/auth/firebase";
 
 /**
  * Redirect gate: authenticated + has-an-address decides which top-level
@@ -26,6 +27,7 @@ export function AppGate({ children }: { children: React.ReactNode }) {
   const status = useAuthStore((s) => s.status);
 
   const inAuthGroup = segments[0] === "(auth)";
+  const authScreen = inAuthGroup ? (segments as string[])[1] : undefined;
   const inOnboardingGroup = segments[0] === "(onboarding)";
 
   const addressesQuery = useQuery({
@@ -36,10 +38,26 @@ export function AppGate({ children }: { children: React.ReactNode }) {
   });
 
   useEffect(() => {
+    // Still restoring the Firebase session: render nothing new, so there is
+    // no login-screen flash before a persisted session comes back.
     if (status === "restoring") return;
 
+    if (!firebaseConfigured) {
+      if (authScreen !== "auth-error") router.replace("/(auth)/auth-error");
+      return;
+    }
+
+    // Email-link handler works in any state (a reset link can be opened
+    // while signed in or out).
+    if (authScreen === "action") return;
+
     if (status === "unauthenticated") {
-      if (!inAuthGroup) router.replace("/(auth)/login");
+      if (!inAuthGroup || authScreen === "verify-email") router.replace("/(auth)/login");
+      return;
+    }
+
+    if (status === "verifyingEmail") {
+      if (authScreen !== "verify-email") router.replace("/(auth)/verify-email");
       return;
     }
 
@@ -54,7 +72,7 @@ export function AppGate({ children }: { children: React.ReactNode }) {
     if ((inAuthGroup || inOnboardingGroup) && hasAddress) {
       router.replace("/(tabs)");
     }
-  }, [status, inAuthGroup, inOnboardingGroup, addressesQuery.data, addressesQuery.isLoading, router]);
+  }, [status, inAuthGroup, authScreen, inOnboardingGroup, addressesQuery.data, addressesQuery.isLoading, router]);
 
   return <>{children}</>;
 }

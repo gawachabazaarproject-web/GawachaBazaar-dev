@@ -20,9 +20,8 @@ from app.core.roles import (
     OPERATIONS,
     WHOLESALER,
 )
-from app.core.security import create_access_token, hash_password
+from app.core.security import hash_password
 from app.models.address import Address
-from app.models.auth_session import AuthSession
 from app.models.batch import Batch
 from app.models.bulk_order_request import BulkOrderRequest
 from app.models.category import Category
@@ -38,6 +37,7 @@ from app.models.role import Role
 from app.models.supplier import Supplier
 from app.models.user import User
 from app.models.user_role import UserRole
+from tests.firebase_fake import auth_headers_for
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -70,15 +70,7 @@ def _create_user_with_role(db_session: Session, role_name: str, email: str) -> U
 
 
 def _auth_headers(db_session: Session, user: User) -> dict[str, str]:
-    session = AuthSession(
-        user_id=user.id, refresh_token_hash=f"dummy-hash-{user.id}-{user.email}",
-        expires_at=datetime.now(UTC) + timedelta(days=30),
-    )
-    db_session.add(session)
-    db_session.commit()
-    db_session.refresh(session)
-    token = create_access_token(user_id=user.id, session_id=session.id)
-    return {"Authorization": f"Bearer {token}"}
+    return auth_headers_for(db_session, user)
 
 
 def _customer(db_session: Session, tag: str) -> tuple[User, dict[str, str]]:

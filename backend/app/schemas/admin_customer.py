@@ -66,8 +66,8 @@ class AdminCustomerListItemResponse(BaseSchema):
 
     id: int
     name: str
-    email: str
-    phone: str
+    email: str | None = None
+    phone: str | None = None
     account_status: str
     order_count: int
     completed_order_count: int
@@ -109,8 +109,8 @@ class CustomerOrderSummaryResponse(BaseSchema):
 class AdminCustomerDetailResponse(BaseSchema):
     id: int
     name: str
-    email: str
-    phone: str
+    email: str | None = None
+    phone: str | None = None
     account_status: str
     roles: list[str]
     is_bulk_customer: bool

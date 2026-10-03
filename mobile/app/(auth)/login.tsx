@@ -1,127 +1,131 @@
 import React, { useState } from "react";
-import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from "react-native";
-import { Link } from "expo-router";
-import { Screen } from "@/components/Screen";
+import { Pressable, View } from "react-native";
+import { Link, useRouter } from "expo-router";
 import { Text } from "@/components/Text";
 import { TextField } from "@/components/TextField";
 import { Button } from "@/components/Button";
-import { Wordmark } from "@/components/Wordmark";
 import { useAuthStore } from "@/store/authStore";
-import { toApiError } from "@/api";
-import { colors, spacing } from "@/theme";
-import { validateLoginIdentifier, validatePassword } from "@/utils/validation";
+import { authErrorMessage } from "@/auth/errors";
+import { AccountExistsError } from "@/auth/types";
+import { colors } from "@/theme";
+import { validateEmail } from "@/utils/validation";
+import { AuthScreen, ErrorBanner, GoogleButton, OrDivider, PhoneButton, authStyles } from "@/features/auth/AuthParts";
 
-type FieldErrors = { identifier?: string; password?: string };
+type FieldErrors = { email?: string; password?: string };
 
 export default function LoginScreen() {
+  const router = useRouter();
   const login = useAuthStore((s) => s.login);
-  const [identifier, setIdentifier] = useState("");
+  const loginWithGoogle = useAuthStore((s) => s.loginWithGoogle);
+  const authError = useAuthStore((s) => s.authError);
+  const linkEmail = useAuthStore((s) => s.linkEmail);
+  const clearAuthError = useAuthStore((s) => s.clearAuthError);
+  const [email, setEmail] = useState(linkEmail ?? "");
   const [password, setPassword] = useState("");
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState<"email" | "google" | null>(null);
 
   const handleLogin = async () => {
     setError(null);
+    clearAuthError();
     const errors: FieldErrors = {
-      identifier: validateLoginIdentifier(identifier) ?? undefined,
-      password: validatePassword(password) ?? undefined,
+      email: validateEmail(email) ?? undefined,
+      password: password ? undefined : "Enter your password.",
     };
     setFieldErrors(errors);
-    if (errors.identifier || errors.password) return;
+    if (errors.email || errors.password) return;
 
-    setLoading(true);
+    setLoading("email");
     try {
-      await login(identifier.trim(), password);
-      // AppGate handles the redirect once `status` flips to authenticated.
+      await login(email, password);
+      // AppGate redirects once the session settles.
     } catch (err) {
-      setError(toApiError(err).message);
+      setError(authErrorMessage(err, "Unable to log in. Please try again."));
     } finally {
-      setLoading(false);
+      setLoading(null);
+    }
+  };
+
+  const handleGoogle = async () => {
+    setError(null);
+    clearAuthError();
+    setLoading("google");
+    try {
+      await loginWithGoogle(); // "cancelled" needs no message
+    } catch (err) {
+      if (err instanceof AccountExistsError) {
+        router.push("/(auth)/link-account");
+        return;
+      }
+      setError(authErrorMessage(err, "Google sign-in failed. Please try again."));
+    } finally {
+      setLoading(null);
     }
   };
 
   return (
-    <Screen>
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.select({ ios: "padding", android: undefined })}
-      >
-        <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-          <View style={styles.header}>
-            <Wordmark />
-            <Text variant="body" color={colors.textSecondary} style={styles.subtitle}>
-              Fresh groceries, delivered fast.
-            </Text>
-          </View>
+    <AuthScreen showWordmark subtitle="Fresh groceries, delivered fast.">
+      <GoogleButton onPress={handleGoogle} loading={loading === "google"} disabled={loading === "email"} />
 
-          <View style={styles.form}>
-            <TextField
-              label="Email or phone"
-              placeholder="you@example.com"
-              autoCapitalize="none"
-              autoComplete="username"
-              keyboardType="email-address"
-              value={identifier}
-              onChangeText={(v) => {
-                setIdentifier(v);
-                if (fieldErrors.identifier) setFieldErrors((e) => ({ ...e, identifier: undefined }));
-              }}
-              error={fieldErrors.identifier}
-            />
-            <View style={{ height: spacing.base }} />
-            <TextField
-              label="Password"
-              placeholder="Your password"
-              secureTextEntry
-              autoCapitalize="none"
-              autoCorrect={false}
-              autoComplete="current-password"
-              value={password}
-              onChangeText={(v) => {
-                setPassword(v);
-                if (fieldErrors.password) setFieldErrors((e) => ({ ...e, password: undefined }));
-              }}
-              onSubmitEditing={handleLogin}
-              error={fieldErrors.password}
-            />
-            {/* No email/SMS channel exists to deliver a reset code - support
-                resets the password from the Admin panel after confirming
-                who the customer is. */}
-            <Text variant="bodySmall" color={colors.textSecondary} style={styles.forgotHint}>
-              Forgot your password? Contact GawachaBazaar support and we'll reset it for you.
-            </Text>
-            {error ? (
-              <Text variant="bodySmall" color={colors.error} style={styles.error}>
-                {error}
-              </Text>
-            ) : null}
-            <View style={{ height: spacing.xl }} />
-            <Button label="Log in" onPress={handleLogin} loading={loading} fullWidth size="lg" />
-          </View>
+      <OrDivider />
 
-          <View style={styles.footer}>
-            <Text variant="body" color={colors.textSecondary}>
-              New to GawachaBazaar?{" "}
+      <TextField
+        label="Email"
+        placeholder="you@example.com"
+        autoCapitalize="none"
+        autoComplete="email"
+        keyboardType="email-address"
+        textContentType="emailAddress"
+        value={email}
+        onChangeText={(v) => {
+          setEmail(v);
+          if (fieldErrors.email) setFieldErrors((e) => ({ ...e, email: undefined }));
+        }}
+        error={fieldErrors.email}
+      />
+      <View style={authStyles.gap} />
+      <TextField
+        label="Password"
+        placeholder="Your password"
+        secureTextEntry
+        autoComplete="current-password"
+        textContentType="password"
+        value={password}
+        onChangeText={(v) => {
+          setPassword(v);
+          if (fieldErrors.password) setFieldErrors((e) => ({ ...e, password: undefined }));
+        }}
+        onSubmitEditing={handleLogin}
+        error={fieldErrors.password}
+      />
+      <View style={authStyles.linkRow}>
+        <Link href={{ pathname: "/(auth)/forgot-password", params: email ? { email } : {} }} asChild>
+          <Pressable accessibilityRole="link" hitSlop={8}>
+            <Text variant="bodyMedium" color={colors.primary}>
+              Forgot password?
             </Text>
-            <Link href="/(auth)/register" asChild>
-              <Text variant="bodyMedium" color={colors.primary}>
-                Create an account
-              </Text>
-            </Link>
-          </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
-    </Screen>
+          </Pressable>
+        </Link>
+      </View>
+
+      <ErrorBanner message={error ?? authError} />
+      <View style={authStyles.gapLg} />
+      <Button label="Sign in" onPress={handleLogin} loading={loading === "email"} disabled={loading === "google"} fullWidth size="lg" />
+
+      <View style={authStyles.footer}>
+        <Text variant="body" color={colors.textSecondary}>
+          Don&apos;t have an account?{" "}
+        </Text>
+        <Link href="/(auth)/register" asChild>
+          <Text variant="bodyMedium" color={colors.primary}>
+            Create account
+          </Text>
+        </Link>
+      </View>
+
+      <OrDivider />
+      <PhoneButton onPress={() => router.push("/(auth)/phone")} disabled={loading !== null} />
+    </AuthScreen>
   );
 }
-
-const styles = StyleSheet.create({
-  content: { flexGrow: 1, padding: spacing.xl, justifyContent: "center" },
-  header: { marginBottom: spacing["3xl"], alignItems: "center" },
-  subtitle: { marginTop: spacing.sm, textAlign: "center" },
-  form: {},
-  forgotHint: { marginTop: spacing.sm },
-  error: { marginTop: spacing.md },
-  footer: { flexDirection: "row", justifyContent: "center", marginTop: spacing["2xl"] },
-});

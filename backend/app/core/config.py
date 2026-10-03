@@ -5,17 +5,6 @@ from typing import Literal
 from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-# Every placeholder secret value that ships in source (this file and
-# docker-compose.yml both define their own dev fallback strings) - if
-# APP_ENV=production is ever set while one of these is still active, the
-# JWT signing key or webhook secret is public knowledge to anyone who has
-# read this repository. Startup fails closed rather than silently running
-# with a forgeable secret in production - see Settings.check_production_secrets.
-_KNOWN_PLACEHOLDER_SECRETS = {
-    "dev-secret-key-replace-in-production-min-32-chars",
-    "dev-container-secret-key-32chars-min",
-}
-
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
@@ -31,13 +20,17 @@ class Settings(BaseSettings):
     HOST: str = "0.0.0.0"
     PORT: int = 8000
 
-    # Security
-    JWT_SECRET_KEY: str = "dev-secret-key-replace-in-production-min-32-chars"
-    JWT_ALGORITHM: str = "HS256"
-    JWT_ISSUER: str = "gawachabazaar"
-    JWT_AUDIENCE: str = "gawachabazaar:api"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
-    REFRESH_TOKEN_EXPIRE_DAYS: int = 30
+    # Firebase Authentication. Firebase owns every credential (passwords,
+    # Google OAuth, phone OTP); this backend only verifies Firebase ID
+    # tokens with the Admin SDK and maps the verified UID to a `users` row.
+    # FIREBASE_SERVICE_ACCOUNT_JSON is the service-account key JSON as a
+    # single secret env value (Render secret) - never commit it. When it is
+    # empty, Application Default Credentials (GOOGLE_APPLICATION_CREDENTIALS)
+    # are used instead. ID-token verification itself only needs the
+    # project id; the key is needed for admin operations (creating staff
+    # accounts, password resets, migrating legacy accounts).
+    FIREBASE_PROJECT_ID: str = ""
+    FIREBASE_SERVICE_ACCOUNT_JSON: str = ""
 
     # Database
     DATABASE_URL: str = (
@@ -94,19 +87,16 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def check_production_secrets(self) -> "Settings":
-        """Fail closed: refuse to start with a known-placeholder or
-        too-short secret when APP_ENV=production. This is the single
-        deployment mistake with the worst consequence in this codebase -
-        a public default JWT_SECRET_KEY lets anyone forge a valid access
-        token for any user, including ADMIN. Every other environment
-        (development/testing/staging) is intentionally left alone so this
-        never affects local dev or CI."""
+        """Fail closed: refuse to start a production instance that cannot
+        verify sign-ins or would run half-configured payments. Every other
+        environment (development/testing/staging) is intentionally left
+        alone so this never affects local dev or CI."""
         if not self.is_production:
             return self
 
         problems: list[str] = []
-        if self.JWT_SECRET_KEY in _KNOWN_PLACEHOLDER_SECRETS or len(self.JWT_SECRET_KEY) < 32:
-            problems.append("JWT_SECRET_KEY is a known placeholder or shorter than 32 characters")
+        if not self.FIREBASE_PROJECT_ID:
+            problems.append("FIREBASE_PROJECT_ID is empty (no sign-in could ever be verified)")
         if self.RAZORPAY_KEY_ID and not (self.RAZORPAY_KEY_SECRET and self.RAZORPAY_WEBHOOK_SECRET):
             # Half-configured Razorpay would accept payments whose webhooks
             # can never be verified (or can't call the API at all).
@@ -116,7 +106,7 @@ class Settings(BaseSettings):
         if problems:
             raise ValueError(
                 "Refusing to start with APP_ENV=production: " + "; ".join(problems) + ". "
-                "Set real, unique, high-entropy secrets via environment variables/secret manager."
+                "Set them via environment variables/secret manager."
             )
         return self
 

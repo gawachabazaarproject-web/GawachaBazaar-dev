@@ -108,6 +108,7 @@ export default function RootLayout() {
               <Stack.Screen name="account/profile" options={{ presentation: "card" }} />
               <Stack.Screen name="account/support" options={{ presentation: "card" }} />
               <Stack.Screen name="account/settings" options={{ presentation: "card" }} />
+              <Stack.Screen name="account/add-phone" options={{ presentation: "card" }} />
               <Stack.Screen name="bulk/review" options={{ presentation: "modal" }} />
               <Stack.Screen name="bulk/success" options={{ presentation: "fullScreenModal", gestureEnabled: false }} />
               <Stack.Screen name="bulk/requests" options={{ presentation: "card" }} />

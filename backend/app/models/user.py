@@ -26,13 +26,22 @@ if TYPE_CHECKING:
 
 
 class User(Base):
-    """User account identity."""
+    """Application user. Identity (credentials, providers, verification)
+    lives in Firebase Auth; `firebase_uid` is the link. `email`/`phone` are
+    copies of verified Firebase claims kept for business use (orders,
+    notifications, admin search), not login identifiers."""
 
     __tablename__ = "users"
     __table_args__ = (
         CheckConstraint(
             "status IN ('ACTIVE', 'INACTIVE', 'SUSPENDED')",
             name="ck_users_status",
+        ),
+        # A phone-OTP user has no email and a Google user has no phone,
+        # but every row must be reachable by at least one of them.
+        CheckConstraint(
+            "email IS NOT NULL OR phone IS NOT NULL",
+            name="ck_users_email_or_phone",
         ),
     )
 
@@ -41,23 +50,31 @@ class User(Base):
         Identity(),
         primary_key=True,
     )
+    firebase_uid: Mapped[str | None] = mapped_column(
+        String(128),
+        unique=True,
+        nullable=True,  # NULL only for pre-Firebase accounts not yet migrated
+    )
     name: Mapped[str] = mapped_column(
         String(150),
         nullable=False,
     )
-    email: Mapped[str] = mapped_column(
+    email: Mapped[str | None] = mapped_column(
         String(255),
         unique=True,
-        nullable=False,
+        nullable=True,
     )
-    phone: Mapped[str] = mapped_column(
+    phone: Mapped[str | None] = mapped_column(
         String(20),
         unique=True,
-        nullable=False,
+        nullable=True,
     )
-    password_hash: Mapped[str] = mapped_column(
+    # Legacy argon2 hash for accounts created before the Firebase cutover.
+    # Cleared the moment the account is migrated to Firebase; never set
+    # for new accounts.
+    password_hash: Mapped[str | None] = mapped_column(
         Text,
-        nullable=False,
+        nullable=True,
     )
     status: Mapped[str] = mapped_column(
         String(30),

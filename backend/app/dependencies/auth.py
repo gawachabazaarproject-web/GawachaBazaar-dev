@@ -8,33 +8,49 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
 from app.core.permissions import role_has_permission
+from app.core.roles import ADMIN, CUSTOMER
 from app.dependencies.database import get_db
 from app.exceptions.base import AuthenticationError, AuthorizationError
 from app.models.role import Role
 from app.models.user import User
 from app.models.user_role import UserRole
-from app.services.auth import AuthService
+from app.services.auth import AuthContext, AuthService
 
 bearer_scheme = HTTPBearer(auto_error=False)
+
+
+def bearer_token(credentials: HTTPAuthorizationCredentials | None) -> str:
+    if not credentials or not credentials.credentials:
+        raise AuthenticationError("Not authenticated.")
+    if credentials.scheme.lower() != "bearer":
+        raise AuthenticationError("Invalid authentication scheme.")
+    return credentials.credentials
+
+
+def get_auth_context(
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
+    db: Session = Depends(get_db),
+) -> AuthContext:
+    """Verified Firebase identity + ACTIVE application user, WITHOUT the
+    email-verification gate. Only for endpoints an unverified user must
+    reach (GET /auth/me, so the app can show the verify-email screen)."""
+    return AuthService(db).resolve(bearer_token(credentials))
 
 
 def get_current_user(
     credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
     db: Session = Depends(get_db),
 ) -> User:
-    """Resolve and validate the authenticated user from the Bearer JWT access token.
+    """Resolve the authenticated user from the `Authorization: Bearer
+    <Firebase ID token>` header.
 
-    Verifies signature, expiration, issuer, audience, token type ('access'),
-    and ensures the server-side session and user account in the database remain active.
+    The token is verified with the Firebase Admin SDK (signature, expiry,
+    audience = this Firebase project); the user is looked up by the
+    verified UID only - never by an id/email/phone the client sends. The
+    user must be ACTIVE, and email/password sign-ins must have a verified
+    email.
     """
-    if not credentials or not credentials.credentials:
-        raise AuthenticationError("Not authenticated.")
-
-    if credentials.scheme.lower() != "bearer":
-        raise AuthenticationError("Invalid authentication scheme.")
-
-    auth_service = AuthService(db)
-    return auth_service.resolve_current_user(credentials.credentials)
+    return AuthService(db).resolve_current_user(bearer_token(credentials))
 
 
 def require_roles(*allowed_roles: str) -> Callable[..., Any]:
@@ -106,3 +122,8 @@ def require_permission(permission: str) -> Callable[..., Any]:
         return current_user
 
     return permission_checker
+
+
+# Convenience dependencies for the two most common audiences.
+get_current_customer = require_roles(CUSTOMER)
+get_current_admin = require_roles(ADMIN)

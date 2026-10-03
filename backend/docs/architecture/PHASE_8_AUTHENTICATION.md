@@ -1,5 +1,7 @@
 # Phase 8 — Production Authentication Architecture
 
+> **Superseded (2026-09-30).** Authentication moved to Firebase Auth: the backend no longer issues JWT access/refresh tokens and `auth_sessions` was dropped (migration `c5f1a7e3d9b2`). See `deploy/FIREBASE_AUTH.md`. Kept as history.
+
 ## 1. Executive Summary
 
 Phase 8 establishes the production authentication foundation for the Gawacha Bazaar FastAPI backend service. Building upon the 25-table database foundation (Phases 1–7) and the modular-monolith application layer (Phase 7 checkpoint), Phase 8 implements server-side session management, cryptographically hardened password hashing, short-lived JWT access tokens, opaque high-entropy refresh tokens, and strict account status enforcement.

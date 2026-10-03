@@ -25,11 +25,17 @@ from sqlalchemy import Select, case, func, or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.core.firebase import FirebaseUnavailableError, get_firebase
+from app.core.logging import logger
 from app.core.roles import CUSTOMER
 from app.core.security import hash_password, normalize_email, normalize_phone
-from app.exceptions.base import BusinessValidationError, ConflictError, NotFoundError
+from app.exceptions.base import (
+    AppException,
+    BusinessValidationError,
+    ConflictError,
+    NotFoundError,
+)
 from app.models.address import Address
-from app.models.auth_session import AuthSession
 from app.models.bulk_customer_profile import BulkCustomerProfile
 from app.models.customer_note import CustomerNote
 from app.models.order import Order
@@ -69,10 +75,12 @@ _CENTS = Decimal("0.01")
 _ORDER_SORT_FIELDS = {"name", "created_at", "last_order_at", "order_count", "total_spend", "average_order_value"}
 
 
-def _mask_phone(phone: str) -> str:
+def _mask_phone(phone: str | None) -> str | None:
     """`+91XXXXXXXXXX` -> `+91******7890` - keep the country code and last
     4 digits, mask the rest. Applied whenever the caller lacks
-    `customers.view_sensitive`."""
+    `customers.view_sensitive`. Google sign-in customers may have no phone."""
+    if phone is None:
+        return None
     if len(phone) <= 6:
         return "*" * len(phone)
     visible_prefix = phone[:3] if phone.startswith("+") else phone[:0]
@@ -634,16 +642,21 @@ class CustomerService:
             user.status = new_status
             self.db.flush()
 
-            if new_status != "ACTIVE":
-                # Defense in depth: AuthService.resolve_current_user/refresh
-                # already reject any non-ACTIVE user's very next request
-                # regardless of session state, but revoking sessions here
-                # too means a still-valid access token can't even attempt
-                # one more call before that check runs.
-                now = datetime.now(UTC)
-                self.db.query(AuthSession).filter(
-                    AuthSession.user_id == user.id, AuthSession.revoked_at.is_(None)
-                ).update({"revoked_at": now}, synchronize_session=False)
+            if user.firebase_uid:
+                # Defense in depth: resolve_current_user already rejects a
+                # non-ACTIVE user's very next request. Disabling the Firebase
+                # user also stops it minting new ID tokens, and revoking ends
+                # its refresh tokens on every device. Best effort - Postgres
+                # status stays the authority if Firebase is unreachable.
+                try:
+                    firebase = get_firebase()
+                    firebase.set_disabled(user.firebase_uid, new_status != "ACTIVE")
+                    if new_status != "ACTIVE":
+                        firebase.revoke_sessions(user.firebase_uid)
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning(
+                        "FIREBASE_STATUS_SYNC_FAILED: user_id=%s (%s)", user.id, type(exc).__name__
+                    )
 
             AdminAuditService(self.db).record(
                 admin_user_id=admin_user_id,
@@ -703,7 +716,7 @@ class CustomerService:
             action="customer.email_changed" if field == "EMAIL" else "customer.phone_changed",
             resource_type="customer",
             resource_id=user_id,
-            previous_state=previous_value[:50],
+            previous_state=(previous_value or "")[:50],
             new_state=normalized[:50],
             reason=data.reason,
         )
@@ -724,14 +737,23 @@ class CustomerService:
             raise BusinessValidationError("You cannot reset your own password here.")
         user = self.get_customer_or_404(user_id)
 
-        user.password_hash = hash_password(data.new_password)
-        # Sign the customer out everywhere - whoever held a session before
-        # the reset (possibly not the real owner) must not keep it. Same
-        # revoke-not-delete precedent as admin_set_account_status.
-        now = datetime.now(UTC)
-        self.db.query(AuthSession).filter(
-            AuthSession.user_id == user.id, AuthSession.revoked_at.is_(None)
-        ).update({"revoked_at": now}, synchronize_session=False)
+        if user.firebase_uid:
+            # Firebase holds the credential. Setting it and revoking refresh
+            # tokens signs the customer out everywhere - whoever held a
+            # session before the reset (possibly not the real owner) must
+            # not keep it.
+            try:
+                firebase = get_firebase()
+                firebase.update_password(user.firebase_uid, data.new_password)
+                firebase.revoke_sessions(user.firebase_uid)
+            except FirebaseUnavailableError as exc:
+                raise AppException(
+                    "Password reset is temporarily unavailable.", status_code=503, code="AUTH_UNAVAILABLE"
+                ) from exc
+        else:
+            # Not migrated yet: the new password is what their one-time
+            # move to Firebase will be verified against.
+            user.password_hash = hash_password(data.new_password)
 
         AdminAuditService(self.db).record(
             admin_user_id=admin_user_id,

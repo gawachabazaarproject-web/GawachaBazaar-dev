@@ -20,8 +20,8 @@ x-backend-env: &backend-env
   APP_ENV: production
   DEBUG: "False"
   DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-gawacha}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@db:5432/${POSTGRES_DB:-gawachabazaar}
-  JWT_SECRET_KEY: ${JWT_SECRET_KEY:?JWT_SECRET_KEY is required}
-  JWT_ALGORITHM: HS256
+  FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID:?FIREBASE_PROJECT_ID is required}
+  FIREBASE_SERVICE_ACCOUNT_JSON: ${FIREBASE_SERVICE_ACCOUNT_JSON:-}
   # Razorpay - empty key id = online payments off (COD only). If the key id
   # is set, the backend refuses to start without the secret + webhook secret.
   RAZORPAY_KEY_ID: ${RAZORPAY_KEY_ID:-}

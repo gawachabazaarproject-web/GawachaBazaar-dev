@@ -14,8 +14,7 @@ from sqlalchemy.orm import Session
 from starlette.testclient import TestClient
 
 from app.core.roles import ADMIN, CUSTOMER
-from app.core.security import create_access_token, hash_password
-from app.models.auth_session import AuthSession
+from app.core.security import hash_password
 from app.models.category import Category
 from app.models.price import Price
 from app.models.product import Product
@@ -23,6 +22,7 @@ from app.models.product_variant import ProductVariant
 from app.models.role import Role
 from app.models.user import User
 from app.models.user_role import UserRole
+from tests.firebase_fake import auth_headers_for
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -60,17 +60,7 @@ def _create_user_with_role(
 
 
 def _auth_headers(db_session: Session, user: User) -> dict[str, str]:
-    session = AuthSession(
-        user_id=user.id,
-        refresh_token_hash=f"dummy-hash-{user.id}",
-        expires_at=datetime.now(UTC) + timedelta(days=30),
-    )
-    db_session.add(session)
-    db_session.commit()
-    db_session.refresh(session)
-
-    token = create_access_token(user_id=user.id, session_id=session.id)
-    return {"Authorization": f"Bearer {token}"}
+    return auth_headers_for(db_session, user)
 
 
 def _create_category(

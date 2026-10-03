@@ -13,37 +13,30 @@
 export interface UserResponse {
   id: number;
   name: string;
-  email: string;
-  phone: string;
+  /** Null for phone-only sign-ups. */
+  email: string | null;
+  /** Null for Google/email sign-ups that never added a phone. */
+  phone: string | null;
   status: string;
   created_at: string;
+  roles?: string[];
 }
 
-export interface TokenResponse {
-  access_token: string;
-  refresh_token: string;
-  token_type: string;
-  expires_in: number;
-  user: UserResponse;
+export interface AuthUserResponse extends UserResponse {
+  /** From the verified Firebase ID token. */
+  email_verified: boolean;
+  /** "password" | "google.com" | "phone" */
+  sign_in_provider: string | null;
 }
 
-export interface RefreshTokenResponse {
-  access_token: string;
-  refresh_token: string;
-  token_type: string;
-  expires_in: number;
+export interface SyncUserPayload {
+  first_name?: string;
+  last_name?: string;
 }
 
-export interface RegisterPayload {
-  name: string;
+export interface LegacyMigrationResponse {
   email: string;
-  phone: string;
-  password: string;
-}
-
-export interface LoginPayload {
-  identifier: string;
-  password: string;
+  message: string;
 }
 
 // ---------------------------------------------------------------------------

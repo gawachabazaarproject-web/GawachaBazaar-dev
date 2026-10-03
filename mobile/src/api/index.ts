@@ -1,4 +1,4 @@
-export { apiClient, hydrateAuthTokens, setAuthTokens, setSessionExpiredHandler } from "./client";
+export { apiClient, setAuthFailureHandler } from "./client";
 export { ApiError, toApiError } from "./errors";
 export { authApi } from "./authApi";
 export { addressApi } from "./addressApi";

@@ -1,8 +1,9 @@
 import React from "react";
 import { StyleSheet, View } from "react-native";
-import { Stack } from "expo-router";
+import { Stack, useRouter } from "expo-router";
 import { Screen } from "@/components/Screen";
 import { Text } from "@/components/Text";
+import { Button } from "@/components/Button";
 import { useAuthStore } from "@/store/authStore";
 import { colors, spacing } from "@/theme";
 
@@ -13,6 +14,7 @@ import { colors, spacing } from "@/theme";
  */
 export default function ProfileScreen() {
   const user = useAuthStore((s) => s.user);
+  const router = useRouter();
 
   return (
     <Screen>
@@ -21,6 +23,11 @@ export default function ProfileScreen() {
         <Field label="Full name" value={user?.name ?? "-"} />
         <Field label="Email" value={user?.email ?? "-"} />
         <Field label="Mobile number" value={user?.phone ?? "-"} />
+        {user && !user.phone ? (
+          <View style={styles.addPhone}>
+            <Button label="Add mobile number" variant="outline" onPress={() => router.push("/account/add-phone")} fullWidth />
+          </View>
+        ) : null}
         <Text variant="caption" color={colors.textMuted} style={styles.note}>
           Need to update your details? Contact support.
         </Text>
@@ -50,4 +57,5 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.border,
   },
   note: { marginTop: spacing.xl },
+  addPhone: { marginTop: spacing.lg },
 });

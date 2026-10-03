@@ -41,7 +41,7 @@ class AdminOrderListItemResponse(BaseSchema):
     placed_at: datetime
     customer_id: int
     customer_name: str
-    customer_email: str
+    customer_email: str | None = None
     item_count: int
     payment_status: str | None
     payment_method: str | None
@@ -67,8 +67,8 @@ class AdminOrderDetailResponse(OrderDetailResponse):
     cancelled_by_user_id: int | None
     customer_id: int
     customer_name: str
-    customer_email: str
-    customer_phone: str
+    customer_email: str | None = None
+    customer_phone: str | None = None
     payment: PaymentResponse | None
     fulfillment: FulfillmentResponse | None
     refund: AdminRefundResponse | None

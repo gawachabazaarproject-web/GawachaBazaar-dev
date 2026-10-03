@@ -1,15 +1,14 @@
-import hashlib
-import re
-import secrets
-import uuid
-from datetime import UTC, datetime, timedelta
-from typing import Any
+"""Password (legacy only) and identifier normalization helpers.
 
-import jwt
+Authentication credentials live in Firebase. `hash_password` /
+`verify_password` exist solely so accounts created before the Firebase
+cutover can be migrated on their first sign-in (AuthService.migrate_legacy_account).
+"""
+
+import re
+
 from argon2 import PasswordHasher
 from argon2.exceptions import VerifyMismatchError
-
-from app.core.config import settings
 
 _ph = PasswordHasher()
 
@@ -55,86 +54,3 @@ def normalize_phone(phone: str) -> str:
     if len(cleaned) == 12 and cleaned.startswith("91") and cleaned.isdigit():
         return f"+{cleaned}"
     raise ValueError("Invalid phone number format.")
-
-
-def generate_refresh_token() -> str:
-    """Generate cryptographically secure, high-entropy opaque refresh token.
-
-    Uses secrets.token_urlsafe(48) providing ~384 bits of entropy.
-    Raw tokens are returned only to the client and never stored server-side.
-    """
-    return secrets.token_urlsafe(48)
-
-
-def hash_refresh_token(token: str) -> str:
-    """Compute SHA-256 digest of opaque refresh token for server-side persistence.
-
-    SHA-256 is appropriate because the raw token has ~384 bits of entropy (unlike human
-    passwords which require slow, memory-hard Argon2id).
-    """
-    return hashlib.sha256(token.encode("utf-8")).hexdigest()
-
-
-def create_access_token(
-    data: dict[str, Any] | None = None,
-    *,
-    user_id: int | None = None,
-    session_id: int | None = None,
-    expires_delta: timedelta | None = None,
-) -> str:
-    """Generate a signed JWT access token adhering to Phase 8 claims architecture.
-
-    Claims: sub, sid, iat, exp, jti, type, iss, aud.
-    """
-    now = datetime.now(UTC)
-    expire = now + (
-        expires_delta
-        if expires_delta is not None
-        else timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
-    )
-    to_encode: dict[str, Any] = {
-        "iat": now,
-        "exp": expire,
-        "jti": uuid.uuid4().hex,
-        "type": "access",
-        "iss": settings.JWT_ISSUER,
-        "aud": settings.JWT_AUDIENCE,
-    }
-    if data:
-        to_encode.update(data)
-    if user_id is not None:
-        to_encode["sub"] = str(user_id)
-    if session_id is not None:
-        to_encode["sid"] = session_id
-
-    return jwt.encode(
-        to_encode,
-        settings.JWT_SECRET_KEY,
-        algorithm=settings.JWT_ALGORITHM,
-    )
-
-
-def decode_access_token(
-    token: str,
-    *,
-    verify_aud: bool = True,
-    verify_iss: bool = True,
-) -> dict[str, Any]:
-    """Decode and validate a signed JWT access token.
-
-    Validates cryptographic signature, expiration, issuer, and audience.
-    """
-    options: dict[str, Any] = {}
-    if not verify_aud:
-        options["verify_aud"] = False
-    if not verify_iss:
-        options["verify_iss"] = False
-
-    return jwt.decode(
-        token,
-        settings.JWT_SECRET_KEY,
-        algorithms=[settings.JWT_ALGORITHM],
-        issuer=settings.JWT_ISSUER if verify_iss else None,
-        audience=settings.JWT_AUDIENCE if verify_aud else None,
-        options=options,
-    )

@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { getAccessToken, getRealtimeUrl } from "@/api/client";
+import { fetchAccessToken, getRealtimeUrl } from "@/api/client";
 import { useAuthStore } from "@/store/authStore";
 
 /** Mirrors backend/app/core/realtime.py's message contract exactly - an
@@ -48,8 +48,10 @@ export function useRealtimeSync(): void {
 
     let cancelled = false;
 
-    const connect = () => {
-      const token = getAccessToken();
+    const connect = async () => {
+      // Fresh Firebase ID token per (re)connect - a cached one may have
+      // expired while the socket was up.
+      const token = await fetchAccessToken().catch(() => null);
       if (!token || cancelled) return;
 
       const ws = new WebSocket(getRealtimeUrl(token));
@@ -67,7 +69,7 @@ export function useRealtimeSync(): void {
 
       ws.onclose = () => {
         if (cancelled) return;
-        reconnectTimerRef.current = setTimeout(connect, RECONNECT_DELAY_MS);
+        reconnectTimerRef.current = setTimeout(() => void connect(), RECONNECT_DELAY_MS);
       };
 
       ws.onerror = () => {
@@ -75,7 +77,7 @@ export function useRealtimeSync(): void {
       };
     };
 
-    connect();
+    void connect();
 
     return () => {
       cancelled = true;

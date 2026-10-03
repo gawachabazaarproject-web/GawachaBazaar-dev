@@ -16,12 +16,10 @@ Architecture Conventions:
 """
 
 from app.schemas.auth import (
-    LoginRequest,
-    LogoutResponse,
-    RefreshTokenRequest,
-    RefreshTokenResponse,
-    RegisterRequest,
-    TokenResponse,
+    AuthUserResponse,
+    LegacyMigrationRequest,
+    LegacyMigrationResponse,
+    SyncUserRequest,
     UserResponse,
 )
 from app.schemas.base import (
@@ -33,16 +31,14 @@ from app.schemas.base import (
 )
 
 __all__ = [
+    "AuthUserResponse",
     "BaseSchema",
     "DatabaseHealthResponse",
     "ErrorResponse",
     "HealthResponse",
-    "LoginRequest",
-    "LogoutResponse",
+    "LegacyMigrationRequest",
+    "LegacyMigrationResponse",
     "PingResponse",
-    "RefreshTokenRequest",
-    "RefreshTokenResponse",
-    "RegisterRequest",
-    "TokenResponse",
+    "SyncUserRequest",
     "UserResponse",
 ]

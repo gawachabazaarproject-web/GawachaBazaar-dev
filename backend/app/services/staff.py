@@ -13,9 +13,19 @@ whatever non-staff role (e.g. CUSTOMER) a user already has.
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
 
+from app.core.firebase import (
+    FirebaseEmailExistsError,
+    FirebasePasswordRejectedError,
+    FirebaseUnavailableError,
+    get_firebase,
+)
 from app.core.roles import STAFF_ROLES
-from app.core.security import hash_password
-from app.exceptions.base import BusinessValidationError, ConflictError, NotFoundError
+from app.exceptions.base import (
+    AppException,
+    BusinessValidationError,
+    ConflictError,
+    NotFoundError,
+)
 from app.models.role import Role
 from app.models.user import User
 from app.models.user_role import UserRole
@@ -54,34 +64,56 @@ class StaffService:
     ) -> StaffDetailResponse:
         role = self._require_staff_role(data.role)
 
-        user = User(
-            name=data.name,
-            email=data.email,
-            phone=data.phone,
-            password_hash=hash_password(data.password),
-            status="ACTIVE",
+        taken = (
+            self.db.query(User.id)
+            .filter((User.email == data.email) | (User.phone == data.phone))
+            .first()
         )
-        self.db.add(user)
-        try:
-            self.db.flush()
-        except IntegrityError as exc:
-            self.db.rollback()
-            raise ConflictError("A user with this email or phone already exists.") from exc
+        if taken:
+            raise ConflictError("A user with this email or phone already exists.")
 
-        self.db.add(UserRole(user_id=user.id, role_id=role.id, is_primary=True))
-        AdminAuditService(self.db).record(
-            admin_user_id=admin_user_id,
-            action="staff.create",
-            resource_type="user",
-            resource_id=user.id,
-            new_state=data.role,
-            reason=f"email={data.email}",
-        )
+        # Firebase holds the credential; the admin-entered email counts as
+        # verified so the new staff member can sign in straight away.
+        firebase = get_firebase()
         try:
+            uid = firebase.create_user(
+                email=data.email, password=data.password, display_name=data.name, email_verified=True
+            )
+        except FirebaseEmailExistsError as exc:
+            raise ConflictError("A sign-in account with this email already exists.") from exc
+        except FirebasePasswordRejectedError as exc:
+            raise BusinessValidationError("Password does not meet the password policy.") from exc
+        except FirebaseUnavailableError as exc:
+            raise AppException(
+                "Creating staff accounts is temporarily unavailable.", status_code=503, code="AUTH_UNAVAILABLE"
+            ) from exc
+
+        try:
+            user = User(
+                firebase_uid=uid,
+                name=data.name,
+                email=data.email,
+                phone=data.phone,
+                status="ACTIVE",
+            )
+            self.db.add(user)
+            self.db.flush()
+            self.db.add(UserRole(user_id=user.id, role_id=role.id, is_primary=True))
+            AdminAuditService(self.db).record(
+                admin_user_id=admin_user_id,
+                action="staff.create",
+                resource_type="user",
+                resource_id=user.id,
+                new_state=data.role,
+                reason=f"email={data.email}",
+            )
             self.db.commit()
-        except IntegrityError as exc:
+        except Exception as exc:
             self.db.rollback()
-            raise ConflictError("A user with this email or phone already exists.") from exc
+            firebase.delete_user(uid)  # no orphaned sign-in without an app user
+            if isinstance(exc, IntegrityError):
+                raise ConflictError("A user with this email or phone already exists.") from exc
+            raise
 
         return self.admin_get_staff_detail(user.id)
 

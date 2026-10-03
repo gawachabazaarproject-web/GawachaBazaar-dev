@@ -11,7 +11,6 @@ real threads against real Postgres row locks (ThreadPoolExecutor), never
 mocked.
 """
 
-import secrets
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
@@ -28,11 +27,10 @@ from app.core.roles import (
     OPERATIONS,
     WHOLESALER,
 )
-from app.core.security import create_access_token, hash_password
+from app.core.security import hash_password
 from app.dependencies.payments import get_payment_gateway
 from app.main import app
 from app.models.address import Address
-from app.models.auth_session import AuthSession
 from app.models.batch import Batch
 from app.models.category import Category
 from app.models.fulfillment import Fulfillment
@@ -50,6 +48,7 @@ from app.models.user import User
 from app.models.user_role import UserRole
 from app.services.payment_gateway import GatewayInitiateResult, PNBGateway
 from app.services.payment_state import TransactionStatus
+from tests.firebase_fake import auth_headers_for
 
 WEBHOOK_SECRET = "test-webhook-secret-for-phase-16-min-32-chars"
 
@@ -123,21 +122,7 @@ def _create_user_with_role(db_session: Session, role_name: str, email: str) -> U
 
 
 def _auth_headers(db_session: Session, user: User) -> dict[str, str]:
-    """Each call creates a fresh session (a real user can be logged in on
-    multiple devices) - the hash must be unique per call, not just per
-    user, so calling this twice for the same user (a legitimate pattern
-    in several tests below) never collides on refresh_token_hash.
-    """
-    session = AuthSession(
-        user_id=user.id,
-        refresh_token_hash=f"dummy-hash-{user.id}-{secrets.token_hex(8)}",
-        expires_at=datetime.now(UTC) + timedelta(days=30),
-    )
-    db_session.add(session)
-    db_session.commit()
-    db_session.refresh(session)
-    token = create_access_token(user_id=user.id, session_id=session.id)
-    return {"Authorization": f"Bearer {token}"}
+    return auth_headers_for(db_session, user)
 
 
 def _customer(db_session: Session, tag: str) -> tuple[User, dict[str, str]]:

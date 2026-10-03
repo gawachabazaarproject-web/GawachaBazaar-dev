@@ -1,139 +1,170 @@
 import React, { useState } from "react";
-import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from "react-native";
-import { Link } from "expo-router";
-import { Screen } from "@/components/Screen";
+import { View } from "react-native";
+import { Link, useRouter } from "expo-router";
 import { Text } from "@/components/Text";
 import { TextField } from "@/components/TextField";
 import { Button } from "@/components/Button";
-import { Wordmark } from "@/components/Wordmark";
 import { useAuthStore } from "@/store/authStore";
-import { toApiError } from "@/api";
+import { authErrorMessage } from "@/auth/errors";
+import { AccountExistsError } from "@/auth/types";
 import { colors, spacing } from "@/theme";
-import { validateEmail, validateName, validatePassword, validatePhone } from "@/utils/validation";
+import {
+  validateEmail,
+  validateNamePart,
+  validatePasswordConfirmation,
+  validateStrongPassword,
+} from "@/utils/validation";
+import { AuthScreen, ErrorBanner, GoogleButton, OrDivider, PhoneButton, authStyles } from "@/features/auth/AuthParts";
 
-type FieldErrors = { name?: string; email?: string; phone?: string; password?: string };
+type Field = "firstName" | "lastName" | "email" | "password" | "confirm";
+type FieldErrors = Partial<Record<Field, string>>;
 
 export default function RegisterScreen() {
+  const router = useRouter();
   const register = useAuthStore((s) => s.register);
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-  const [phone, setPhone] = useState("");
-  const [password, setPassword] = useState("");
+  const loginWithGoogle = useAuthStore((s) => s.loginWithGoogle);
+  const [values, setValues] = useState<Record<Field, string>>({
+    firstName: "",
+    lastName: "",
+    email: "",
+    password: "",
+    confirm: "",
+  });
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState<"email" | "google" | null>(null);
 
-  const setField =
-    (key: keyof FieldErrors, setter: (v: string) => void) =>
-    (v: string) => {
-      setter(v);
-      if (fieldErrors[key]) setFieldErrors((e) => ({ ...e, [key]: undefined }));
-    };
+  const update = (field: Field) => (v: string) => {
+    setValues((s) => ({ ...s, [field]: v }));
+    if (fieldErrors[field]) setFieldErrors((e) => ({ ...e, [field]: undefined }));
+  };
 
   const handleRegister = async () => {
     setError(null);
     const errors: FieldErrors = {
-      name: validateName(name) ?? undefined,
-      email: validateEmail(email) ?? undefined,
-      phone: validatePhone(phone) ?? undefined,
-      password: validatePassword(password) ?? undefined,
+      firstName: validateNamePart(values.firstName, "First name") ?? undefined,
+      lastName: validateNamePart(values.lastName, "Last name") ?? undefined,
+      email: validateEmail(values.email) ?? undefined,
+      password: validateStrongPassword(values.password) ?? undefined,
+      confirm: validatePasswordConfirmation(values.password, values.confirm) ?? undefined,
     };
     setFieldErrors(errors);
     if (Object.values(errors).some(Boolean)) return;
 
-    setLoading(true);
+    setLoading("email");
     try {
-      await register({ name: name.trim(), email: email.trim(), phone: phone.trim(), password });
+      await register({
+        firstName: values.firstName,
+        lastName: values.lastName,
+        email: values.email,
+        password: values.password,
+      });
+      // AppGate moves to the verify-email screen.
     } catch (err) {
-      setError(toApiError(err).message);
+      setError(authErrorMessage(err, "Couldn't create your account. Please try again."));
     } finally {
-      setLoading(false);
+      setLoading(null);
+    }
+  };
+
+  const handleGoogle = async () => {
+    setError(null);
+    setLoading("google");
+    try {
+      await loginWithGoogle();
+    } catch (err) {
+      if (err instanceof AccountExistsError) {
+        router.push("/(auth)/link-account");
+        return;
+      }
+      setError(authErrorMessage(err, "Google sign-in failed. Please try again."));
+    } finally {
+      setLoading(null);
     }
   };
 
   return (
-    <Screen>
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.select({ ios: "padding", android: undefined })}>
-        <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-          <View style={styles.header}>
-            <Wordmark size="md" />
-            <Text variant="h2" style={styles.title}>
-              Create your account
-            </Text>
-          </View>
-
+    <AuthScreen title="Create your account" subtitle="Farm-fresh produce, straight to your door.">
+      <View style={{ flexDirection: "row", gap: spacing.md }}>
+        <View style={{ flex: 1 }}>
           <TextField
-            label="Full name"
-            placeholder="Priya Sharma"
-            value={name}
-            onChangeText={setField("name", setName)}
-            autoComplete="name"
-            error={fieldErrors.name}
+            label="First name"
+            placeholder="Arjun"
+            autoComplete="given-name"
+            textContentType="givenName"
+            value={values.firstName}
+            onChangeText={update("firstName")}
+            error={fieldErrors.firstName}
           />
-          <View style={{ height: spacing.base }} />
+        </View>
+        <View style={{ flex: 1 }}>
           <TextField
-            label="Email"
-            placeholder="you@example.com"
-            autoCapitalize="none"
-            keyboardType="email-address"
-            autoComplete="email"
-            value={email}
-            onChangeText={setField("email", setEmail)}
-            error={fieldErrors.email}
+            label="Last name"
+            placeholder="Sharma"
+            autoComplete="family-name"
+            textContentType="familyName"
+            value={values.lastName}
+            onChangeText={update("lastName")}
+            error={fieldErrors.lastName}
           />
-          <View style={{ height: spacing.base }} />
-          <TextField
-            label="Mobile number"
-            placeholder="9876543210"
-            keyboardType="phone-pad"
-            autoComplete="tel"
-            value={phone}
-            onChangeText={setField("phone", setPhone)}
-            error={fieldErrors.phone}
-          />
-          <View style={{ height: spacing.base }} />
-          <TextField
-            label="Password"
-            placeholder="At least 8 characters"
-            secureTextEntry
-            autoCapitalize="none"
-            autoCorrect={false}
-            autoComplete="new-password"
-            value={password}
-            onChangeText={setField("password", setPassword)}
-            onSubmitEditing={handleRegister}
-            error={fieldErrors.password}
-          />
+        </View>
+      </View>
+      <View style={authStyles.gap} />
+      <TextField
+        label="Email"
+        placeholder="you@example.com"
+        autoCapitalize="none"
+        autoComplete="email"
+        keyboardType="email-address"
+        textContentType="emailAddress"
+        value={values.email}
+        onChangeText={update("email")}
+        error={fieldErrors.email}
+      />
+      <View style={authStyles.gap} />
+      <TextField
+        label="Password"
+        placeholder="At least 8 characters"
+        secureTextEntry
+        autoComplete="new-password"
+        textContentType="newPassword"
+        value={values.password}
+        onChangeText={update("password")}
+        error={fieldErrors.password}
+        helperText="8+ characters with upper and lowercase letters and a number."
+      />
+      <View style={authStyles.gap} />
+      <TextField
+        label="Confirm password"
+        placeholder="Re-enter your password"
+        secureTextEntry
+        autoComplete="new-password"
+        textContentType="newPassword"
+        value={values.confirm}
+        onChangeText={update("confirm")}
+        onSubmitEditing={handleRegister}
+        error={fieldErrors.confirm}
+      />
 
-          {error ? (
-            <Text variant="bodySmall" color={colors.error} style={styles.error}>
-              {error}
-            </Text>
-          ) : null}
+      <ErrorBanner message={error} />
+      <View style={authStyles.gapLg} />
+      <Button label="Create Account" onPress={handleRegister} loading={loading === "email"} disabled={loading === "google"} fullWidth size="lg" />
 
-          <View style={{ height: spacing.xl }} />
-          <Button label="Create account" onPress={handleRegister} loading={loading} fullWidth size="lg" />
+      <OrDivider />
+      <GoogleButton onPress={handleGoogle} loading={loading === "google"} disabled={loading === "email"} />
+      <View style={authStyles.gap} />
+      <PhoneButton onPress={() => router.push("/(auth)/phone")} disabled={loading !== null} />
 
-          <View style={styles.footer}>
-            <Text variant="body" color={colors.textSecondary}>
-              Already have an account?{" "}
-            </Text>
-            <Link href="/(auth)/login" asChild>
-              <Text variant="bodyMedium" color={colors.primary}>
-                Log in
-              </Text>
-            </Link>
-          </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
-    </Screen>
+      <View style={authStyles.footer}>
+        <Text variant="body" color={colors.textSecondary}>
+          Already have an account?{" "}
+        </Text>
+        <Link href="/(auth)/login" asChild>
+          <Text variant="bodyMedium" color={colors.primary}>
+            Sign in
+          </Text>
+        </Link>
+      </View>
+    </AuthScreen>
   );
 }
-
-const styles = StyleSheet.create({
-  content: { flexGrow: 1, padding: spacing.xl },
-  header: { marginBottom: spacing["2xl"] },
-  title: { marginTop: spacing.lg },
-  error: { marginTop: spacing.md },
-  footer: { flexDirection: "row", justifyContent: "center", marginTop: spacing["2xl"], marginBottom: spacing.xl },
-});

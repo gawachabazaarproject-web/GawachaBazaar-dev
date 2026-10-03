@@ -41,6 +41,7 @@ from app.exceptions.base import AuthorizationError
 from app.models.role import Role
 from app.models.user import User
 from app.models.user_role import UserRole
+from tests.firebase_fake import fake_firebase
 
 # ---------------------------------------------------------------------------
 # Part 1: Role initialization (migration-seeded reference data)
@@ -218,19 +219,15 @@ def test_8_public_registration_ignores_client_supplied_role(
     _create_role(db_session, CUSTOMER)
     _create_role(db_session, ADMIN)
 
+    token = fake_firebase.issue("fb-elevate", email="elevate@example.com")
     response = client.post(
-        "/api/v1/auth/register",
-        json={
-            "name": "Attempted Elevation",
-            "email": "elevate@example.com",
-            "phone": "9876543210",
-            "password": "SecurePass123",
-            "role": "ADMIN",
-        },
+        "/api/v1/auth/sync",
+        json={"first_name": "Attempted", "last_name": "Elevation", "role": "ADMIN", "roles": ["ADMIN"]},
+        headers={"Authorization": f"Bearer {token}"},
     )
 
-    assert response.status_code == 201
-    user_id = response.json()["user"]["id"]
+    assert response.status_code == 200, response.text
+    user_id = response.json()["id"]
 
     assigned_roles = (
         db_session.query(Role.name)

@@ -84,7 +84,7 @@ Copy `.env.example` to `.env` and configure your local parameters:
 cp .env.example .env
 ```
 
-Ensure `JWT_SECRET_KEY` is a strong random secret. Never commit `.env` to source control.
+Set `FIREBASE_PROJECT_ID` (and, for admin operations, `FIREBASE_SERVICE_ACCOUNT_JSON`) - see `deploy/FIREBASE_AUTH.md`. Never commit `.env` to source control.
 
 ### 3. Running Code Quality & Tests
 

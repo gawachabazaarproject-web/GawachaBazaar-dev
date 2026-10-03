@@ -68,3 +68,10 @@ backend/uv.lock
 # Production
 !.env.production.example
 backups/
+
+# Firebase credentials - service-account keys are secrets; the mobile
+# native config files are generated per environment (EAS secret / local).
+*firebase-adminsdk*.json
+service-account*.json
+mobile/google-services.json
+mobile/GoogleService-Info.plist

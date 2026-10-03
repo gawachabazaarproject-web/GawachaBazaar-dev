@@ -28,10 +28,9 @@ from sqlalchemy.orm import Session
 from starlette.testclient import TestClient
 
 from app.core.roles import ADMIN, CUSTOMER
-from app.core.security import create_access_token, hash_password
+from app.core.security import hash_password
 from app.dependencies.payments import get_payment_gateway
 from app.main import app
-from app.models.auth_session import AuthSession
 from app.models.inventory_reservation import InventoryReservation
 from app.models.order import Order
 from app.models.payment import Payment
@@ -50,6 +49,7 @@ from app.services.payment_gateway import (
     PNBGateway,
 )
 from app.services.payment_state import TransactionStatus
+from tests.firebase_fake import auth_headers_for
 
 WEBHOOK_SECRET = "test-webhook-secret-for-phase-14-min-32-chars"
 
@@ -172,15 +172,7 @@ def _create_user_with_role(db_session: Session, role_name: str, email: str) -> U
 
 
 def _auth_headers(db_session: Session, user: User) -> dict[str, str]:
-    session = AuthSession(
-        user_id=user.id, refresh_token_hash=f"dummy-hash-{user.id}-{user.email}",
-        expires_at=datetime.now(UTC) + timedelta(days=30),
-    )
-    db_session.add(session)
-    db_session.commit()
-    db_session.refresh(session)
-    token = create_access_token(user_id=user.id, session_id=session.id)
-    return {"Authorization": f"Bearer {token}"}
+    return auth_headers_for(db_session, user)
 
 
 def _customer(db_session: Session, tag: str) -> tuple[User, dict[str, str]]:
