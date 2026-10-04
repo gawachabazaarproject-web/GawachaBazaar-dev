@@ -6,6 +6,8 @@ import { useAuth } from "@/lib/auth-context";
 import { useOrderEvents } from "@/lib/realtime-context";
 
 const MUTE_STORAGE_KEY = "gawacha-admin-new-order-alarm-muted";
+/** How long a new order rings unless staff dismiss it sooner. */
+const RING_SECONDS = 10;
 
 interface Toast {
   id: string;
@@ -31,6 +33,7 @@ export function NewOrderAlarm() {
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [muted, setMuted] = useState(false);
   const audioCtxRef = useRef<AudioContext | null>(null);
+  const ringingRef = useRef<GainNode | null>(null);
 
   useEffect(() => {
     try {
@@ -63,34 +66,60 @@ export function NewOrderAlarm() {
     return () => document.removeEventListener("pointerdown", prime);
   }, [getAudioContext]);
 
+  // Silences a ring that is still playing (staff acknowledged the order,
+  // muted the alarm, or another order restarted it).
+  const stopAlarm = useCallback(() => {
+    const ringing = ringingRef.current;
+    if (!ringing) return;
+    ringingRef.current = null;
+    try {
+      ringing.disconnect();
+    } catch {
+      // Already disconnected.
+    }
+  }, []);
+
   const playAlarm = useCallback(() => {
     const ctx = getAudioContext();
     if (!ctx) return;
     if (ctx.state === "suspended") ctx.resume().catch(() => undefined);
+    stopAlarm();
 
-    const now = ctx.currentTime;
-    // Two-note rising chime, repeated twice - distinct and attention-getting
-    // without being a harsh siren in a shared office space.
-    const notes: Array<[number, number]> = [
-      [880, now],
-      [1175, now + 0.16],
-      [880, now + 0.55],
-      [1175, now + 0.71],
-    ];
-    for (const [freq, start] of notes) {
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.type = "sine";
-      osc.frequency.setValueAtTime(freq, start);
-      gain.gain.setValueAtTime(0.0001, start);
-      gain.gain.exponentialRampToValueAtTime(0.22, start + 0.02);
-      gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.14);
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.start(start);
-      osc.stop(start + 0.16);
+    // Everything goes through one master node so the ring can be cut off
+    // in one place; the compressor keeps full volume from clipping.
+    const master = ctx.createGain();
+    const compressor = ctx.createDynamicsCompressor();
+    master.connect(compressor);
+    compressor.connect(ctx.destination);
+    ringingRef.current = master;
+
+    // Two-note rising chime, twice a second, for the full ring. Triangle
+    // waves carry further across a warehouse than a pure sine at the same
+    // level.
+    const start0 = ctx.currentTime;
+    for (let beat = 0; beat < RING_SECONDS; beat += 1) {
+      const at = start0 + beat;
+      const notes: Array<[number, number]> = [
+        [880, at],
+        [1175, at + 0.18],
+        [880, at + 0.5],
+        [1175, at + 0.68],
+      ];
+      for (const [freq, start] of notes) {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = "triangle";
+        osc.frequency.setValueAtTime(freq, start);
+        gain.gain.setValueAtTime(0.0001, start);
+        gain.gain.exponentialRampToValueAtTime(1, start + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.17);
+        osc.connect(gain);
+        gain.connect(master);
+        osc.start(start);
+        osc.stop(start + 0.18);
+      }
     }
-  }, [getAudioContext]);
+  }, [getAudioContext, stopAlarm]);
 
   useOrderEvents((event) => {
     if (event.resource !== "order" || event.previous_status !== null) return;
@@ -101,9 +130,13 @@ export function NewOrderAlarm() {
     if (!muted) playAlarm();
   });
 
-  const dismiss = (id: string) => setToasts((prev) => prev.filter((t) => t.id !== id));
+  const dismiss = (id: string) => {
+    stopAlarm();
+    setToasts((prev) => prev.filter((t) => t.id !== id));
+  };
 
   const toggleMuted = () => {
+    stopAlarm();
     setMuted((prev) => {
       const next = !prev;
       try {
