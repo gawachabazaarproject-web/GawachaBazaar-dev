@@ -206,6 +206,11 @@ class StaffService:
     ) -> StaffDetailResponse:
         if new_status not in ("ACTIVE", "INACTIVE", "SUSPENDED"):
             raise BusinessValidationError(f"Invalid status '{new_status}'.")
+        if user_id == admin_user_id and new_status != "ACTIVE":
+            # Nobody can undo this from the panel once they are locked out.
+            raise ConflictError(
+                "You can't deactivate or suspend your own account. Ask another admin to do it."
+            )
         user = self._get_staff_or_404(user_id)
         previous = user.status
         user.status = new_status
