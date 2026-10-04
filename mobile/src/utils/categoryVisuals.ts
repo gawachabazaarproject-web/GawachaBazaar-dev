@@ -1,10 +1,8 @@
 /**
- * Category photography. Categories have no image field in the backend
- * (see app/models/category.py), so this is a client-side slug -> photo
- * lookup, same "illustrative presentation layer" pattern as
- * productEmbellishments.ts - real, relevant photography (not generated
- * placeholders), just not sourced from the API. A hashed fallback photo
- * covers any category added later with no explicit entry.
+ * Category photography. The image an admin uploads for a category
+ * (`image_url`) always wins. A category without one falls back to a
+ * client-side slug -> photo lookup, and then to a hashed stock photo, so
+ * a panel is never blank.
  */
 const _UNSPLASH = (id: string) => `https://images.unsplash.com/photo-${id}?w=500&h=500&fit=crop&q=80`;
 
@@ -30,6 +28,7 @@ function hashString(value: string): number {
   return Math.abs(hash);
 }
 
-export function getCategoryPhoto(slug: string): string {
+export function getCategoryPhoto(slug: string, imageUrl?: string | null): string {
+  if (imageUrl) return imageUrl;
   return CATEGORY_PHOTOS[slug] ?? FALLBACK_PHOTOS[hashString(slug) % FALLBACK_PHOTOS.length];
 }

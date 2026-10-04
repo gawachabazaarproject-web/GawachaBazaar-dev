@@ -130,6 +130,7 @@ export default function HomeScreen() {
                 <CategoryPanel
                   id={category.id}
                   slug={category.slug}
+                  imageUrl={category.image_url}
                   name={category.name}
                   index={index}
                   onPress={() => router.push(`/category/${category.id}`)}

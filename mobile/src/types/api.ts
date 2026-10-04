@@ -85,6 +85,8 @@ export interface CategoryResponse {
   name: string;
   slug: string;
   description: string | null;
+  /** Image uploaded from the Admin panel; null until one is set. */
+  image_url: string | null;
   parent_id: number | null;
   status: string;
   created_at: string;

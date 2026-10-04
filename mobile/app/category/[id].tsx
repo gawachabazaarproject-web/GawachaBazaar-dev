@@ -62,7 +62,7 @@ export default function CategoryScreen() {
       <Stack.Screen options={{ headerShown: false }} />
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: spacing.xl + CART_BAR_CLEARANCE }}>
         <View style={styles.hero}>
-          <Image source={getCategoryPhoto(category.slug)} style={StyleSheet.absoluteFill} contentFit="cover" />
+          <Image source={getCategoryPhoto(category.slug, category.image_url)} style={StyleSheet.absoluteFill} contentFit="cover" />
           <LinearGradient
             pointerEvents="none"
             colors={["rgba(11,45,32,0)", "rgba(11,45,32,0.08)", "rgba(11,45,32,0.4)", "rgba(11,45,32,0.68)"]}

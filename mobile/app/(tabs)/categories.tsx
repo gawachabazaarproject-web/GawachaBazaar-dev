@@ -96,7 +96,7 @@ function CategoryRow({
   return (
     <Animated.View entering={FadeInUp.delay(Math.min(index, 6) * 60).duration(300)}>
       <PressableScale style={styles.panel} onPress={onPress}>
-        <Image source={getCategoryPhoto(category.slug)} style={styles.panelImage} contentFit="cover" transition={200} />
+        <Image source={getCategoryPhoto(category.slug, category.image_url)} style={styles.panelImage} contentFit="cover" transition={200} />
         <View style={styles.panelScrim} />
         <Text variant="displayL" color={colors.textInverse} style={styles.panelIndex}>
           {String(index + 1).padStart(2, "0")}

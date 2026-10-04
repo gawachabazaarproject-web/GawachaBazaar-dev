@@ -12,6 +12,7 @@ import { colors, radius, spacing } from "@/theme";
 export interface CategoryPanelProps {
   id: number;
   slug: string;
+  imageUrl?: string | null;
   name: string;
   index: number;
   onPress: () => void;
@@ -23,12 +24,12 @@ const PANEL_HEIGHT = 226;
 /** Large visual "shop by category" panel - dominant photography and
  * editorial typography, replacing the old small circular icon+label
  * tile. Horizontally scrollable on Home. */
-export function CategoryPanel({ slug, name, index, onPress }: CategoryPanelProps) {
+export function CategoryPanel({ slug, imageUrl, name, index, onPress }: CategoryPanelProps) {
   const marathiName = CATEGORY_MARATHI[slug];
 
   return (
     <PressableScale onPress={onPress} style={styles.panel}>
-      <Image source={getCategoryPhoto(slug)} style={StyleSheet.absoluteFill} contentFit="cover" transition={200} />
+      <Image source={getCategoryPhoto(slug, imageUrl)} style={StyleSheet.absoluteFill} contentFit="cover" transition={200} />
       <LinearGradient
         pointerEvents="none"
         colors={["rgba(11,45,32,0.22)", "rgba(11,45,32,0)", "rgba(11,45,32,0.35)", "rgba(11,45,32,0.62)"]}
