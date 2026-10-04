@@ -16,6 +16,7 @@ import { formatDateTime, formatMoney, formatPaymentMethod } from "@/lib/format";
 import { ErrorState } from "@/components/ErrorState";
 import { StatusBadge } from "@/components/StatusBadge";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { FulfillmentActions } from "@/components/FulfillmentActions";
 import { Icon } from "@/components/icons";
 
 export default function OrderDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -195,6 +196,13 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
             value={order.fulfillment.delivery_partner_user_id ? `User #${order.fulfillment.delivery_partner_user_id}` : "Not yet assigned"}
           />
           {order.fulfillment.delivered_at && <Row label="Delivered at" value={formatDateTime(order.fulfillment.delivered_at)} />}
+          {order.status !== "CANCELLED" && (
+            <FulfillmentActions
+              fulfillment={order.fulfillment}
+              isCashOnDelivery={order.payment?.payment_method === "COD"}
+              onChanged={() => load({ silent: true })}
+            />
+          )}
         </Section>
       )}
 
