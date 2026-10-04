@@ -24,6 +24,7 @@ import { TableSkeleton } from "@/components/TableSkeleton";
 import { Pagination } from "@/components/Pagination";
 import { StatusBadge } from "@/components/StatusBadge";
 import { ReceiveStockDialog } from "@/components/ReceiveStockDialog";
+import { AddWarehouseDialog } from "@/components/AddWarehouseDialog";
 
 const PAGE_SIZE = 20;
 
@@ -38,6 +39,7 @@ export default function InventoryPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [receiveOpen, setReceiveOpen] = useState(false);
+  const [warehouseOpen, setWarehouseOpen] = useState(false);
 
   const [page, setPage] = useState(1);
   const [q, setQ] = useState("");
@@ -105,9 +107,14 @@ export default function InventoryPage() {
         description="On-hand, reserved, and available stock across every warehouse - transactional, never a raw quantity edit."
         actions={
           canReceive ? (
-            <button onClick={() => setReceiveOpen(true)} className="rounded bg-primary-800 px-4 py-2 text-sm font-semibold text-white hover:bg-primary-700">
-              Receive stock
-            </button>
+            <div className="flex gap-2">
+              <button onClick={() => setWarehouseOpen(true)} className="rounded border border-primary-800 px-4 py-2 text-sm font-semibold text-primary-800 hover:bg-primary-50">
+                Add warehouse
+              </button>
+              <button onClick={() => setReceiveOpen(true)} className="rounded bg-primary-800 px-4 py-2 text-sm font-semibold text-white hover:bg-primary-700">
+                Receive stock
+              </button>
+            </div>
           ) : undefined
         }
       />
@@ -206,6 +213,14 @@ export default function InventoryPage() {
       </div>
 
       <ReceiveStockDialog open={receiveOpen} onClose={() => setReceiveOpen(false)} onReceived={refreshAll} />
+      <AddWarehouseDialog
+        open={warehouseOpen}
+        onClose={() => setWarehouseOpen(false)}
+        onCreated={() => {
+          const token = getAccessToken();
+          if (token) fetchLocations(token).then(setLocations).catch(() => undefined);
+        }}
+      />
     </div>
   );
 }

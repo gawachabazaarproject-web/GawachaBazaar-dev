@@ -199,6 +199,21 @@ export async function fetchLocations(accessToken: string): Promise<Location[]> {
   return result.items;
 }
 
+export interface CreateLocationPayload {
+  name: string;
+  code: string;
+  type: string;
+  address_line_1: string;
+  address_line_2?: string | null;
+  city: string;
+  state: string;
+  postal_code: string;
+}
+
+export async function createLocation(accessToken: string, payload: CreateLocationPayload): Promise<Location> {
+  return request(accessToken, "/inventory/locations", { method: "POST", body: JSON.stringify(payload) });
+}
+
 export async function fetchBatches(accessToken: string, productId?: number): Promise<Batch[]> {
   const search = new URLSearchParams({ page_size: "100" });
   if (productId) search.set("product_id", String(productId));
