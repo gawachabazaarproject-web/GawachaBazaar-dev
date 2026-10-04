@@ -14,10 +14,12 @@ third-party account this repo doesn't control.
 from typing import Any
 
 import cloudinary
+import cloudinary.exceptions
 import cloudinary.uploader
 from fastapi import UploadFile
 
 from app.core.config import settings
+from app.core.logging import logger
 from app.exceptions.base import AppException, BusinessValidationError
 
 MAX_UPLOAD_BYTES = 8 * 1024 * 1024  # 8 MB
@@ -40,10 +42,12 @@ def _ensure_configured() -> None:
             status_code=503,
             code="UPLOADS_NOT_CONFIGURED",
         )
+    # A value pasted into a dashboard with a stray space or newline fails
+    # as "Invalid Signature", which is hard to spot by eye.
     cloudinary.config(
-        cloud_name=settings.CLOUDINARY_CLOUD_NAME,
-        api_key=settings.CLOUDINARY_API_KEY,
-        api_secret=settings.CLOUDINARY_API_SECRET,
+        cloud_name=settings.CLOUDINARY_CLOUD_NAME.strip(),
+        api_key=settings.CLOUDINARY_API_KEY.strip(),
+        api_secret=settings.CLOUDINARY_API_SECRET.strip(),
         secure=True,
     )
     _configured = True
@@ -80,9 +84,20 @@ def upload_image(file: UploadFile, *, folder: str) -> dict[str, Any]:
     if size == 0:
         raise BusinessValidationError("The uploaded file is empty.")
 
-    result = cloudinary.uploader.upload(
-        file.file,
-        folder=folder,
-        resource_type="image",
-    )
+    try:
+        result = cloudinary.uploader.upload(
+            file.file,
+            folder=folder,
+            resource_type="image",
+        )
+    except cloudinary.exceptions.Error as exc:
+        # Wrong cloud name/key/secret, quota, or Cloudinary being down. Say
+        # which, instead of an unexplained 500 - Cloudinary's message names
+        # the problem ("Invalid cloud_name ...") and carries no secret.
+        logger.error("IMAGE_UPLOAD_FAILED: %s: %s", type(exc).__name__, exc)
+        raise AppException(
+            f"Cloudinary rejected the upload: {exc}",
+            status_code=502,
+            code="UPLOAD_FAILED",
+        ) from exc
     return {"secure_url": result["secure_url"], "public_id": result["public_id"]}
