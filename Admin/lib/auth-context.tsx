@@ -9,7 +9,7 @@ import {
   signOut,
   User as FirebaseUser,
 } from "firebase/auth";
-import { ApiError, fetchMe, migrateLegacyAccount, UserProfile } from "./api";
+import { ApiError, fetchMe, migrateLegacyAccount, syncAccount, UserProfile } from "./api";
 import { firebaseAuth, missingFirebaseConfig } from "./firebase";
 import { firebaseErrorCode, firebaseErrorMessage, NOT_IN_FIREBASE_CODES } from "./firebase-errors";
 import { canOpenAdminPanel } from "./permissions";
@@ -70,7 +70,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (profileUidRef.current === fbUser.uid) return; // token refresh only
 
       try {
-        const profile = await fetchMe(token);
+        let profile: UserProfile;
+        try {
+          profile = await fetchMe(token);
+        } catch (err) {
+          if (!(err instanceof ApiError && err.code === "ACCOUNT_NOT_REGISTERED")) throw err;
+          // Firebase knows this person but no staff record is linked yet.
+          // The backend only links on a verified email, so prove it first.
+          if (!fbUser.emailVerified && fbUser.providerData.some((p) => p.providerId === "password")) {
+            await sendEmailVerification(fbUser).catch(() => undefined);
+            await rejectSession(
+              "Verify your email address first - we sent a link to your inbox. Then sign in again.",
+            );
+            return;
+          }
+          profile = await syncAccount(token);
+        }
         if (!canOpenAdminPanel(profile.roles)) {
           await rejectSession(NO_ACCESS);
           return;

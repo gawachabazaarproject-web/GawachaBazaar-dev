@@ -73,6 +73,22 @@ export async function fetchMe(accessToken: string): Promise<UserProfile> {
 }
 
 /**
+ * Links this Firebase user to their existing staff record (matched on the
+ * verified email/phone in the token). Only needed when the Firebase user
+ * was not created by `migrateLegacyAccount` - e.g. the same email already
+ * signed up in the customer app, or the password was reset first.
+ */
+export async function syncAccount(accessToken: string): Promise<UserProfile> {
+  const response = await fetch(`${API_BASE_URL}/auth/sync`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+    body: "{}",
+  });
+  if (!response.ok) throw await parseErrorResponse(response);
+  return response.json();
+}
+
+/**
  * Authenticated fetch used by every admin module. Attaches the Firebase ID
  * token as the bearer token. The Firebase SDK refreshes that token before
  * it expires (see `lib/auth-context.tsx`), so callers just pass the
