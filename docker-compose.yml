@@ -8,8 +8,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
       POSTGRES_DB: ${POSTGRES_DB:-gawachabazaar}
     ports:
-      # Host port 5433 avoids conflict with any local PostgreSQL service on host port 5432
-      - "${POSTGRES_HOST_PORT:-5433}:5432"
+      - "127.0.0.1:5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -29,23 +28,49 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - APP_NAME=GawachaBazaar
-      - APP_ENV=development
-      - DEBUG=True
-      - DATABASE_URL=postgresql+psycopg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-gawachabazaar}
-      - FIREBASE_PROJECT_ID=${FIREBASE_PROJECT_ID:-}
-      - FIREBASE_SERVICE_ACCOUNT_JSON=${FIREBASE_SERVICE_ACCOUNT_JSON:-}
-      - ALLOWED_ORIGINS=["http://localhost:3000","http://localhost:5173","http://localhost:3001"]
-      - CLOUDINARY_CLOUD_NAME=${CLOUDINARY_CLOUD_NAME:-}
-      - CLOUDINARY_API_KEY=${CLOUDINARY_API_KEY:-}
-      - CLOUDINARY_API_SECRET=${CLOUDINARY_API_SECRET:-}
-      - RAZORPAY_KEY_ID=${RAZORPAY_KEY_ID:-}
-      - RAZORPAY_KEY_SECRET=${RAZORPAY_KEY_SECRET:-}
-      - RAZORPAY_WEBHOOK_SECRET=${RAZORPAY_WEBHOOK_SECRET:-}
+      APP_NAME: GawachaBazaar
+      APP_ENV: development
+      DEBUG: "True"
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-gawachabazaar}
+      FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID:-}
+      FIREBASE_SERVICE_ACCOUNT_JSON: ${FIREBASE_SERVICE_ACCOUNT_JSON:-}
+      ALLOWED_ORIGINS: '["http://localhost:3000","http://localhost:5173","http://localhost:3001","http://13.203.210.65:3000","http://13.203.210.65:3001"]'
+      CLOUDINARY_CLOUD_NAME: ${CLOUDINARY_CLOUD_NAME:-}
+      CLOUDINARY_API_KEY: ${CLOUDINARY_API_KEY:-}
+      CLOUDINARY_API_SECRET: ${CLOUDINARY_API_SECRET:-}
+      RAZORPAY_KEY_ID: ${RAZORPAY_KEY_ID:-}
+      RAZORPAY_KEY_SECRET: ${RAZORPAY_KEY_SECRET:-}
+      RAZORPAY_WEBHOOK_SECRET: ${RAZORPAY_WEBHOOK_SECRET:-}
     volumes:
       - ./backend:/app
     depends_on:
       db:
+        condition: service_healthy
+
+  website:
+    build:
+      context: ./website
+      dockerfile: Dockerfile
+    container_name: gawachabazaar-website
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    depends_on:
+      backend:
+        condition: service_healthy
+
+  admin:
+    build:
+      context: ./Admin
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_BASE_URL: http://13.203.210.65:8000/api/v1
+    container_name: gawachabazaar-admin
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    depends_on:
+      backend:
         condition: service_healthy
 
 volumes:
