@@ -8,7 +8,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
       POSTGRES_DB: ${POSTGRES_DB:-gawachabazaar}
     ports:
-      - "127.0.0.1:5433:5432"
+      - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -34,7 +34,7 @@ services:
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-gawachabazaar}
       FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID:-}
       FIREBASE_SERVICE_ACCOUNT_JSON: ${FIREBASE_SERVICE_ACCOUNT_JSON:-}
-      ALLOWED_ORIGINS: '["http://localhost:3000","http://localhost:5173","http://localhost:3001","http://13.203.210.65:3000","http://13.203.210.65:3001"]'
+      ALLOWED_ORIGINS: '["http://localhost:3000","http://localhost:5173","http://localhost:3001"]'
       CLOUDINARY_CLOUD_NAME: ${CLOUDINARY_CLOUD_NAME:-}
       CLOUDINARY_API_KEY: ${CLOUDINARY_API_KEY:-}
       CLOUDINARY_API_SECRET: ${CLOUDINARY_API_SECRET:-}
@@ -64,7 +64,7 @@ services:
       context: ./Admin
       dockerfile: Dockerfile
       args:
-        NEXT_PUBLIC_API_BASE_URL: http://13.203.210.65:8000/api/v1
+        NEXT_PUBLIC_API_BASE_URL: http://localhost:8000/api/v1
     container_name: gawachabazaar-admin
     restart: unless-stopped
     ports:
