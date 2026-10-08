@@ -6,11 +6,10 @@ on:
       - main
 
 env:
-  AWS_REGION: ap-south-1
-  AWS_ACCOUNT_ID: "544695387729"
-  ECR_BACKEND: gawachabazaar-backend
-  ECR_WEBSITE: gawachabazaar-website
+  DOCKER_BACKEND: gawachabazaar-backend
+  DOCKER_WEBSITE: gawachabazaar-website
   EKS_CLUSTER: gawachabazaar-prod
+  AWS_REGION: ap-south-1
   K8S_NAMESPACE: gawachabazaar
 
 jobs:
@@ -27,35 +26,44 @@ jobs:
           aws --version
           kubectl version --client
 
-      - name: Login to Amazon ECR
+      - name: Login to Docker Hub
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
         run: |
-          aws ecr get-login-password --region "$AWS_REGION" \
-            | docker login \
-              --username AWS \
-              --password-stdin \
-              "$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com"
+          echo "$DOCKERHUB_TOKEN" | docker login \
+            --username "$DOCKERHUB_USERNAME" \
+            --password-stdin
 
       - name: Build backend image
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
         run: |
           docker build \
-            -t "$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_BACKEND:$GITHUB_SHA" \
+            -t "$DOCKERHUB_USERNAME/$DOCKER_BACKEND:$GITHUB_SHA" \
             ./backend
 
       - name: Build website image
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
         run: |
           docker build \
-            -t "$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_WEBSITE:$GITHUB_SHA" \
+            -t "$DOCKERHUB_USERNAME/$DOCKER_WEBSITE:$GITHUB_SHA" \
             ./website
 
       - name: Push backend image
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
         run: |
           docker push \
-            "$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_BACKEND:$GITHUB_SHA"
+            "$DOCKERHUB_USERNAME/$DOCKER_BACKEND:$GITHUB_SHA"
 
       - name: Push website image
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
         run: |
           docker push \
-            "$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_WEBSITE:$GITHUB_SHA"
+            "$DOCKERHUB_USERNAME/$DOCKER_WEBSITE:$GITHUB_SHA"
 
       - name: Configure kubectl
         run: |
@@ -63,15 +71,39 @@ jobs:
             --region "$AWS_REGION" \
             --name "$EKS_CLUSTER"
 
-      - name: Deploy backend
+      - name: Create Docker Hub pull secret
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
         run: |
-          kubectl -n "$K8S_NAMESPACE" set image deployment/gawachabazaar-backend \
-            "backend=$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_BACKEND:$GITHUB_SHA"
+          kubectl create secret docker-registry dockerhub-regcred \
+            -n "$K8S_NAMESPACE" \
+            --docker-server=https://index.docker.io/v1/ \
+            --docker-username="$DOCKERHUB_USERNAME" \
+            --docker-password="$DOCKERHUB_TOKEN" \
+            --dry-run=client \
+            -o yaml | kubectl apply -f -
+
+      - name: Configure backend image pull secret
+        run: |
+          kubectl -n "$K8S_NAMESPACE" patch deployment gawachabazaar-backend \
+            -p '{"spec":{"template":{"spec":{"imagePullSecrets":[{"name":"dockerhub-regcred"}]}}}}'
+
+      - name: Deploy backend
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+        run: |
+          kubectl -n "$K8S_NAMESPACE" set image \
+            deployment/gawachabazaar-backend \
+            "backend=$DOCKERHUB_USERNAME/$DOCKER_BACKEND:$GITHUB_SHA"
 
       - name: Deploy website
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
         run: |
-          kubectl -n "$K8S_NAMESPACE" set image deployment/gawachabazaar-website \
-            "website=$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_WEBSITE:$GITHUB_SHA"
+          kubectl -n "$K8S_NAMESPACE" set image \
+            deployment/gawachabazaar-website \
+            "website=$DOCKERHUB_USERNAME/$DOCKER_WEBSITE:$GITHUB_SHA"
 
       - name: Wait for backend rollout
         run: |
