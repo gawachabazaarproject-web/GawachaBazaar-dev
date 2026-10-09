@@ -29,6 +29,7 @@ from app.api.v1.promotions import router as promotions_router
 from app.api.v1.realtime import router as realtime_router
 from app.api.v1.staff import router as staff_router
 from app.api.v1.suppliers import router as suppliers_router
+from app.api.v1.wishlist import router as wishlist_router
 from app.schemas.base import PingResponse
 
 api_router = APIRouter()
@@ -38,6 +39,9 @@ api_router.include_router(auth_router, prefix="/auth", tags=["auth"])
 
 # Address domain routes (CUSTOMER-only, user-scoped address book)
 api_router.include_router(addresses_router, prefix="/addresses", tags=["addresses"])
+
+# Wishlist domain routes (CUSTOMER-only)
+api_router.include_router(wishlist_router, prefix="/wishlist", tags=["wishlist"])
 
 # Catalog domain routes (public browsing + ADMIN-only management)
 api_router.include_router(catalog_router, prefix="/catalog", tags=["catalog"])

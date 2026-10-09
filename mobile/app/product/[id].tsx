@@ -7,6 +7,7 @@ import { Feather } from "@expo/vector-icons";
 import Animated, { FadeInUp } from "react-native-reanimated";
 import { Screen } from "@/components/Screen";
 import { Text } from "@/components/Text";
+import { WishlistButton } from "@/components/WishlistButton";
 import { PriceTag } from "@/components/PriceTag";
 import { QuantityStepper } from "@/components/QuantityStepper";
 import { Skeleton } from "@/components/Skeleton";
@@ -97,6 +98,10 @@ export default function ProductDetailScreen() {
           >
             <Feather name="arrow-left" size={18} color={colors.textInverse} />
           </Pressable>
+
+          <View style={[styles.heartWrap, { top: insets.top + spacing.sm }]}>
+            <WishlistButton productId={productId} size={20} />
+          </View>
 
           {images.length > 1 ? (
             <View style={styles.counterBadge}>
@@ -247,6 +252,7 @@ export default function ProductDetailScreen() {
 }
 
 const styles = StyleSheet.create({
+  heartWrap: { position: "absolute", right: spacing.base },
   galleryWrap: { position: "relative" },
   backButton: {
     position: "absolute",

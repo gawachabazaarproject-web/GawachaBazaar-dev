@@ -37,13 +37,13 @@ export function BillBreakdownCard({ items, totalAmount, currency }: BillBreakdow
       <Text variant="h3" style={styles.title}>
         Bill Breakdown
       </Text>
-      <Row label={`Item Total${mrpTotal > 0 ? ` (MRP ${formatMoney(mrpTotal, currency ?? "INR")})` : ""}`} value={formatMoney(totalAmount ?? "0", currency ?? "INR")} />
+      <Row label={`Item Total (${items.length} ${items.length === 1 ? "item" : "items"})`} value={formatMoney(mrpTotal > 0 ? mrpTotal : Number.parseFloat(totalAmount ?? "0"), currency ?? "INR")} />
       {savings > 0 ? <Row label="Farm Direct Savings" value={`-${formatMoney(savings, currency ?? "INR")}`} valueColor={colors.success} /> : null}
       <Row label="Delivery Partner Fee" value="FREE" valueColor={colors.success} />
       <View style={styles.divider} />
       <View style={styles.totalRow}>
-        <Text variant="bodyMedium">Total Bill Amount</Text>
-        <Text variant="h3">{formatMoney(totalAmount ?? "0", currency ?? "INR")}</Text>
+        <Text variant="bodyMedium">Total Amount</Text>
+        <Text variant="price">{formatMoney(totalAmount ?? "0", currency ?? "INR")}</Text>
       </View>
       {savings > 0 ? (
         <Text variant="caption" color={colors.success} style={styles.savedNote}>
@@ -57,10 +57,10 @@ export function BillBreakdownCard({ items, totalAmount, currency }: BillBreakdow
 function Row({ label, value, valueColor }: { label: string; value: string; valueColor?: string }) {
   return (
     <View style={styles.row}>
-      <Text variant="body" color={colors.textSecondary}>
+      <Text variant="bodySmall" color={colors.textSecondary}>
         {label}
       </Text>
-      <Text variant="bodyMedium" color={valueColor ?? colors.textPrimary}>
+      <Text variant="priceSmall" color={valueColor ?? colors.textPrimary}>
         {value}
       </Text>
     </View>
@@ -70,12 +70,12 @@ function Row({ label, value, valueColor }: { label: string; value: string; value
 const styles = StyleSheet.create({
   card: {
     marginHorizontal: spacing.base,
-    marginTop: spacing.xl,
-    paddingTop: spacing.lg,
+    marginTop: spacing.lg,
+    paddingTop: spacing.md,
     borderTopWidth: 1,
     borderColor: colors.divider,
   },
-  title: { marginBottom: spacing.md },
+  title: { marginBottom: spacing.sm },
   row: { flexDirection: "row", justifyContent: "space-between", marginBottom: spacing.sm },
   divider: { height: 1, backgroundColor: colors.divider, marginVertical: spacing.sm },
   totalRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },

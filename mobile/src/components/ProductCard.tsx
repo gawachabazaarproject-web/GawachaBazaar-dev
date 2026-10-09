@@ -7,10 +7,11 @@ import { Text } from "./Text";
 import { PriceTag } from "./PriceTag";
 import { QuantityStepper } from "./QuantityStepper";
 import { PressableScale } from "./PressableScale";
+import { WishlistButton } from "./WishlistButton";
 import { useVariantStepper } from "@/features/cart/useCart";
 import { formatVariantSize } from "@/utils/money";
 import { getEmbellishment } from "@/utils/productEmbellishments";
-import { colors, radius, shadows, spacing } from "@/theme";
+import { colors, shadows, spacing } from "@/theme";
 import { PriceResponse, ProductSummaryResponse, ProductVariantResponse } from "@/types/api";
 
 export interface ProductCardData {
@@ -59,13 +60,28 @@ export function ProductCard({ product, onPress, index = 0 }: ProductCardProps) {
       ? product.variant.id
       : null
     : (product.defaultVariantId ?? null);
-  const stepper = useVariantStepper(addableVariantId ?? -1);
   const isAvailable = addableVariantId !== null;
   const price = product.variant?.current_price ?? product.startingPrice ?? null;
-  const { marathiName, origin, mrp, badge, eta } = getEmbellishment(product.slug);
+  const { origin, mrp, badge } = getEmbellishment(product.slug);
+  const tag = badge ?? origin ?? "Farm Fresh";
+  const sizeLabel = product.variant
+    ? formatVariantSize(product.variant.quantity, product.variant.unit)
+    : product.defaultVariantUnit && product.defaultVariantQuantity
+      ? formatVariantSize(product.defaultVariantQuantity, product.defaultVariantUnit)
+      : null;
+  const stepper = useVariantStepper(addableVariantId ?? -1, {
+    product_id: product.id,
+    product_slug: product.slug,
+    primary_image_url: product.imageUrl,
+    product_name: product.name,
+    variant_name: sizeLabel ?? "",
+    sku: "",
+    unit_price: price?.price ?? null,
+    currency: price?.currency ?? null,
+  });
 
   return (
-    <Animated.View entering={FadeInUp.delay(Math.min(index, 8) * 40).duration(280)}>
+    <Animated.View style={{ flex: 1 }} entering={FadeInUp.delay(Math.min(index, 8) * 40).duration(280)}>
       <PressableScale onPress={onPress} style={styles.card} accessibilityRole="button" accessibilityLabel={product.name}>
         {/* Shadow lives on `card` (PressableScale) above, corner rounding +
             clipping lives on this inner `surface` wrapper below - an
@@ -81,13 +97,17 @@ export function ProductCard({ product, onPress, index = 0 }: ProductCardProps) {
               transition={200}
               placeholder={{ blurhash: "L4C~D%~q00~q~q00%M-;9F%M-;-;" }}
             />
-            {badge ? (
+            {tag ? (
               <View style={styles.badge}>
-                <Text variant="label" color={colors.textOnAccent}>
-                  {badge}
+                <Feather name="feather" size={12} color={colors.primary} />
+                <Text variant="label" color={colors.primaryDark} numberOfLines={1} style={styles.badgeText}>
+                  {tag.toUpperCase()}
                 </Text>
               </View>
             ) : null}
+            <View style={styles.heart}>
+              <WishlistButton productId={product.id} size={18} />
+            </View>
             {!isAvailable ? (
               <View style={styles.unavailableOverlay}>
                 <Text variant="captionMedium" color={colors.textInverse}>
@@ -97,59 +117,34 @@ export function ProductCard({ product, onPress, index = 0 }: ProductCardProps) {
             ) : null}
           </View>
 
-          <View style={styles.body}>
-            <View style={styles.info}>
-            {origin || eta ? (
-              <View style={styles.metaRow}>
-                {origin ? (
-                  <Text variant="eyebrow" color={colors.accentDark} numberOfLines={1} style={styles.origin}>
-                    {origin.toUpperCase()}
-                  </Text>
-                ) : null}
-                {eta ? (
-                  <View style={styles.etaFlag}>
-                    <Feather name="zap" size={9} color={colors.primaryDark} />
-                    <Text variant="label" color={colors.primaryDark}>
-                      {eta}
-                    </Text>
-                  </View>
-                ) : null}
-              </View>
+          <Text variant="h3" numberOfLines={1} style={styles.name}>
+            {product.name.toUpperCase()}
+          </Text>
+          <View style={styles.footer}>
+            <View style={styles.footerInfo}>
+              {sizeLabel ? (
+                <Text variant="caption" color={colors.textSecondary}>
+                  {sizeLabel}
+                </Text>
+              ) : null}
+              {price ? (
+                <PriceTag amount={price.price} currency={price.currency} mrp={mrp} />
+              ) : (
+                <Text variant="bodySmall" color={colors.textMuted}>
+                  Price unavailable
+                </Text>
+              )}
+            </View>
+            {isAvailable ? (
+              <QuantityStepper
+                pill
+                quantity={stepper.quantity}
+                onAdd={stepper.add}
+                onIncrement={stepper.increment}
+                onDecrement={stepper.decrement}
+                disabled={stepper.isMutating}
+              />
             ) : null}
-            <Text variant="titleSmall" numberOfLines={1} style={styles.name}>
-              {product.name}
-              {marathiName ? <Text variant="caption" color={colors.textSecondary}> ({marathiName})</Text> : null}
-            </Text>
-            {product.variant ? (
-              <Text variant="caption" color={colors.textSecondary}>
-                {formatVariantSize(product.variant.quantity, product.variant.unit)}
-              </Text>
-            ) : product.defaultVariantUnit && product.defaultVariantQuantity ? (
-              <Text variant="caption" color={colors.textSecondary}>
-                {formatVariantSize(product.defaultVariantQuantity, product.defaultVariantUnit)}
-              </Text>
-            ) : null}
-          </View>
-
-          <View style={styles.priceRow}>
-            {price ? (
-              <PriceTag amount={price.price} currency={price.currency} mrp={mrp} />
-            ) : (
-              <Text variant="bodySmall" color={colors.textMuted}>
-                Price unavailable
-              </Text>
-            )}
-          </View>
-          {isAvailable ? (
-            <QuantityStepper
-              quantity={stepper.quantity}
-              onAdd={stepper.add}
-              onIncrement={stepper.increment}
-              onDecrement={stepper.decrement}
-              disabled={stepper.isMutating}
-              fullWidth
-            />
-          ) : null}
           </View>
         </View>
       </PressableScale>
@@ -179,21 +174,19 @@ const styles = StyleSheet.create({
     flex: 1,
     ...shadows.card,
   },
-  // Corner rounding + clipping live here, separate from `card` above -
-  // overflow:hidden on the same view as a shadow would clip the shadow
-  // itself away (an RN gotcha), so the two responsibilities are split
-  // across an outer (shadow) and inner (rounded/clipped) view.
+  // Corner rounding + clipping live on `surface`, separate from `card`
+  // (shadow) - overflow:hidden on a shadowed view clips the shadow away.
   surface: {
-    borderRadius: radius.card,
+    borderRadius: 20,
     overflow: "hidden",
     backgroundColor: colors.surface,
+    padding: spacing.sm,
+    flex: 1,
   },
   imageWrap: {
     width: "100%",
-    // Square (was 0.82 - noticeably taller than wide) - now that cards
-    // are wider, a square image keeps the overall card from stretching
-    // tall the way a portrait image would.
-    aspectRatio: 1,
+    aspectRatio: 1.25,
+    borderRadius: 16,
     overflow: "hidden",
     backgroundColor: colors.background,
   },
@@ -202,33 +195,32 @@ const styles = StyleSheet.create({
     position: "absolute",
     top: spacing.sm,
     left: spacing.sm,
-    backgroundColor: colors.accent,
-    borderRadius: radius.card,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 4,
+    maxWidth: "70%",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "rgba(255,255,255,0.92)",
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
   },
+  badgeText: { flexShrink: 1 },
+  heart: { position: "absolute", top: spacing.sm, right: spacing.sm, zIndex: 2 },
   unavailableOverlay: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
+    ...StyleSheet.absoluteFill as object,
     backgroundColor: colors.overlay,
     alignItems: "center",
     justifyContent: "center",
   },
-  body: { paddingHorizontal: spacing.sm, paddingBottom: spacing.xs },
-  // Tightened (was marginTop: spacing.base / minHeight: 58) - the square
-  // image above already gives the card presence, so the text block below
-  // it no longer needs as much room to keep the whole card from reading
-  // tall.
-  info: { marginTop: spacing.xs, minHeight: 44 },
-  metaRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: spacing.xs },
-  origin: { flexShrink: 1 },
-  etaFlag: { flexDirection: "row", alignItems: "center", gap: 2 },
-  name: { marginBottom: spacing.xs },
-  priceRow: {
-    marginTop: spacing.xs,
-    marginBottom: spacing.xs,
+  name: { marginTop: spacing.sm, paddingHorizontal: 2, fontSize: 15, lineHeight: 21 },
+  footer: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    justifyContent: "space-between",
+    marginTop: "auto",
+    paddingTop: 2,
+    paddingHorizontal: 2,
+    gap: spacing.xs,
   },
+  footerInfo: { flexShrink: 1 },
 });

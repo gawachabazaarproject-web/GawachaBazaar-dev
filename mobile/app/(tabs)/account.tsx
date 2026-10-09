@@ -32,6 +32,7 @@ export default function AccountScreen() {
       items: [
         { icon: "user", label: "Profile", onPress: () => router.push("/account/profile") },
         { icon: "map-pin", label: "Saved addresses", onPress: () => router.push("/address") },
+        { icon: "heart", label: "Wishlist", onPress: () => router.push("/wishlist" as never) },
         { icon: "package", label: "Orders", onPress: () => router.push("/(tabs)/orders") },
         { icon: "briefcase", label: "Bulk requests", onPress: () => router.push("/bulk/requests") },
       ],

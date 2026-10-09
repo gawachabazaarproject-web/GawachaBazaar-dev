@@ -9,3 +9,4 @@ export { orderApi } from "./orderApi";
 export { paymentApi } from "./paymentApi";
 export { bulkOrderApi } from "./bulkOrderApi";
 export { adsApi } from "./adsApi";
+export { wishlistApi } from "./wishlistApi";
