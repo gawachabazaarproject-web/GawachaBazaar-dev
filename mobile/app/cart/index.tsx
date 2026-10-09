@@ -3,15 +3,13 @@ import { Image } from "expo-image";
 import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Stack, useRouter } from "expo-router";
-import { Feather } from "@expo/vector-icons";
+import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
 import { Screen } from "@/components/Screen";
 import { Text } from "@/components/Text";
-import { Button } from "@/components/Button";
 import { EmptyState } from "@/components/EmptyState";
-import { QuantityStepper } from "@/components/QuantityStepper";
-import { ShopHeader } from "@/components/ShopHeader";
 import { RecommendationRail } from "@/components/RecommendationRail";
 import { MiniProductTile } from "@/components/MiniProductTile";
+import { CartHeaderArt } from "@/components/cart/CartHeaderArt";
 import { DeliverySummaryCard } from "@/components/cart/DeliverySummaryCard";
 import { FreeDeliveryProgress } from "@/components/cart/FreeDeliveryProgress";
 import { DeliveryInstructionCard } from "@/components/cart/DeliveryInstructionCard";
@@ -27,7 +25,7 @@ import {
 import { useAddresses } from "@/features/address/useAddresses";
 import { useProducts } from "@/features/catalog/useCatalog";
 import { productSummaryToCardData } from "@/components/ProductCard";
-import { colors, radius, spacing } from "@/theme";
+import { colors, spacing } from "@/theme";
 import { CartItemResponse } from "@/types/api";
 
 const ADDON_SLUGS = ["fresh-lemons", "curry-leaves", "fresh-coriander", "green-chillies"];
@@ -72,47 +70,70 @@ export default function CartScreen() {
     <Screen edges={["top"]}>
       <Stack.Screen options={{ headerShown: false }} />
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        <ShopHeader
-          locationLabel={defaultAddress ? `${defaultAddress.label} - ${defaultAddress.city}` : "Add an address"}
-          onLocationPress={() => router.push("/address")}
-          onAccountPress={() => router.push("/(tabs)/account")}
-        />
-        <View style={styles.closeRow}>
-          <Pressable onPress={() => router.back()} hitSlop={8} style={styles.closeButton}>
-            <Feather name="x" size={18} color={colors.textSecondary} />
+        <CartHeaderArt />
+        <View style={styles.topRow}>
+          <Pressable
+            onPress={() => router.back()}
+            hitSlop={8}
+            style={styles.backButton}
+            accessibilityRole="button"
+            accessibilityLabel="Go back"
+          >
+            <Feather name="chevron-left" size={24} color={colors.textPrimary} />
+          </Pressable>
+          <View style={{ flex: 1 }}>
+            <DeliverySummaryCard
+              addressLabel={defaultAddress?.label ?? "Home"}
+              addressLine={
+                defaultAddress ? `${defaultAddress.label} - ${defaultAddress.city}` : "Add a delivery address"
+              }
+              onChangePress={() => router.push("/address")}
+            />
+          </View>
+          <Pressable
+            onPress={() => router.push("/(tabs)/account")}
+            style={styles.accountButton}
+            accessibilityRole="button"
+            accessibilityLabel="Account"
+          >
+            <Feather name="user" size={20} color={colors.textPrimary} />
           </Pressable>
         </View>
 
         {isLoading ? null : (
           <>
-            <DeliverySummaryCard
-              addressLabel={defaultAddress?.label ?? "Home"}
-              addressLine={
-                defaultAddress
-                  ? `${defaultAddress.city}, ${defaultAddress.state} (${defaultAddress.postal_code})`
-                  : "Add a delivery address"
-              }
-              onChangePress={() => router.push("/address")}
+            <FreeDeliveryProgress
+              cartTotal={Number.parseFloat(cart?.total_amount ?? "0")}
+              currency={cart?.currency ?? "INR"}
             />
-            <FreeDeliveryProgress cartTotal={Number.parseFloat(cart?.total_amount ?? "0")} currency={cart?.currency ?? "INR"} />
 
             <View style={styles.basketHeader}>
-              <View>
+              <View style={styles.marketRow}>
                 <Text variant="eyebrow" color={colors.accentDark}>
                   YOUR MARKET
                 </Text>
-                <Text variant="h1" style={{ marginTop: spacing.xs }}>
-                  Your Harvest Basket
-                </Text>
-                <Text variant="caption" color={colors.textSecondary} style={{ marginTop: spacing.xs }}>
-                  {items.length} Farm SKUs
-                </Text>
+                <Feather name="feather" size={16} color={colors.success} />
               </View>
-              <Pressable onPress={() => clearCart.mutate()} disabled={clearCart.isPending}>
-                <Text variant="bodySmall" color={colors.error}>
-                  EMPTY CART
+              <Text variant="displayM" color={colors.primary} style={styles.basketTitle}>
+                Your Harvest Basket
+              </Text>
+              <View style={styles.basketMeta}>
+                <Text variant="bodySmall" color={colors.textSecondary}>
+                  {items.length} {items.length === 1 ? "item" : "items"} · From local farms
                 </Text>
-              </Pressable>
+                <Pressable
+                  onPress={() => clearCart.mutate()}
+                  disabled={clearCart.isPending}
+                  style={styles.clearButton}
+                  accessibilityRole="button"
+                  accessibilityLabel="Clear cart"
+                >
+                  <Feather name="trash-2" size={13} color={colors.error} />
+                  <Text variant="caption" color={colors.error} style={styles.clearText}>
+                    Clear
+                  </Text>
+                </Pressable>
+              </View>
             </View>
 
             <View style={styles.list}>
@@ -120,6 +141,7 @@ export default function CartScreen() {
                 <CartItemCard
                   key={item.id}
                   item={item}
+                  onRemove={() => removeItem.mutate(item.id)}
                   onIncrement={() =>
                     updateItem.mutate({ itemId: item.id, quantity: Math.round(Number.parseFloat(item.quantity)) + 1 })
                   }
@@ -143,32 +165,37 @@ export default function CartScreen() {
             <DeliveryInstructionCard />
             <BillBreakdownCard items={items} totalAmount={cart?.total_amount ?? null} currency={cart?.currency ?? null} />
 
-            <Text variant="caption" color={colors.textSecondary} style={styles.impactNote}>
-              Wholesale mandi rates: directly helping {items.length + 10} Vidarbha farmer families.
-            </Text>
+            <View style={styles.impactCard}>
+              <MaterialCommunityIcons name="sprout-outline" size={22} color={colors.textPrimary} />
+              <Text variant="caption" color={colors.textSecondary} style={{ flex: 1 }}>
+                Wholesale mandi rates directly helping {items.length + 10} Vidarbha farmer families.
+              </Text>
+            </View>
           </>
         )}
       </ScrollView>
 
       {!isLoading && items.length > 0 ? (
-        <View style={[styles.stickyBar, { paddingBottom: insets.bottom, height: 68 + insets.bottom }]}>
-          <View>
+        <View style={[styles.stickyBar, { marginBottom: insets.bottom + spacing.md }]}>
+          <View style={{ flexShrink: 1 }}>
             <View style={styles.stickyTotalRow}>
-              <Text variant="price" color={colors.textInverse}>
+              <Text variant="priceLarge" color={colors.textInverse}>
                 {formatMoney(cart?.total_amount ?? "0", cart?.currency ?? "INR")}
               </Text>
-              <View style={styles.itemCountBadge}>
-                <Text variant="label" color={colors.textInverse}>
-                  {items.length} ITEMS
-                </Text>
-              </View>
+              <View style={styles.stickyDivider} />
+              <Text variant="bodySmall" color={colors.textInverse}>
+                {items.length} {items.length === 1 ? "item" : "items"}
+              </Text>
             </View>
-            <Text variant="caption" color={colors.primaryLight}>
-              Delivery in 25 mins
-            </Text>
+            <View style={styles.etaRow}>
+              <Feather name="clock" size={14} color={colors.primaryLight} />
+              <Text variant="caption" color={colors.primaryLight}>
+                Delivery in 25 mins
+              </Text>
+            </View>
           </View>
           <Pressable style={styles.checkoutButton} onPress={() => router.push("/checkout")}>
-            <Text variant="button" color={colors.textOnAccent}>
+            <Text variant="bodyMedium" color={colors.textOnAccent}>
               Proceed to Pay
             </Text>
             <Feather name="arrow-right" size={16} color={colors.textOnAccent} />
@@ -183,123 +210,196 @@ function CartItemCard({
   item,
   onIncrement,
   onDecrement,
+  onRemove,
 }: {
   item: CartItemResponse;
   onIncrement: () => void;
   onDecrement: () => void;
+  onRemove: () => void;
 }) {
   const quantity = Math.round(Number.parseFloat(item.quantity));
-  const { marathiName, origin, mrp, cartBadge } = getEmbellishment(item.product_slug);
+  const { origin, cartBadge } = getEmbellishment(item.product_slug);
+  const tag = cartBadge ?? origin ?? null;
 
   return (
     <View style={styles.card}>
-      <View style={styles.imageWrap}>
-        <Image
-          source={item.primary_image_url ?? undefined}
-          style={styles.image}
-          contentFit="cover"
-          placeholder={{ blurhash: "L4C~D%~q00~q~q00%M-;9F%M-;-;" }}
-        />
-        {cartBadge ? (
-          <View style={styles.cartBadge}>
-            <Text variant="label" color={colors.textOnAccent}>
-              {cartBadge}
-            </Text>
-          </View>
-        ) : null}
-      </View>
+      <Image
+        source={item.primary_image_url ?? undefined}
+        style={styles.image}
+        contentFit="cover"
+        placeholder={{ blurhash: "L4C~D%~q00~q~q00%M-;9F%M-;-;" }}
+      />
       <View style={styles.cardInfo}>
-        {origin ? (
-          <Text variant="label" color={colors.accentDark} numberOfLines={1}>
-            {origin.toUpperCase()}
-          </Text>
-        ) : null}
+        <View style={styles.cardTop}>
+          {tag ? (
+            <View style={styles.tagPill}>
+              <Feather name="feather" size={11} color={colors.primary} />
+              <Text variant="label" color={colors.primaryDark} numberOfLines={1}>
+                {tag.toUpperCase()}
+              </Text>
+            </View>
+          ) : (
+            <View />
+          )}
+          <Pressable onPress={onRemove} hitSlop={8} accessibilityRole="button" accessibilityLabel="Remove item">
+            <Feather name="trash-2" size={16} color={colors.textSecondary} />
+          </Pressable>
+        </View>
         <Text variant="titleSmall" numberOfLines={1}>
           {item.product_name}
-          {marathiName ? <Text variant="caption" color={colors.textSecondary}> ({marathiName})</Text> : null}
         </Text>
         <Text variant="caption" color={colors.textSecondary} numberOfLines={1}>
           {item.variant_name}
         </Text>
-        {item.unit_price ? (
-          <View style={styles.priceRow}>
-            <Text variant="priceSmall" color={colors.price}>
+        <View style={styles.cardBottom}>
+          {item.unit_price ? (
+            <Text variant="price" color={colors.price}>
               {formatMoney(item.unit_price, item.currency ?? "INR")}
             </Text>
-            {mrp && Number.parseFloat(mrp) > Number.parseFloat(item.unit_price) ? (
-              <Text variant="caption" color={colors.strikethrough} style={styles.strike}>
-                {formatMoney(mrp, item.currency ?? "INR")}
-              </Text>
-            ) : null}
+          ) : (
+            <Text variant="bodySmall" color={colors.error}>
+              Price no longer available
+            </Text>
+          )}
+          <View style={styles.stepper}>
+            <Pressable
+              onPress={onDecrement}
+              hitSlop={8}
+              style={styles.stepBtn}
+              accessibilityRole="button"
+              accessibilityLabel="Decrease quantity"
+            >
+              <Feather name="minus" size={14} color={colors.textPrimary} />
+            </Pressable>
+            <Text variant="price" style={styles.qty}>
+              {quantity}
+            </Text>
+            <Pressable
+              onPress={onIncrement}
+              hitSlop={8}
+              style={styles.stepBtn}
+              accessibilityRole="button"
+              accessibilityLabel="Increase quantity"
+            >
+              <Feather name="plus" size={14} color={colors.textPrimary} />
+            </Pressable>
           </View>
-        ) : (
-          <Text variant="bodySmall" color={colors.error}>
-            Price no longer available
-          </Text>
-        )}
+        </View>
       </View>
-      <QuantityStepper quantity={quantity} onAdd={onIncrement} onIncrement={onIncrement} onDecrement={onDecrement} />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  scrollContent: { paddingBottom: 130 },
-  closeRow: { alignItems: "flex-end", paddingHorizontal: spacing.base },
-  closeButton: { width: 32, height: 32, alignItems: "center", justifyContent: "center" },
-  basketHeader: {
+  scrollContent: { paddingBottom: 110 },
+  topRow: {
     flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-end",
+    alignItems: "center",
+    gap: spacing.sm,
     paddingHorizontal: spacing.base,
-    marginTop: spacing.lg,
-    marginBottom: spacing.sm,
+    paddingTop: spacing.md,
   },
-  list: { paddingHorizontal: spacing.base, marginTop: spacing.base },
+  backButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: colors.divider,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  accountButton: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: colors.surface,
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#000",
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
+  },
+  basketHeader: { paddingHorizontal: spacing.base, marginTop: spacing.xl },
+  basketMeta: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 2 },
+  clearButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    height: 28,
+    backgroundColor: "#FBECEC",
+    borderRadius: 14,
+    paddingHorizontal: 12,
+  },
+  clearText: { fontSize: 12.5, lineHeight: 16, fontWeight: "500" },
+  basketTitle: { marginTop: 2, fontSize: 30, lineHeight: 36 },
+  marketRow: { flexDirection: "row", alignItems: "center", gap: 6 },
+  list: { paddingHorizontal: spacing.base, marginTop: spacing.md, gap: spacing.sm },
   card: {
+    flexDirection: "row",
+    gap: spacing.sm,
+    backgroundColor: colors.surface,
+    borderRadius: 16,
+    padding: spacing.sm,
+  },
+  image: { width: 76, height: 76, borderRadius: 12, backgroundColor: colors.background },
+  cardInfo: { flex: 1, justifyContent: "space-between" },
+  cardTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  tagPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    backgroundColor: colors.primaryLight,
+    borderRadius: 999,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    maxWidth: "80%",
+  },
+  cardBottom: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: spacing.xs },
+  stepper: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: colors.divider,
+    borderRadius: 999,
+    height: 30,
+  },
+  stepBtn: { width: 28, height: 30, alignItems: "center", justifyContent: "center" },
+  qty: { minWidth: 20, textAlign: "center", fontSize: 15 },
+  impactCard: {
     flexDirection: "row",
     alignItems: "center",
     gap: spacing.md,
-    backgroundColor: colors.surface,
-    borderBottomWidth: 1,
-    borderColor: colors.divider,
-    paddingVertical: spacing.md,
+    marginHorizontal: spacing.base,
+    marginTop: spacing.lg,
+    padding: spacing.md,
+    borderRadius: 14,
+    backgroundColor: colors.divider,
   },
-  imageWrap: { width: 88, height: 88 },
-  image: { width: 88, height: 88, borderRadius: radius.card, backgroundColor: colors.background },
-  cartBadge: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    backgroundColor: colors.accent,
-    paddingHorizontal: 4,
-    paddingVertical: 2,
-  },
-  cardInfo: { flex: 1 },
-  priceRow: { flexDirection: "row", alignItems: "baseline", gap: spacing.xs, marginTop: 2 },
-  strike: { textDecorationLine: "line-through" },
-  impactNote: { marginHorizontal: spacing.base, marginTop: spacing.base, textAlign: "center" },
   stickyBar: {
     position: "absolute",
-    left: 0,
-    right: 0,
+    left: spacing.sm,
+    right: spacing.sm,
     bottom: 0,
-    height: 68,
     backgroundColor: colors.primary,
+    borderRadius: 26,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: spacing.base,
+    paddingVertical: spacing.sm,
+    paddingLeft: spacing.base,
+    paddingRight: spacing.sm,
+    gap: spacing.sm,
   },
   stickyTotalRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
-  itemCountBadge: { backgroundColor: colors.primaryDark, borderRadius: radius.card, paddingHorizontal: spacing.xs, paddingVertical: 2 },
+  stickyDivider: { width: 1, height: 22, backgroundColor: "rgba(255,255,255,0.4)" },
+  etaRow: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 4 },
   checkoutButton: {
     flexDirection: "row",
     alignItems: "center",
     gap: spacing.xs,
     backgroundColor: colors.accent,
-    borderRadius: radius.card,
-    paddingHorizontal: spacing.lg,
-    height: 44,
+    borderRadius: 999,
+    paddingHorizontal: spacing.base,
+    height: 42,
   },
 });

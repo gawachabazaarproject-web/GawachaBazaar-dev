@@ -117,28 +117,11 @@ class CatalogService:
             children=[CategoryResponse.model_validate(c) for c in children],
         )
 
-    def list_public_products(
-        self, category_id: int | None, page: int, page_size: int, *, q: str | None = None
-    ) -> ProductListResponse:
-        query = self.db.query(Product).filter(Product.status == _ACTIVE)
-        if category_id is not None:
-            query = query.filter(Product.category_id == category_id)
-        if q is not None:
-            # Phase 20 addition: the smallest possible backend change to
-            # support the mobile search screen - no full-text search
-            # engine, just a case-insensitive name filter, consistent with
-            # the "do not invent a complex search engine" instruction.
-            query = query.filter(Product.name.ilike(f"%{q}%"))
-
-        total = query.count()
-        products = (
-            query.order_by(Product.name)
-            .offset((page - 1) * page_size)
-            .limit(page_size)
-            .options(selectinload(Product.images), selectinload(Product.variants))
-            .all()
-        )
-
+    def build_product_summaries(
+        self, products: list[Product]
+    ) -> list[ProductSummaryResponse]:
+        """Summary cards (price + default variant) for already-loaded products.
+        Products must have images and variants eagerly loaded."""
         # Phase 20 addition: browsing grids (Home/Category/Search) need a
         # real price and a real addable variant, not just name/image - the
         # smallest correct fix is resolving each product's lowest-id ACTIVE
@@ -176,6 +159,31 @@ class CatalogService:
                     default_variant_quantity=default_variant.quantity if default_variant else None,
                 )
             )
+        return items
+
+    def list_public_products(
+        self, category_id: int | None, page: int, page_size: int, *, q: str | None = None
+    ) -> ProductListResponse:
+        query = self.db.query(Product).filter(Product.status == _ACTIVE)
+        if category_id is not None:
+            query = query.filter(Product.category_id == category_id)
+        if q is not None:
+            # Phase 20 addition: the smallest possible backend change to
+            # support the mobile search screen - no full-text search
+            # engine, just a case-insensitive name filter, consistent with
+            # the "do not invent a complex search engine" instruction.
+            query = query.filter(Product.name.ilike(f"%{q}%"))
+
+        total = query.count()
+        products = (
+            query.order_by(Product.name)
+            .offset((page - 1) * page_size)
+            .limit(page_size)
+            .options(selectinload(Product.images), selectinload(Product.variants))
+            .all()
+        )
+
+        items = self.build_product_summaries(products)
         return ProductListResponse(
             items=items, page=page, page_size=page_size, total=total
         )

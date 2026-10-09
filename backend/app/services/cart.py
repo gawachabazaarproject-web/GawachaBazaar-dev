@@ -23,7 +23,7 @@ exists to lock) needs that handling.
 from decimal import ROUND_HALF_UP, Decimal
 
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from app.exceptions.base import ConflictError, NotFoundError
 from app.models.cart import Cart
@@ -86,9 +86,12 @@ class CartService:
     # ------------------------------------------------------------------
 
     def add_item(self, user_id: int, data: AddCartItemRequest) -> CartItemResponse:
-        self._validate_variant_purchasable(data.variant_id)
-        self._get_or_create_active_cart(user_id)
-        cart = self._get_locked_active_cart(user_id)
+        # Round trips dominate latency when the database is remote, so this
+        # path is kept to the minimum: one joined variant/product/images
+        # load (reused for the response), one locking cart read, one item
+        # read, one price read, one commit.
+        variant = self._validate_variant_purchasable(data.variant_id)
+        cart = self._lock_or_create_active_cart(user_id)
 
         existing = (
             self.db.query(CartItem)
@@ -106,9 +109,10 @@ class CartService:
             )
             self.db.add(item)
 
+        self.db.flush()
+        response = self._build_item_response(item, variant)
         self.db.commit()
-        self.db.refresh(item)
-        return self._to_item_response(item)
+        return response
 
     def update_item_quantity(
         self, user_id: int, item_id: int, data: UpdateCartItemRequest
@@ -123,9 +127,10 @@ class CartService:
             raise NotFoundError("Cart item not found.")
 
         item.quantity = data.quantity
+        self.db.flush()
+        response = self._build_item_response(item, self._load_variant(item.variant_id))
         self.db.commit()
-        self.db.refresh(item)
-        return self._to_item_response(item)
+        return response
 
     def remove_item(self, user_id: int, item_id: int) -> None:
         cart = self._get_locked_active_cart(user_id)
@@ -205,23 +210,40 @@ class CartService:
             )
         return cart
 
-    def _validate_variant_purchasable(self, variant_id: int) -> ProductVariant:
-        variant = (
+    def _load_variant(self, variant_id: int) -> ProductVariant | None:
+        """Variant with its product and the product's images in one query."""
+        return (
             self.db.query(ProductVariant)
+            .options(joinedload(ProductVariant.product).joinedload(Product.images))
             .filter(ProductVariant.id == variant_id)
             .first()
         )
+
+    def _validate_variant_purchasable(self, variant_id: int) -> ProductVariant:
+        variant = self._load_variant(variant_id)
         if not variant:
             raise NotFoundError("Product variant not found.")
         if variant.status != _ACTIVE:
             raise ConflictError("This product variant is not currently available.")
-
-        product = (
-            self.db.query(Product).filter(Product.id == variant.product_id).first()
-        )
+        product = variant.product
         if not product or product.status != _ACTIVE:
             raise ConflictError("This product is not currently available.")
         return variant
+
+    def _lock_or_create_active_cart(self, user_id: int) -> Cart:
+        """Lock the user's latest cart in one query; only fall back to the
+        create-then-lock path for a first-ever or checked-out cart."""
+        cart = (
+            self.db.query(Cart)
+            .filter(Cart.user_id == user_id)
+            .order_by(Cart.id.desc())
+            .with_for_update()
+            .first()
+        )
+        if cart is not None and cart.status == _ACTIVE:
+            return cart
+        self._get_or_create_active_cart(user_id)
+        return self._get_locked_active_cart(user_id)
 
     @staticmethod
     def _line_total(quantity: Decimal, unit_price: Decimal) -> Decimal:
@@ -230,6 +252,30 @@ class CartService:
         no DB column/CHECK constraint to catch an unrounded result.
         """
         return (quantity * unit_price).quantize(_CENTS, rounding=ROUND_HALF_UP)
+
+    def _build_item_response(
+        self, item: CartItem, variant: ProductVariant
+    ) -> CartItemResponse:
+        """Item response from an already-loaded variant (product + images)."""
+        product = variant.product
+        price = get_current_prices_for_variants(self.db, [item.variant_id]).get(
+            item.variant_id
+        )
+        primary_image = next((i for i in product.images if i.is_primary), None)
+        return CartItemResponse(
+            id=item.id,
+            variant_id=item.variant_id,
+            product_id=product.id,
+            product_slug=product.slug,
+            primary_image_url=primary_image.image_url if primary_image else None,
+            product_name=product.name,
+            variant_name=variant.name,
+            sku=variant.sku,
+            quantity=item.quantity,
+            unit_price=price.price if price else None,
+            line_total=self._line_total(item.quantity, price.price) if price else None,
+            currency=price.currency if price else None,
+        )
 
     def _to_item_response(self, item: CartItem) -> CartItemResponse:
         variant = (

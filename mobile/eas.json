@@ -11,10 +11,30 @@
       "distribution": "internal",
       "android": {
         "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_API_BASE_URL": "https://api.gawachabazaar.in/api/v1",
+        "EXPO_PUBLIC_FIREBASE_API_KEY": "AIzaSyDBPicSnbA_MzNeXJXyC0SJ-JKz0M8lFuE",
+        "EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN": "gawachabazaar-ac900.firebaseapp.com",
+        "EXPO_PUBLIC_FIREBASE_PROJECT_ID": "gawachabazaar-ac900",
+        "EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET": "gawachabazaar-ac900.firebasestorage.app",
+        "EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID": "853340583825",
+        "EXPO_PUBLIC_FIREBASE_APP_ID": "1:853340583825:web:16be2aad373fc79bee0c30",
+        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "853340583825-a7lu38kmj7ierapa571grhd40hefm346.apps.googleusercontent.com"
       }
     },
     "production": {
-      "autoIncrement": true
+      "autoIncrement": true,
+      "env": {
+        "EXPO_PUBLIC_API_BASE_URL": "https://api.gawachabazaar.in/api/v1",
+        "EXPO_PUBLIC_FIREBASE_API_KEY": "AIzaSyDBPicSnbA_MzNeXJXyC0SJ-JKz0M8lFuE",
+        "EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN": "gawachabazaar-ac900.firebaseapp.com",
+        "EXPO_PUBLIC_FIREBASE_PROJECT_ID": "gawachabazaar-ac900",
+        "EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET": "gawachabazaar-ac900.firebasestorage.app",
+        "EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID": "853340583825",
+        "EXPO_PUBLIC_FIREBASE_APP_ID": "1:853340583825:web:16be2aad373fc79bee0c30",
+        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "853340583825-a7lu38kmj7ierapa571grhd40hefm346.apps.googleusercontent.com"
+      }
     }
   },
   "submit": {

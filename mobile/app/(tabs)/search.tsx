@@ -16,12 +16,14 @@ import { useAllProducts, useCategories, useProducts } from "@/features/catalog/u
 import { useAddresses } from "@/features/address/useAddresses";
 import { useRecentSearches } from "@/features/catalog/useRecentSearches";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
+import { useVoiceSearch } from "@/hooks/useVoiceSearch";
 import { RELATED_PRODUCTS, DEFAULT_QUICK_SEARCH_TERMS } from "@/utils/relatedProducts";
 import { colors, radius, spacing, typography } from "@/theme";
 
 export default function SearchScreen() {
   const router = useRouter();
   const [query, setQuery] = useState("");
+  const voice = useVoiceSearch(setQuery);
   const debouncedQuery = useDebouncedValue(query.trim(), 350);
   const { recent, addRecent, clearRecent } = useRecentSearches();
   const { data: addresses } = useAddresses();
@@ -102,6 +104,15 @@ export default function SearchScreen() {
               <Feather name="x" size={16} color={colors.textMuted} />
             </Pressable>
           ) : null}
+          <Pressable
+            onPress={voice.toggle}
+            hitSlop={8}
+            style={{ marginLeft: spacing.sm }}
+            accessibilityRole="button"
+            accessibilityLabel={voice.listening ? "Stop voice search" : "Search by voice"}
+          >
+            <Feather name="mic" size={18} color={voice.listening ? colors.primary : colors.textMuted} />
+          </Pressable>
         </View>
       </View>
 

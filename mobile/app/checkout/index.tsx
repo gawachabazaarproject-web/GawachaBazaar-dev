@@ -1,14 +1,15 @@
 import React, { useEffect, useState } from "react";
 import { Alert, Pressable, ScrollView, StyleSheet, TextInput, View } from "react-native";
 import { Stack, useRouter } from "expo-router";
-import { Feather } from "@expo/vector-icons";
-import { Image } from "expo-image";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
 import { toApiError } from "@/api";
 import { Screen } from "@/components/Screen";
 import { Text } from "@/components/Text";
 import { Button } from "@/components/Button";
 import { CheckoutSection } from "@/components/checkout/CheckoutSection";
-import { HarvestSlotSelector } from "@/components/checkout/HarvestSlotSelector";
+import { HarvestSlotSelector, slotSummary, Day, Slot } from "@/components/checkout/HarvestSlotSelector";
+import { CheckoutStepper } from "@/components/checkout/CheckoutStepper";
 import { BasketSummaryCard } from "@/components/checkout/BasketSummaryCard";
 import { ImpactCard } from "@/components/checkout/ImpactCard";
 import { useCart, useEvaluatePromo } from "@/features/cart/useCart";
@@ -18,11 +19,12 @@ import { useCancelOrder } from "@/features/orders/useOrders";
 import { useOnlinePayment } from "@/features/payment/useOnlinePayment";
 import { RazorpayCheckout } from "@/components/payment/RazorpayCheckout";
 import { formatMoney } from "@/utils/money";
-import { colors, radius, spacing } from "@/theme";
+import { colors, spacing } from "@/theme";
 import { PaymentMethod, PaymentResponse, PromotionEvaluationResponse, RazorpaySuccessPayload } from "@/types/api";
 
 export default function CheckoutScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { data: cart } = useCart();
   const { data: addresses } = useAddresses();
   const placeOrder = usePlaceOrder();
@@ -32,6 +34,8 @@ export default function CheckoutScreen() {
   const [selectedAddressId, setSelectedAddressId] = useState<number | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("COD");
   const [result, setResult] = useState<PlaceOrderResult | null>(null);
+  const [day, setDay] = useState<Day>("today");
+  const [slot, setSlot] = useState<Slot>("morning");
 
   const [promoInput, setPromoInput] = useState("");
   const [promoEvaluation, setPromoEvaluation] = useState<PromotionEvaluationResponse | null>(null);
@@ -236,81 +240,117 @@ export default function CheckoutScreen() {
     <Screen edges={["top", "bottom"]}>
       <Stack.Screen options={{ headerShown: false }} />
       <View style={styles.header}>
-        <Pressable onPress={() => router.back()} hitSlop={8}>
-          <Feather name="arrow-left" size={20} color={colors.textPrimary} />
+        <Pressable onPress={() => router.back()} hitSlop={8} style={styles.headerSide} accessibilityRole="button" accessibilityLabel="Go back">
+          <Feather name="chevron-left" size={26} color={colors.textPrimary} />
         </Pressable>
-        <Text variant="h3">Checkout</Text>
-        <View style={styles.headerRight}>
-          <Image source={require("../../assets/logo.jpeg")} style={styles.headerLogo} contentFit="cover" />
-          <Pressable onPress={() => router.push("/account/support")} hitSlop={8}>
-            <Feather name="help-circle" size={20} color={colors.textSecondary} />
-          </Pressable>
-        </View>
+        <Text variant="h1" color={colors.primary} style={{ fontSize: 24 }}>
+          Checkout
+        </Text>
+        <Pressable
+          onPress={() => router.push("/account/support")}
+          hitSlop={8}
+          style={[styles.headerSide, styles.headerRight]}
+          accessibilityRole="button"
+          accessibilityLabel="Help"
+        >
+          <Feather name="help-circle" size={24} color={colors.textPrimary} />
+        </Pressable>
       </View>
 
       <View style={styles.trustStrip}>
         <View style={styles.trustItem}>
-          <Feather name="shield" size={13} color={colors.success} />
-          <Text variant="caption" color={colors.textSecondary}>
+          <MaterialCommunityIcons name="leaf" size={18} color={colors.success} />
+          <Text variant="caption" color={colors.textSecondary} numberOfLines={1} style={{ flexShrink: 1 }}>
             100% Farm Fresh Guarantee
           </Text>
         </View>
-        <View style={styles.trustPill}>
-          <Text variant="label" color={colors.accentDark}>
-            DIRECT MANDI HARVEST
-          </Text>
+        <View style={styles.trustDivider} />
+        <View style={styles.trustItem}>
+          <MaterialCommunityIcons name="barley" size={18} color={colors.accentDark} />
+          <View style={styles.trustPill}>
+            <Text variant="caption" color={colors.textPrimary} numberOfLines={1} style={{ fontWeight: "600" }}>
+              Direct Mandi Harvest
+            </Text>
+          </View>
         </View>
       </View>
 
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        <CheckoutStepper active={1} />
         {/* 1. Delivery address - real */}
-        <CheckoutSection number={1} label="Address" title="Delivery Address (पत्ता)">
-          {(addresses ?? []).map((address) => (
-            <Pressable key={address.id} style={styles.addressOption} onPress={() => setSelectedAddressId(address.id)}>
-              <View style={[styles.radio, selectedAddressId === address.id && styles.radioActive]}>
-                {selectedAddressId === address.id ? <View style={styles.radioDot} /> : null}
-              </View>
-              <View style={{ flex: 1 }}>
-                <View style={styles.addressTitleRow}>
-                  <Text variant="bodyMedium">{address.label}</Text>
-                  {address.is_default ? (
-                    <View style={styles.primaryBadge}>
-                      <Text variant="label" color={colors.primary}>
-                        PRIMARY
-                      </Text>
-                    </View>
-                  ) : null}
-                </View>
-                <Text variant="bodySmall" color={colors.textSecondary}>
-                  {address.address_line_1}, {address.city}, {address.state} {address.postal_code}
-                </Text>
-              </View>
+        <CheckoutSection
+          number={1}
+          label="Delivery Address"
+          action={
+            <Pressable onPress={() => router.push("/address")} style={styles.changeLink} hitSlop={8}>
+              <Text variant="bodyMedium" color={colors.primary}>
+                Change
+              </Text>
+              <Feather name="chevron-right" size={16} color={colors.primary} />
             </Pressable>
-          ))}
-          <Pressable onPress={() => router.push("/address/add")} style={styles.addAddressLink}>
-            <Feather name="plus" size={14} color={colors.primary} />
-            <Text variant="bodyMedium" color={colors.primary} style={{ marginLeft: spacing.xs }}>
-              Add new address
-            </Text>
+          }
+        >
+          {(addresses ?? []).map((address) => {
+            const selected = selectedAddressId === address.id;
+            return (
+              <Pressable
+                key={address.id}
+                style={[styles.addressCard, selected && styles.addressCardSelected]}
+                onPress={() => setSelectedAddressId(address.id)}
+                accessibilityRole="radio"
+                accessibilityState={{ selected }}
+              >
+                <View style={styles.addressIcon}>
+                  <Feather name="home" size={22} color={colors.primary} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <View style={styles.addressTitleRow}>
+                    <Text variant="h3">{address.label}</Text>
+                    {address.is_default ? (
+                      <View style={styles.primaryBadge}>
+                        <Text variant="label" color={colors.primary}>
+                          PRIMARY
+                        </Text>
+                      </View>
+                    ) : null}
+                  </View>
+                  <Text variant="bodySmall" color={colors.textSecondary} style={{ marginTop: 2 }}>
+                    {address.address_line_1}, {address.city}, {address.state} {address.postal_code}
+                  </Text>
+                </View>
+                <Feather name={selected ? "check-circle" : "chevron-right"} size={20} color={selected ? colors.primary : colors.textPrimary} />
+              </Pressable>
+            );
+          })}
+          <Pressable onPress={() => router.push("/address/add")} style={styles.addAddressCard} accessibilityRole="button">
+            <Feather name="plus-circle" size={20} color={colors.textPrimary} />
+            <Text variant="bodyMedium">Add new address</Text>
           </Pressable>
         </CheckoutSection>
 
         {/* 2. Harvest slot - illustrative, interactive local state (see component) */}
-        <CheckoutSection number={2} label="Delivery" title="Select Farm Harvest Slot" badge="FRESH TIMINGS">
-          <HarvestSlotSelector />
+        <CheckoutSection number={2} label="Delivery" badge="FRESH TIMINGS" badgeIcon="feather">
+          <HarvestSlotSelector day={day} slot={slot} onDayChange={setDay} onSlotChange={setSlot} />
         </CheckoutSection>
 
         {/* 3. Payment method - online via Razorpay, or Cash on Delivery */}
-        <CheckoutSection number={3} label="Payment" title="Payment Options (पेमेंट)" badge="BANK GRADE SSL">
+        <CheckoutSection
+          number={3}
+          label="Payment"
+          title="Payment Options (पेमेंट)"
+          badge="BANK GRADE SSL"
+          badgeIcon="lock"
+        >
           <PaymentOption
             label="Pay online"
-            description="UPI, cards, netbanking & wallets · secured by Razorpay"
-            icon="smartphone"
+            description="UPI, cards, netbanking & wallets"
+            icon="credit-card"
             selected={paymentMethod === "UPI"}
             onPress={() => setPaymentMethod("UPI")}
+            extra={<PaymentBrands />}
           />
           <PaymentOption
-            label="Cash / UPI on Crate Delivery"
+            label="Cash / UPI on Delivery"
             description="Verify freshness before paying at your door"
             icon="dollar-sign"
             selected={paymentMethod === "COD"}
@@ -339,7 +379,7 @@ export default function CheckoutScreen() {
           ) : (
             <View style={styles.promoRow}>
               <View style={styles.promoInputWrapper}>
-                <Feather name="tag" size={16} color={colors.textSecondary} />
+                <Feather name="tag" size={18} color={colors.textSecondary} />
                 <TextInput
                   value={promoInput}
                   onChangeText={(text) => {
@@ -347,13 +387,13 @@ export default function CheckoutScreen() {
                     if (promoEvaluation) setPromoEvaluation(null);
                   }}
                   placeholder="Enter promo code"
-                  placeholderTextColor={colors.textSecondary}
+                  placeholderTextColor={colors.textMuted}
                   autoCapitalize="characters"
                   style={styles.promoInput}
                 />
               </View>
               <Pressable
-                style={[styles.promoApplyButton, (!promoInput.trim() || evaluatePromo.isPending) && styles.placeOrderButtonDisabled]}
+                style={[styles.promoApplyButton, (!promoInput.trim() || evaluatePromo.isPending) && styles.disabled]}
                 onPress={handleApplyPromo}
                 disabled={!promoInput.trim() || evaluatePromo.isPending}
               >
@@ -368,27 +408,48 @@ export default function CheckoutScreen() {
               {promoEvaluation.message}
             </Text>
           ) : null}
+          <View style={styles.offerBanner}>
+            <View style={styles.offerIcon}>
+              <Feather name="gift" size={20} color={colors.primary} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text variant="bodyMedium">Save more with farm fresh offers!</Text>
+              <Text variant="caption" color={colors.textSecondary}>
+                Get special discounts and support local farmers.
+              </Text>
+            </View>
+            <Feather name="chevron-right" size={18} color={colors.textPrimary} />
+          </View>
         </CheckoutSection>
 
         {/* 5. Order summary - real cart data */}
         <CheckoutSection number={5} label="Order Summary" title="Review your order">
-          <BasketSummaryCard items={cart.items} totalAmount={cart.total_amount} currency={cart.currency} />
+          <BasketSummaryCard
+            items={cart.items}
+            totalAmount={cart.total_amount}
+            currency={cart.currency}
+            slotLabel={slotSummary(day, slot)}
+            paymentLabel={paymentMethod === "UPI" ? "Pay online" : "Cash / UPI on Delivery"}
+          />
           {promoEvaluation?.eligible ? (
             <View style={styles.discountSummaryRow}>
               <Text variant="bodyMedium" color={colors.textSecondary}>Discount ({promoEvaluation.applied_code})</Text>
-              <Text variant="bodyMedium" color={colors.success}>
+              <Text variant="priceSmall" color={colors.success}>
                 -{formatMoney(promoEvaluation.discount_amount, cart.currency ?? "INR")}
               </Text>
             </View>
           ) : null}
           <ImpactCard />
-          <Text variant="caption" color={colors.textSecondary} align="center" style={styles.sustainabilityNote}>
-            Zero single-use plastics. Delivered in sanitised returnable jute crates.
-          </Text>
+          <View style={styles.sustainRow}>
+            <MaterialCommunityIcons name="leaf" size={18} color={colors.success} />
+            <Text variant="caption" color={colors.textSecondary} style={{ flex: 1 }}>
+              Zero single-use plastics. Delivered in sanitised, returnable jute crates.
+            </Text>
+          </View>
         </CheckoutSection>
       </ScrollView>
 
-      <View style={styles.footer}>
+      <View style={[styles.footer, { bottom: insets.bottom + spacing.md }]}>
         {paymentMethod === "COD" ? (
           <Text variant="caption" color={colors.textSecondary} style={styles.footerNote}>
             Amount to pay on delivery: {formatMoney(total, cart.currency ?? "INR")}
@@ -402,21 +463,27 @@ export default function CheckoutScreen() {
           </Text>
         ) : null}
         <View style={styles.placeOrderBar}>
-          <View>
-            <Text variant="price" color={colors.textInverse}>
-              {formatMoney(total, cart.currency ?? "INR")}
-            </Text>
-            <Text variant="caption" color={colors.primaryLight}>
-              Free delivery
+          <View style={{ flex: 1 }}>
+            <View style={styles.totalRow}>
+              <Text variant="priceLarge" color={colors.textInverse} style={{ fontSize: 22, lineHeight: 28 }}>
+                {formatMoney(total, cart.currency ?? "INR")}
+              </Text>
+              <View style={styles.totalDivider} />
+              <Text variant="bodySmall" color={colors.textInverse}>
+                {cart.items.length} {cart.items.length === 1 ? "item" : "items"}
+              </Text>
+            </View>
+            <Text variant="caption" color={colors.primaryLight} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>
+              Free delivery • {slotSummary(day, slot)}
             </Text>
           </View>
           <Pressable
-            style={[styles.placeOrderButton, (!selectedAddressId || placeOrder.isPending) && styles.placeOrderButtonDisabled]}
+            style={[styles.placeOrderButton, (!selectedAddressId || placeOrder.isPending) && styles.disabled]}
             onPress={handlePlaceOrder}
             disabled={!selectedAddressId || placeOrder.isPending}
           >
-            <Text variant="button" color={colors.textOnAccent}>
-              {placeOrder.isPending ? "Placing order..." : "Place Order"}
+            <Text variant="bodyMedium" color={colors.textOnAccent}>
+              {placeOrder.isPending ? "Placing..." : "Place Order"}
             </Text>
             <Feather name="arrow-right" size={16} color={colors.textOnAccent} />
           </Pressable>
@@ -426,18 +493,42 @@ export default function CheckoutScreen() {
   );
 }
 
+/** Simple brand marks shown under "Pay online" - plain shapes/text, no
+ * trademarked artwork. */
+function PaymentBrands() {
+  return (
+    <View style={styles.brands}>
+      <Text variant="caption" style={[styles.brandText, { color: "#1A4FB5", fontStyle: "italic", fontWeight: "800" }]}>
+        VISA
+      </Text>
+      <View style={styles.mc}>
+        <View style={[styles.mcDot, { backgroundColor: "#E0443A" }]} />
+        <View style={[styles.mcDot, { backgroundColor: "#F2A12B", marginLeft: -7 }]} />
+      </View>
+      <Text variant="caption" style={[styles.brandText, { color: "#0C6AB0", fontWeight: "800" }]}>
+        UPI
+      </Text>
+      <Text variant="caption" style={[styles.brandText, { color: "#0B7CC4", fontWeight: "800" }]}>
+        Paytm
+      </Text>
+    </View>
+  );
+}
+
 function PaymentOption({
   label,
   description,
   icon,
   selected,
   onPress,
+  extra,
 }: {
   label: string;
   description: string;
   icon: keyof typeof Feather.glyphMap;
   selected: boolean;
   onPress: () => void;
+  extra?: React.ReactNode;
 }) {
   return (
     <Pressable
@@ -446,14 +537,17 @@ function PaymentOption({
       accessibilityRole="radio"
       accessibilityState={{ selected }}
     >
-      <View style={styles.paymentIcon}>
-        <Feather name={icon} size={18} color={selected ? colors.primary : colors.textSecondary} />
+      <View style={[styles.paymentIcon, selected && styles.paymentIconSelected]}>
+        <Feather name={icon} size={20} color={colors.primary} />
       </View>
       <View style={{ flex: 1 }}>
-        <Text variant="bodyMedium">{label}</Text>
+        <Text variant="bodyMedium" style={{ fontWeight: "600" }}>
+          {label}
+        </Text>
         <Text variant="caption" color={colors.textSecondary}>
           {description}
         </Text>
+        {extra}
       </View>
       <View style={[styles.radio, selected && styles.radioActive]}>{selected ? <View style={styles.radioDot} /> : null}</View>
     </Pressable>
@@ -467,79 +561,145 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     paddingHorizontal: spacing.base,
     paddingTop: spacing.sm,
-    paddingBottom: spacing.xs,
+    paddingBottom: spacing.sm,
   },
-  headerRight: { flexDirection: "row", alignItems: "center", gap: spacing.md },
-  headerLogo: { width: 24, height: 24 * (1149 / 1369), borderRadius: 0 },
+  headerSide: { width: 36, height: 36, justifyContent: "center" },
+  headerRight: { alignItems: "flex-end" },
   trustStrip: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: spacing.base,
     paddingBottom: spacing.sm,
+    borderBottomWidth: 1,
+    borderColor: colors.divider,
+    gap: spacing.sm,
   },
-  trustItem: { flexDirection: "row", alignItems: "center", gap: spacing.xs },
-  trustPill: { backgroundColor: colors.accentLight, borderRadius: radius.card, paddingHorizontal: spacing.xs, paddingVertical: 3 },
-  content: { padding: spacing.base, paddingBottom: spacing["3xl"] },
+  trustItem: { flexDirection: "row", alignItems: "center", gap: 6, flexShrink: 1 },
+  trustDivider: { width: 1, height: 20, backgroundColor: colors.border },
+  trustPill: { backgroundColor: colors.accentLight, borderRadius: 999, paddingHorizontal: 9, paddingVertical: 4, flexShrink: 1 },
+  content: { paddingHorizontal: spacing.base, paddingBottom: 170 },
   centered: { flex: 1, alignItems: "center", justifyContent: "center", padding: spacing.xl },
   errorTitle: { marginTop: spacing.lg },
   errorMessage: { marginTop: spacing.sm },
-  addressOption: { flexDirection: "row", alignItems: "flex-start", gap: spacing.sm, marginBottom: spacing.md },
-  addressTitleRow: { flexDirection: "row", alignItems: "center", gap: spacing.xs },
-  primaryBadge: { backgroundColor: colors.primaryLight, borderRadius: radius.card, paddingHorizontal: 4, paddingVertical: 1 },
-  addAddressLink: { flexDirection: "row", alignItems: "center", marginTop: spacing.xs },
+  changeLink: { flexDirection: "row", alignItems: "center", gap: 2 },
+  addressCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
+    padding: spacing.md,
+    borderRadius: 18,
+    backgroundColor: "#EEF0E9",
+    borderWidth: 1.5,
+    borderColor: "transparent",
+    marginBottom: spacing.sm,
+  },
+  addressCardSelected: { borderColor: colors.primary },
+  addressIcon: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: colors.primaryLight,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  addressTitleRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
+  primaryBadge: { backgroundColor: colors.primaryLight, borderRadius: 999, paddingHorizontal: 8, paddingVertical: 2 },
+  addAddressCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: spacing.sm,
+    height: 52,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderStyle: "dashed",
+    borderColor: colors.border,
+  },
   radio: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
     borderWidth: 1.5,
     borderColor: colors.border,
     alignItems: "center",
     justifyContent: "center",
-    marginTop: 2,
   },
-  radioActive: { borderColor: colors.primary },
-  radioDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: colors.primary },
+  radioActive: { borderColor: colors.primary, borderWidth: 2 },
+  radioDot: { width: 12, height: 12, borderRadius: 6, backgroundColor: colors.primary },
   paymentOption: {
     flexDirection: "row",
     alignItems: "center",
     gap: spacing.md,
     padding: spacing.md,
-    borderRadius: radius.card,
-    borderWidth: 1.5,
-    borderColor: colors.border,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: colors.divider,
+    backgroundColor: colors.surface,
     marginBottom: spacing.sm,
   },
-  paymentOptionSelected: { borderColor: colors.primary, backgroundColor: colors.primaryLight },
-  paymentIcon: { width: 32, alignItems: "center" },
+  paymentOptionSelected: { borderColor: colors.primary, borderWidth: 1.5, backgroundColor: colors.primaryLight },
+  paymentIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: colors.divider,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  paymentIconSelected: { backgroundColor: "rgba(47,122,77,0.14)" },
+  brands: { flexDirection: "row", alignItems: "center", gap: spacing.md, marginTop: spacing.sm },
+  brandText: { fontSize: 13, lineHeight: 16 },
+  mc: { flexDirection: "row", alignItems: "center" },
+  mcDot: { width: 16, height: 16, borderRadius: 8 },
   promoRow: { flexDirection: "row", gap: spacing.sm },
   promoInputWrapper: {
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
-    gap: spacing.xs,
-    borderWidth: 1.5,
+    gap: spacing.sm,
+    height: 50,
+    borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: radius.card,
-    paddingHorizontal: spacing.sm,
+    backgroundColor: colors.surface,
+    borderRadius: 25,
+    paddingHorizontal: spacing.base,
   },
-  promoInput: { flex: 1, paddingVertical: spacing.sm, fontSize: 14, color: colors.textPrimary },
+  promoInput: { flex: 1, paddingVertical: 0, fontSize: 15, color: colors.textPrimary },
   promoApplyButton: {
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: colors.accent,
-    borderRadius: radius.card,
-    paddingHorizontal: spacing.lg,
+    borderRadius: 25,
+    paddingHorizontal: spacing.xl,
+    height: 50,
   },
   promoAppliedRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: spacing.sm,
-    padding: spacing.sm,
+    padding: spacing.md,
     borderWidth: 1.5,
     borderColor: colors.success,
     backgroundColor: colors.primaryLight,
-    borderRadius: radius.card,
+    borderRadius: 16,
+  },
+  offerBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
+    backgroundColor: "#EEF0E9",
+    borderRadius: 16,
+    padding: spacing.md,
+    marginTop: spacing.md,
+  },
+  offerIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: colors.primaryLight,
+    alignItems: "center",
+    justifyContent: "center",
   },
   discountSummaryRow: {
     flexDirection: "row",
@@ -547,26 +707,34 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     marginTop: spacing.sm,
   },
-  sustainabilityNote: { marginTop: spacing.sm, marginBottom: spacing.base },
-  footer: { padding: spacing.base, paddingTop: spacing.sm, borderTopWidth: 1, borderTopColor: colors.border, backgroundColor: colors.surface },
-  footerNote: { textAlign: "center", marginBottom: spacing.sm },
+  sustainRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm, marginTop: spacing.md },
+  footer: {
+    position: "absolute",
+    left: spacing.sm,
+    right: spacing.sm,
+  },
+  footerNote: { textAlign: "center", marginBottom: spacing.xs },
   placeOrderBar: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     backgroundColor: colors.primary,
-    borderRadius: radius.card,
-    paddingHorizontal: spacing.base,
-    height: 56,
+    borderRadius: 30,
+    paddingVertical: spacing.sm,
+    paddingLeft: spacing.base,
+    paddingRight: spacing.sm,
+    gap: spacing.sm,
   },
+  totalRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
+  totalDivider: { width: 1, height: 22, backgroundColor: "rgba(255,255,255,0.4)" },
   placeOrderButton: {
     flexDirection: "row",
     alignItems: "center",
     gap: spacing.xs,
     backgroundColor: colors.accent,
-    borderRadius: radius.card,
-    paddingHorizontal: spacing.lg,
-    height: 44,
+    borderRadius: 999,
+    paddingHorizontal: spacing.base,
+    height: 42,
   },
-  placeOrderButtonDisabled: { opacity: 0.5 },
+  disabled: { opacity: 0.5 },
 });

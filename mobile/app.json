@@ -53,7 +53,14 @@
       ],
       "@react-native-firebase/app",
       "@react-native-firebase/auth",
-      "@react-native-google-signin/google-signin"
+      "@react-native-google-signin/google-signin",
+      [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "GawachaBazaar uses the microphone so you can search by voice.",
+          "speechRecognitionPermission": "GawachaBazaar uses speech recognition so you can search by voice."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true
