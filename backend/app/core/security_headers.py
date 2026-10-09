@@ -17,6 +17,19 @@ from starlette.requests import Request
 from starlette.responses import Response
 
 
+_DOCS_PATHS = {"/docs", "/redoc", "/docs/oauth2-redirect"}
+_DOCS_CSP = (
+    "default-src 'none'; "
+    "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+    "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://fonts.googleapis.com; "
+    "font-src https://fonts.gstatic.com data:; "
+    "img-src 'self' data: https://fastapi.tiangolo.com https://cdn.jsdelivr.net; "
+    "worker-src blob:; "
+    "connect-src 'self'; "
+    "frame-ancestors 'none'"
+)
+
+
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next) -> Response:
         response = await call_next(request)
@@ -36,7 +49,13 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         # 'none' (belt-and-braces alongside X-Frame-Options) is correct and
         # cannot break any real client - a JSON response was never going to
         # execute a script or load a frame regardless.
-        response.headers["Content-Security-Policy"] = "default-src 'none'; frame-ancestors 'none'"
+        # The Swagger UI / ReDoc pages are the one exception: they load
+        # their JS/CSS from cdn.jsdelivr.net and bootstrap via an inline
+        # script, so 'none' renders them as a blank page.
+        if request.url.path in _DOCS_PATHS:
+            response.headers["Content-Security-Policy"] = _DOCS_CSP
+        else:
+            response.headers["Content-Security-Policy"] = "default-src 'none'; frame-ancestors 'none'"
 
         # Never leak the URL (which can carry query-string tokens/PII in a
         # referrer header) to any cross-origin destination.
