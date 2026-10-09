@@ -30,6 +30,7 @@ from Phase 14. See app/services/inventory_reservation.py for why.
 """
 
 import secrets
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import ROUND_HALF_UP, Decimal
 
@@ -49,6 +50,7 @@ from app.models.order_address import OrderAddress
 from app.models.order_item import OrderItem
 from app.models.payment import Payment
 from app.models.product import Product
+from app.models.product_image import ProductImage
 from app.models.product_variant import ProductVariant
 from app.models.refund import Refund
 from app.models.user import User
@@ -69,7 +71,7 @@ from app.schemas.order import (
 from app.schemas.payment import PaymentResponse
 from app.schemas.refund import AdminRefundResponse
 from app.services.admin_audit import AdminAuditService
-from app.services.delivery import calculate_delivery_fee, distinct_product_count
+from app.services.delivery import calculate_delivery_fee, distinct_product_count, get_packing_point
 from app.services.inventory_reservation import InventoryReservationService
 from app.services.order_state import (
     IllegalOrderTransitionError,
@@ -84,6 +86,21 @@ _ACTIVE = "ACTIVE"
 _CHECKED_OUT = "CHECKED_OUT"
 _ABANDONED = "ABANDONED"
 _CENTS = Decimal("0.01")
+
+
+@dataclass
+class _CheckoutPlan:
+    address: Address
+    currency: str
+    order_item_rows: list
+    subtotal_amount: Decimal
+    evaluation: object
+    promotion_service: PromotionService
+    now: datetime
+    delivery_quote: object
+    total_amount: Decimal
+    cart_id: int | None = None
+    cart_items: list | None = None
 
 
 class OrderService:
@@ -408,10 +425,17 @@ class OrderService:
     # Checkout (the atomic business transaction)
     # ------------------------------------------------------------------
 
-    def checkout(self, user_id: int, data: CheckoutRequest) -> tuple[OrderDetailResponse, bool]:
+    def checkout(
+        self, user_id: int, data: CheckoutRequest, expected_total: Decimal | None = None
+    ) -> tuple[OrderDetailResponse, bool]:
         """Returns (order, created) - created=False when this call found an
         already-CHECKED_OUT cart and returned its existing order instead of
         creating a new one (the retry-safety path).
+
+        `expected_total` is set by pay-first online checkout: the customer
+        has already paid exactly that amount, so if the cart now prices to
+        anything else (item price changed, promo expired...) the order is
+        refused BEFORE it is created and the caller refunds the payment.
         """
         cart = (
             self.db.query(Cart)
@@ -446,6 +470,96 @@ class OrderService:
         if not items:
             raise ConflictError("Cannot checkout an empty cart.")
 
+        plan = self._plan_checkout(user_id, items, data, expected_total)
+        address = plan.address
+        currency = plan.currency
+        order_item_rows = plan.order_item_rows
+        subtotal_amount = plan.subtotal_amount
+        evaluation = plan.evaluation
+        promotion_service = plan.promotion_service
+        now = plan.now
+        delivery_quote = plan.delivery_quote
+        total_amount = plan.total_amount
+
+        order = Order(
+            user_id=user_id,
+            cart_id=cart.id,
+            order_number=self._generate_order_number(),
+            status="PENDING",
+            subtotal_amount=subtotal_amount,
+            discount_amount=evaluation.discount_amount,
+            delivery_fee=delivery_quote.fee,
+            total_amount=total_amount,
+            currency=currency,
+            promotion_id=evaluation.promotion.id if evaluation.promotion else None,
+            applied_promo_code=evaluation.promotion.code if evaluation.promotion else None,
+            placed_at=now,
+        )
+        self.db.add(order)
+        self.db.flush()  # assign order.id for FK references below
+
+        created_items = []
+        for row in order_item_rows:
+            order_item = OrderItem(order_id=order.id, **row)
+            self.db.add(order_item)
+            created_items.append(order_item)
+        self.db.flush()  # assign order_item.id, needed by reservation allocation
+
+        InventoryReservationService(self.db).create_reservation_for_order(
+            order, created_items
+        )
+
+        if evaluation.promotion is not None:
+            promotion_service.record_redemption(
+                promotion_id=evaluation.promotion.id,
+                order_id=order.id,
+                customer_user_id=user_id,
+                discount_amount=evaluation.discount_amount,
+                now=now,
+            )
+
+        self.db.add(
+            OrderAddress(
+                order_id=order.id,
+                address_line_1=address.address_line_1,
+                address_line_2=address.address_line_2,
+                city=address.city,
+                state=address.state,
+                postal_code=address.postal_code,
+                latitude=address.latitude,
+                longitude=address.longitude,
+            )
+        )
+
+        cart.status = _CHECKED_OUT
+
+        try:
+            self.db.commit()
+        except IntegrityError as exc:
+            self.db.rollback()
+            raise ConflictError(
+                "Could not complete checkout due to a conflicting update."
+            ) from exc
+
+        notify_status_event(
+            resource="order",
+            order_id=order.id,
+            user_id=order.user_id,
+            new_status="PENDING",
+            previous_status=None,
+        )
+
+        return self._to_order_detail(order), True
+
+    def _plan_checkout(
+        self, user_id: int, items: list[CartItem], data: CheckoutRequest, expected_total: Decimal | None
+    ) -> "_CheckoutPlan":
+        """Everything checkout needs to know BEFORE writing an order:
+        validated variants/prices, the address, line rows, the promotion
+        evaluation, the delivery fee and the final total. Shared by
+        `checkout` (which then persists it) and `quote_checkout` (which only
+        prices it, for starting an online payment) so the amount the
+        customer is asked to pay can never drift from the order total."""
         variant_ids = sorted({i.variant_id for i in items})
         variants = {
             v.id: v
@@ -552,78 +666,55 @@ class OrderService:
             distinct_product_count(variants[i.variant_id].product_id for i in items),
             address.latitude,
             address.longitude,
+            origin=get_packing_point(self.db),
         )
         total_amount = evaluation.final_total + delivery_quote.fee
 
-        order = Order(
-            user_id=user_id,
-            cart_id=cart.id,
-            order_number=self._generate_order_number(),
-            status="PENDING",
-            subtotal_amount=subtotal_amount,
-            discount_amount=evaluation.discount_amount,
-            delivery_fee=delivery_quote.fee,
-            total_amount=total_amount,
-            currency=currency,
-            promotion_id=evaluation.promotion.id if evaluation.promotion else None,
-            applied_promo_code=evaluation.promotion.code if evaluation.promotion else None,
-            placed_at=now,
-        )
-        self.db.add(order)
-        self.db.flush()  # assign order.id for FK references below
-
-        created_items = []
-        for row in order_item_rows:
-            order_item = OrderItem(order_id=order.id, **row)
-            self.db.add(order_item)
-            created_items.append(order_item)
-        self.db.flush()  # assign order_item.id, needed by reservation allocation
-
-        InventoryReservationService(self.db).create_reservation_for_order(
-            order, created_items
-        )
-
-        if evaluation.promotion is not None:
-            promotion_service.record_redemption(
-                promotion_id=evaluation.promotion.id,
-                order_id=order.id,
-                customer_user_id=user_id,
-                discount_amount=evaluation.discount_amount,
-                now=now,
-            )
-
-        self.db.add(
-            OrderAddress(
-                order_id=order.id,
-                address_line_1=address.address_line_1,
-                address_line_2=address.address_line_2,
-                city=address.city,
-                state=address.state,
-                postal_code=address.postal_code,
-                latitude=address.latitude,
-                longitude=address.longitude,
-            )
-        )
-
-        cart.status = _CHECKED_OUT
-
-        try:
-            self.db.commit()
-        except IntegrityError as exc:
-            self.db.rollback()
+        if expected_total is not None and total_amount != expected_total:
             raise ConflictError(
-                "Could not complete checkout due to a conflicting update."
-            ) from exc
-
-        notify_status_event(
-            resource="order",
-            order_id=order.id,
-            user_id=order.user_id,
-            new_status="PENDING",
-            previous_status=None,
+                "Your basket changed while paying, so this order could not be placed. "
+                "Your payment will be refunded."
+            )
+        return _CheckoutPlan(
+            address=address,
+            currency=currency,
+            order_item_rows=order_item_rows,
+            subtotal_amount=subtotal_amount,
+            evaluation=evaluation,
+            promotion_service=promotion_service,
+            now=now,
+            delivery_quote=delivery_quote,
+            total_amount=total_amount,
         )
 
-        return self._to_order_detail(order), True
+    def quote_checkout(self, user_id: int, data: CheckoutRequest) -> "_CheckoutPlan":
+        """Prices the user's ACTIVE cart exactly as `checkout` would, without
+        creating anything. Raises the same business errors checkout would
+        (empty cart, unavailable item, bad address, bad promo code)."""
+        cart = (
+            self.db.query(Cart)
+            .filter(Cart.user_id == user_id, Cart.status == _ACTIVE)
+            .order_by(Cart.id.desc())
+            .first()
+        )
+        if not cart:
+            raise NotFoundError("No cart found. Add items before checking out.")
+        items = (
+            self.db.query(CartItem)
+            .filter(CartItem.cart_id == cart.id)
+            .order_by(CartItem.variant_id)
+            .all()
+        )
+        if not items:
+            raise ConflictError("Cannot checkout an empty cart.")
+        try:
+            plan = self._plan_checkout(user_id, items, data, None)
+        finally:
+            # The planner row-locks variants; this is a read-only quote.
+            self.db.rollback()
+        plan.cart_id = cart.id
+        plan.cart_items = [(i.variant_id, i.quantity) for i in items]
+        return plan
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -637,6 +728,22 @@ class OrderService:
         """
         return f"ORD{datetime.now(UTC):%Y%m%d}{secrets.token_hex(4).upper()}"
 
+    def _primary_images_by_variant(self, variant_ids: list[int]) -> dict[int, str]:
+        """variant_id -> its product's primary (else first) photo URL."""
+        if not variant_ids:
+            return {}
+        rows = (
+            self.db.query(ProductVariant.id, ProductImage.image_url)
+            .join(ProductImage, ProductImage.product_id == ProductVariant.product_id)
+            .filter(ProductVariant.id.in_(variant_ids))
+            .order_by(ProductImage.is_primary.desc(), ProductImage.sort_order, ProductImage.id)
+            .all()
+        )
+        result: dict[int, str] = {}
+        for variant_id, url in rows:
+            result.setdefault(variant_id, url)
+        return result
+
     def _to_order_detail(self, order: Order) -> OrderDetailResponse:
         items = (
             self.db.query(OrderItem)
@@ -649,8 +756,14 @@ class OrderService:
             .filter(OrderAddress.order_id == order.id)
             .first()
         )
+        images = self._primary_images_by_variant([i.variant_id for i in items])
+        order_items = []
+        for i in items:
+            line = OrderItemResponse.model_validate(i)
+            line.image_url = images.get(i.variant_id)
+            order_items.append(line)
         return OrderDetailResponse(
             **OrderResponse.model_validate(order).model_dump(),
-            items=[OrderItemResponse.model_validate(i) for i in items],
+            items=order_items,
             address=OrderAddressResponse.model_validate(address) if address else None,
         )

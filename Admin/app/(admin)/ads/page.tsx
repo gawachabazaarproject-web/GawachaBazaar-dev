@@ -1,8 +1,9 @@
 "use client";
 
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState, useRef } from "react";
 import { useAuth } from "@/lib/auth-context";
 import {
+  AD_IMAGE,
   AdApiError,
   AdminAdListItem,
   createAd,
@@ -10,6 +11,7 @@ import {
   fetchAds,
   replaceAdImage,
   updateAd,
+  validateAdImage,
 } from "@/lib/ads";
 import { ImageDropzone } from "@/components/ImageDropzone";
 import { formatDate } from "@/lib/format";
@@ -22,6 +24,8 @@ export default function AdsPage() {
   const { getAccessToken } = useAuth();
   const [ads, setAds] = useState<AdminAdListItem[] | null>(null);
   const [loading, setLoading] = useState(true);
+  // After the first load, refreshes are silent so the page does not blank out.
+  const loadedOnce = useRef(false);
   const [error, setError] = useState<string | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   const [editing, setEditing] = useState<AdminAdListItem | null>(null);
@@ -30,7 +34,7 @@ export default function AdsPage() {
   const load = useCallback(async () => {
     const token = getAccessToken();
     if (!token) return;
-    setLoading(true);
+    if (!loadedOnce.current) setLoading(true); // refreshes after an edit stay in place
     setError(null);
     try {
       setAds(await fetchAds(token));
@@ -38,6 +42,7 @@ export default function AdsPage() {
       setError(err instanceof AdApiError ? err.message : "Unable to load ads.");
     } finally {
       setLoading(false);
+      loadedOnce.current = true;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -88,7 +93,7 @@ export default function AdsPage() {
       <PageHeader
         eyebrow="Marketing"
         title="Ads"
-        description="Brand-advertising creatives shown in the mobile app's ads carousel, below the regular/wholesale toggle."
+        description={`Brand-advertising cards shown in the mobile app's ads carousel. Upload images at exactly ${AD_IMAGE.width} x ${AD_IMAGE.height} px (${AD_IMAGE.ratioLabel}) so nothing is cropped. One ad stays still; two or more slide automatically.`}
         actions={
           <button
             onClick={() => setAddOpen(true)}
@@ -142,7 +147,7 @@ export default function AdsPage() {
                   <tr key={ad.id} className={busy ? "opacity-50" : undefined}>
                     <td className="px-4 py-3">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={ad.image_url} alt={ad.brand_name} className="h-12 w-20 rounded object-cover" />
+                      <img src={ad.image_url} alt={ad.brand_name} className="aspect-[12/5] w-28 rounded object-cover" />
                     </td>
                     <td className="px-4 py-3 font-medium text-primary-900">{ad.brand_name}</td>
                     <td className="max-w-[220px] truncate px-4 py-3 text-neutral-500">
@@ -215,15 +220,26 @@ function AddAdDialog({ onClose, onCreated }: { onClose: () => void; onCreated: (
   const { getAccessToken } = useAuth();
   const [brandName, setBrandName] = useState("");
   const [linkUrl, setLinkUrl] = useState("");
+  const [title, setTitle] = useState("");
+  const [subtitle, setSubtitle] = useState("");
   const [displayOrder, setDisplayOrder] = useState("0");
   const [file, setFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const handleFilePick = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFilePick = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const picked = e.target.files?.[0];
+    e.target.value = "";
     if (!picked) return;
+    const problem = await validateAdImage(picked);
+    if (problem) {
+      setFile(null);
+      setPreviewUrl(null);
+      setError(problem);
+      return;
+    }
+    setError(null);
     setFile(picked);
     setPreviewUrl(URL.createObjectURL(picked));
   };
@@ -237,6 +253,8 @@ function AddAdDialog({ onClose, onCreated }: { onClose: () => void; onCreated: (
       await createAd(token, {
         brand_name: brandName,
         link_url: linkUrl || undefined,
+        title: title.trim() || undefined,
+        subtitle: subtitle.trim() || undefined,
         display_order: Number(displayOrder) || 0,
         file,
       });
@@ -264,6 +282,12 @@ function AddAdDialog({ onClose, onCreated }: { onClose: () => void; onCreated: (
             className="w-full rounded border border-neutral-300 px-3 py-2 text-sm"
           />
         </Field>
+        <Field label="Card title (optional)">
+          <input value={title} onChange={(e) => setTitle(e.target.value)} maxLength={80} placeholder="Shown on the card, e.g. Fresh this week" className="w-full rounded border border-neutral-300 px-3 py-2 text-sm" />
+        </Field>
+        <Field label="Card subtitle (optional)">
+          <input value={subtitle} onChange={(e) => setSubtitle(e.target.value)} maxLength={140} placeholder="One short line under the title" className="w-full rounded border border-neutral-300 px-3 py-2 text-sm" />
+        </Field>
         <Field label="Display order">
           <input
             type="number"
@@ -273,12 +297,16 @@ function AddAdDialog({ onClose, onCreated }: { onClose: () => void; onCreated: (
           />
         </Field>
         <Field label="Creative image">
+          <p className="mb-2 rounded bg-primary-50 px-3 py-2 text-xs text-primary-900">
+            Required size: <strong>{AD_IMAGE.width} x {AD_IMAGE.height} px</strong> ({AD_IMAGE.ratioLabel}, wide banner). JPG, PNG or WebP, up to 8 MB.
+            Keep logos and important text away from the bottom edge - the title and subtitle sit there.
+          </p>
           <label className="flex min-h-[110px] cursor-pointer flex-col items-center justify-center gap-2 rounded border-2 border-dashed border-neutral-300 bg-neutral-50 p-4 text-center hover:border-primary-400">
             {previewUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={previewUrl} alt="" className="max-h-24 rounded object-contain" />
+              <img src={previewUrl} alt="" className="aspect-[12/5] w-full rounded object-cover" />
             ) : (
-              <p className="text-sm text-neutral-500">Click to choose an image</p>
+              <p className="text-sm text-neutral-500">Click to choose a {AD_IMAGE.width} x {AD_IMAGE.height} image</p>
             )}
             <input type="file" accept="image/jpeg,image/png,image/webp,image/gif" className="hidden" onChange={handleFilePick} />
           </label>
@@ -317,6 +345,8 @@ function EditAdDialog({
   const { getAccessToken } = useAuth();
   const [brandName, setBrandName] = useState(ad.brand_name);
   const [linkUrl, setLinkUrl] = useState(ad.link_url ?? "");
+  const [title, setTitle] = useState(ad.title ?? "");
+  const [subtitle, setSubtitle] = useState(ad.subtitle ?? "");
   const [displayOrder, setDisplayOrder] = useState(String(ad.display_order));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -330,6 +360,8 @@ function EditAdDialog({
       await updateAd(token, ad.id, {
         brand_name: brandName,
         link_url: linkUrl,
+        title,
+        subtitle,
         display_order: Number(displayOrder) || 0,
       });
       onSaved();
@@ -346,7 +378,21 @@ function EditAdDialog({
         <h2 className="mb-4 font-display text-lg font-semibold text-primary-900">Edit ad</h2>
 
         <Field label="Creative image">
-          <ImageDropzone currentUrl={ad.image_url} onUpload={onReplaceImage} />
+          <ImageDropzone
+            currentUrl={ad.image_url}
+            onUpload={onReplaceImage}
+            validate={validateAdImage}
+            hint={`${AD_IMAGE.width} x ${AD_IMAGE.height} px (${AD_IMAGE.ratioLabel}) · JPG, PNG or WebP · up to 8 MB`}
+          />
+          <p className="mt-1 text-xs text-neutral-500">
+            Required size: {AD_IMAGE.width} x {AD_IMAGE.height} px ({AD_IMAGE.ratioLabel}) so nothing is cropped.
+          </p>
+        </Field>
+        <Field label="Card title (optional)">
+          <input value={title} onChange={(e) => setTitle(e.target.value)} maxLength={80} className="w-full rounded border border-neutral-300 px-3 py-2 text-sm" />
+        </Field>
+        <Field label="Card subtitle (optional)">
+          <input value={subtitle} onChange={(e) => setSubtitle(e.target.value)} maxLength={140} className="w-full rounded border border-neutral-300 px-3 py-2 text-sm" />
         </Field>
         <Field label="Brand name">
           <input value={brandName} onChange={(e) => setBrandName(e.target.value)} className="w-full rounded border border-neutral-300 px-3 py-2 text-sm" />

@@ -5,7 +5,12 @@ from decimal import Decimal
 import pytest
 
 from app.core.config import settings
-from app.services.delivery import calculate_delivery_fee, distinct_product_count, haversine_km
+from app.services import delivery
+from app.services.delivery import (
+    calculate_delivery_fee,
+    distinct_product_count,
+    haversine_km,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -16,6 +21,15 @@ def _delivery_settings(monkeypatch):
     monkeypatch.setattr(settings, "DELIVERY_MAX_CHARGED_KM", 30.0)
     monkeypatch.setattr(settings, "PACKING_POINT_LATITUDE", 21.1458)
     monkeypatch.setattr(settings, "PACKING_POINT_LONGITUDE", 79.0882)
+    monkeypatch.setattr(settings, "DELIVERY_ROAD_FACTOR", 1.4)
+    # Default: the router is "down", so tests never touch the network and
+    # distance is straight-line x road factor unless a test installs a router.
+    delivery._cached_road_km.cache_clear()
+
+    def _down(*_a, **_k):
+        raise RuntimeError("router down")
+
+    monkeypatch.setattr(delivery, "_osrm_road_km", _down)
 
 
 def test_fifteen_items_ships_free():
@@ -27,8 +41,8 @@ def test_fourteen_items_pays_base_plus_per_km():
     quote = calculate_delivery_fee(14, 21.2358, 79.0882)  # ~10 km north
     assert not quote.free_delivery
     assert quote.items_to_free_delivery == 1
-    assert 9.5 < quote.distance_km < 10.5
-    assert quote.fee in (Decimal("120"), Decimal("121"))  # 20 + 10/km, rounded up
+    assert 13.5 < quote.distance_km < 14.5  # ~10 km straight x 1.4 road factor
+    assert quote.fee in (Decimal("160"), Decimal("161"))  # 20 + 10/km, rounded up
 
 
 def test_zero_distance_is_base_fee_only():
@@ -74,3 +88,17 @@ def test_month_start_is_first_of_month_in_ist():
 def test_haversine_known_distance():
     # Nagpur -> Wardha is roughly 70 km as the crow flies.
     assert 60 < haversine_km(21.1458, 79.0882, 20.7453, 78.6022) < 80
+
+
+def test_road_distance_comes_from_the_router(monkeypatch):
+    monkeypatch.setattr(delivery, "_osrm_road_km", lambda *a: 12.3)
+    delivery._cached_road_km.cache_clear()
+    quote = calculate_delivery_fee(3, 21.2358, 79.0882)
+    assert quote.distance_km == 12.3
+    assert quote.fee == Decimal("20") + Decimal("10") * Decimal("12.3")
+
+
+def test_router_failure_falls_back_to_straight_line_times_road_factor():
+    quote = calculate_delivery_fee(3, 21.2358, 79.0882)  # ~10 km straight
+    assert 13.0 < quote.distance_km < 15.0
+    assert not quote.distance_estimated

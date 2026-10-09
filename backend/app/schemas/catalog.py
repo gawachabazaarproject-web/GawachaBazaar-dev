@@ -154,6 +154,10 @@ class ProductVariantResponse(BaseSchema):
     quantity: Decimal
     status: str
     current_price: PriceResponse | None = None
+    # False when no ACTIVE inventory lot has unreserved stock - the app greys
+    # the item out and disables ordering. Defaults True where stock is not
+    # computed (admin variant writes).
+    in_stock: bool = True
 
 
 # ---------------------------------------------------------------------------
@@ -190,6 +194,8 @@ class ProductSummaryResponse(BaseSchema):
     default_variant_id: int | None = None
     default_variant_unit: str | None = None
     default_variant_quantity: Decimal | None = None
+    # Whether the default variant has stock available to order.
+    in_stock: bool = True
 
 
 class ProductResponse(BaseSchema):

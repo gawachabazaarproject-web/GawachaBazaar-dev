@@ -83,11 +83,13 @@ function TabBarItem({
       accessibilityLabel={label}
       accessibilityState={{ selected: focused }}
     >
-      <Animated.View style={[styles.indicator, indicatorStyle]} />
-      <Feather name={icon} size={21} color={color} />
-      <Text variant="label" color={color} style={styles.tabLabel}>
+      <View style={[styles.iconWrap, focused && styles.iconWrapActive]}>
+        <Feather name={icon} size={21} color={color} />
+      </View>
+      <Text variant="label" color={color} style={[styles.tabLabel, focused && styles.tabLabelActive]}>
         {label.toUpperCase()}
       </Text>
+      <Animated.View style={[styles.indicator, indicatorStyle]} />
     </Pressable>
   );
 }
@@ -105,9 +107,22 @@ export default function TabsLayout() {
 }
 
 const styles = StyleSheet.create({
-  wrapper: { backgroundColor: colors.surface, borderTopWidth: 1, borderTopColor: colors.border },
-  tabRow: { flexDirection: "row", paddingTop: spacing.md },
-  tabItem: { flex: 1, alignItems: "center", gap: 5, paddingBottom: spacing.sm, minHeight: 44 },
-  indicator: { position: "absolute", top: 0, width: 16, height: 2, backgroundColor: colors.accent },
+  wrapper: {
+    backgroundColor: colors.surface,
+    borderTopLeftRadius: 22,
+    borderTopRightRadius: 22,
+    shadowColor: "#000",
+    shadowOpacity: 0.06,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: -3 },
+    elevation: 8,
+  },
+  tabRow: { flexDirection: "row", paddingTop: spacing.sm },
+  tabItem: { flex: 1, alignItems: "center", gap: 2, paddingBottom: spacing.sm, minHeight: 44 },
+  // overflow:hidden guarantees the active highlight renders as a rounded pill.
+  iconWrap: { width: 56, height: 34, borderRadius: 17, overflow: "hidden", alignItems: "center", justifyContent: "center" },
+  iconWrapActive: { backgroundColor: colors.successLight },
+  indicator: { width: 20, height: 3, borderRadius: 2, backgroundColor: colors.accent, marginTop: 1 },
   tabLabel: { marginTop: 1 },
+  tabLabelActive: { fontFamily: "PlusJakartaSans_800ExtraBold" },
 });

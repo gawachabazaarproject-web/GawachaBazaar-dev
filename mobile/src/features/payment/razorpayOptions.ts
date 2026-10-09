@@ -1,12 +1,12 @@
 import { colors } from "@/theme";
-import { PaymentCheckoutResponse, RazorpaySuccessPayload } from "@/types/api";
+import { RazorpayCheckoutParams, RazorpaySuccessPayload } from "@/types/api";
 
 export const RAZORPAY_CHECKOUT_SCRIPT = "https://checkout.razorpay.com/v1/checkout.js";
 
 /** Razorpay Standard Checkout options for one payment. Everything here
  * comes from GET /payments/{id}/checkout - amount and order id are
  * server-authoritative, never computed on the device. */
-export function buildCheckoutOptions(checkout: PaymentCheckoutResponse) {
+export function buildCheckoutOptions(checkout: RazorpayCheckoutParams) {
   return {
     key: checkout.key_id,
     order_id: checkout.gateway_order_id,

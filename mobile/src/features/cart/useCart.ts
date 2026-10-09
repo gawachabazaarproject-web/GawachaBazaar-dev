@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { cartApi } from "@/api";
+import { cartApi, toApiError } from "@/api";
+import { useToastStore } from "@/store/toastStore";
 import { CartItemResponse, CartResponse } from "@/types/api";
 
 /**
@@ -171,9 +172,24 @@ export function useRemoveCartItem() {
 
 export function useClearCart() {
   const queryClient = useQueryClient();
+  const showToast = useToastStore((s) => s.show);
   return useMutation({
     mutationFn: cartApi.clear,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: cartQueryKey }),
+    onMutate: async () => {
+      // Stop any in-flight cart fetch from landing after this and
+      // bringing the old items back.
+      await queryClient.cancelQueries({ queryKey: cartQueryKey });
+      const previous = queryClient.getQueryData<CartResponse>(cartQueryKey);
+      if (previous) queryClient.setQueryData<CartResponse>(cartQueryKey, withTotals(previous, []));
+      return { previous };
+    },
+    onError: (err, _vars, context) => {
+      if (context?.previous) queryClient.setQueryData(cartQueryKey, context.previous);
+      showToast(toApiError(err).message || "Couldn't clear your cart. Please try again.", "error");
+    },
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: cartQueryKey });
+    },
   });
 }
 

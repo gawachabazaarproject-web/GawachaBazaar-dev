@@ -12,6 +12,8 @@ import { formatMoney } from "@/utils/money";
 import { colors, radius, shadows, spacing } from "@/theme";
 
 const TAB_BAR_CONTENT_HEIGHT = 64;
+/** Product detail's Add-to-cart footer height excluding the bottom inset. */
+const PRODUCT_FOOTER_HEIGHT = 68;
 
 /** Extra bottom padding scrollable screens should add so their last row
  * never ends up hidden behind the floating CartBar (tab bar height + bar
@@ -35,17 +37,21 @@ export function CartBar() {
   const { data: cart } = useCart(authStatus === "authenticated");
 
   const inTabs = segments[0] === "(tabs)";
-  // Hidden on any screen that already has its own bottom action bar -
-  // cart/checkout show their own summary/pay bar, and product detail has
-  // its own Add-to-cart footer; floating this bar on top of those would
-  // stack two bottom bars on each other.
+  // Hidden on cart/checkout (own summary/pay bar) and the Bazaar page (own
+  // basket bar). Product
+  // detail keeps its Add-to-cart footer, so the pill floats just above it.
   const rootSegment = segments[0];
-  const hiddenOnScreen = rootSegment === "cart" || rootSegment === "checkout" || rootSegment === "product";
+  const hiddenOnScreen = rootSegment === "cart" || rootSegment === "checkout" || rootSegment === "bazaar";
+  const onProduct = rootSegment === "product";
 
   const itemCount = cart?.items.reduce((sum, i) => sum + Math.round(Number.parseFloat(i.quantity)), 0) ?? 0;
   if (!cart || itemCount === 0 || hiddenOnScreen || wholesaleMode === "wholesale") return null;
 
-  const bottomOffset = inTabs ? TAB_BAR_CONTENT_HEIGHT + insets.bottom + spacing.xs : insets.bottom + spacing.xl;
+  const bottomOffset = inTabs
+    ? TAB_BAR_CONTENT_HEIGHT + insets.bottom + spacing.xs
+    : onProduct
+      ? PRODUCT_FOOTER_HEIGHT + insets.bottom + spacing.sm
+      : insets.bottom + spacing.xl;
 
   return (
     <Animated.View

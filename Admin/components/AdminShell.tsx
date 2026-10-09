@@ -1,10 +1,12 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { hasPermission, Permission } from "@/lib/permissions";
+import { fetchAdminOrders } from "@/lib/orders";
+import { useOrderEvents } from "@/lib/realtime-context";
 import { Icon, IconName } from "./icons";
 
 interface NavItem {
@@ -35,13 +37,35 @@ const NAV_ITEMS: NavItem[] = [
 ];
 
 export function AdminShell({ children }: { children: React.ReactNode }) {
-  const { user, logout } = useAuth();
+  const { user, logout, getAccessToken } = useAuth();
   const pathname = usePathname();
   const router = useRouter();
   const [collapsed, setCollapsed] = useState(false);
 
   const roles = user?.roles ?? [];
   const visibleItems = NAV_ITEMS.filter((item) => !item.permission || hasPermission(roles, item.permission));
+
+  // Orders still waiting to be confirmed - the number staff need to act on.
+  const canSeeOrders = hasPermission(roles, "orders.read");
+  const [pendingOrders, setPendingOrders] = useState(0);
+  const refreshPending = useCallback(() => {
+    const token = getAccessToken();
+    if (!token || !canSeeOrders) return;
+    fetchAdminOrders(token, { status: "PENDING", page: 1, page_size: 1 })
+      .then((r) => setPendingOrders(r.total))
+      .catch(() => undefined);
+  }, [getAccessToken, canSeeOrders]);
+  useEffect(() => {
+    refreshPending();
+    const timer = window.setInterval(refreshPending, 60_000);
+    return () => window.clearInterval(timer);
+  }, [refreshPending]);
+  // New orders and every status change arrive live over the websocket.
+  useOrderEvents((event) => {
+    if (event.resource === "order") refreshPending();
+  });
+
+  const badgeFor = (href: string) => (href === "/orders" ? pendingOrders : 0);
 
   const handleLogout = async () => {
     await logout();
@@ -85,8 +109,21 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
                 }`}
                 title={collapsed ? item.label : undefined}
               >
-                <Icon name={item.icon} size={17} />
-                {!collapsed && <span>{item.label}</span>}
+                <span className="relative">
+                  <Icon name={item.icon} size={17} />
+                  {collapsed && badgeFor(item.href) > 0 && (
+                    <span className="absolute -right-1.5 -top-1.5 h-2.5 w-2.5 rounded-full bg-secondary-400" />
+                  )}
+                </span>
+                {!collapsed && <span className="flex-1">{item.label}</span>}
+                {!collapsed && badgeFor(item.href) > 0 && (
+                  <span
+                    className="min-w-[22px] rounded-full bg-secondary-400 px-1.5 py-0.5 text-center text-xs font-bold text-primary-900"
+                    aria-label={`${badgeFor(item.href)} pending orders`}
+                  >
+                    {badgeFor(item.href) > 99 ? "99+" : badgeFor(item.href)}
+                  </span>
+                )}
               </Link>
             );
           })}

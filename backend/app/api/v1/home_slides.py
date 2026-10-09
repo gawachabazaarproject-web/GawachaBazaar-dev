@@ -8,7 +8,11 @@ from sqlalchemy.orm import Session
 from app.dependencies.auth import require_permission
 from app.dependencies.database import get_db
 from app.models.user import User
-from app.schemas.home_slide import AdminHomeSlideResponse, HomeSlideResponse, UpdateHomeSlideRequest
+from app.schemas.home_slide import (
+    AdminHomeSlideResponse,
+    HomeSlideResponse,
+    UpdateHomeSlideRequest,
+)
 from app.services.home_slide import HomeSlideService
 from app.services.image_upload import upload_image
 

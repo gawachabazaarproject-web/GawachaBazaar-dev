@@ -12,3 +12,4 @@ export { adsApi } from "./adsApi";
 export { homeSlidesApi } from "./homeSlidesApi";
 export { wishlistApi } from "./wishlistApi";
 export { bazaarApi } from "./bazaarApi";
+export { offersApi } from "./offersApi";

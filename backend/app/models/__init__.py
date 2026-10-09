@@ -20,6 +20,7 @@ from app.models.bulk_order_request import BulkOrderRequest
 from app.models.bulk_order_request_item import BulkOrderRequestItem
 from app.models.cart import Cart
 from app.models.cart_item import CartItem
+from app.models.checkout_session import CheckoutSession
 from app.models.category import Category
 from app.models.customer_note import CustomerNote
 from app.models.farm import Farm
@@ -71,6 +72,7 @@ __all__ = [
     "BulkOrderRequestItem",
     "Cart",
     "CartItem",
+    "CheckoutSession",
     "Category",
     "CustomerNote",
     "Farm",

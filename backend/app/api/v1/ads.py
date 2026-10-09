@@ -56,13 +56,21 @@ def admin_get_ad(
 def admin_create_ad(
     brand_name: str = Form(...),
     link_url: str | None = Form(default=None),
+    title: str | None = Form(default=None),
+    subtitle: str | None = Form(default=None),
     display_order: int = Form(default=0),
     file: UploadFile = File(...),
     current_user: User = Depends(require_permission("ads.manage")),
     db: Session = Depends(get_db),
 ) -> AdminAdDetailResponse:
     result = upload_image(file, folder="gawachabazaar/ads")
-    data = CreateAdRequest(brand_name=brand_name, link_url=link_url, display_order=display_order)
+    data = CreateAdRequest(
+        brand_name=brand_name,
+        link_url=link_url,
+        title=title,
+        subtitle=subtitle,
+        display_order=display_order,
+    )
     return AdService(db).admin_create_ad(result["secure_url"], data, current_user.id)
 
 

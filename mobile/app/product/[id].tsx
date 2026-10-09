@@ -39,7 +39,8 @@ export default function ProductDetailScreen() {
   }, [product, selectedVariant]);
 
   const stepper = useVariantStepper(selectedVariant?.id ?? -1);
-  const isAvailable = selectedVariant?.status === "ACTIVE";
+  const inStock = selectedVariant?.in_stock !== false;
+  const isAvailable = selectedVariant?.status === "ACTIVE" && inStock;
   const embellishment = getEmbellishment(product?.slug ?? "");
 
   const { data: relatedPages } = useProducts(product ? { categoryId: product.category.id } : { categoryId: -1 });
@@ -140,7 +141,7 @@ export default function ProductDetailScreen() {
                   <Pressable
                     key={variant.id}
                     onPress={() => setSelectedVariant(variant)}
-                    style={[styles.variantChip, active && styles.variantChipActive]}
+                    style={[styles.variantChip, active && styles.variantChipActive, variant.in_stock === false && styles.variantChipSoldOut]}
                     disabled={variant.status !== "ACTIVE"}
                   >
                     <Text variant="bodySmall" color={active ? colors.textInverse : colors.textPrimary}>
@@ -167,7 +168,7 @@ export default function ProductDetailScreen() {
             {!isAvailable ? (
               <View style={styles.unavailableBadge}>
                 <Text variant="captionMedium" color={colors.error}>
-                  Currently unavailable
+                  {selectedVariant?.status === "ACTIVE" && !inStock ? "Out of stock" : "Currently unavailable"}
                 </Text>
               </View>
             ) : null}
@@ -283,6 +284,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
   },
+  variantChipSoldOut: { opacity: 0.45 },
   variantChipActive: { backgroundColor: colors.primary, borderColor: colors.primary },
   singleVariant: { marginTop: spacing.sm },
   priceRow: { flexDirection: "row", alignItems: "center", gap: spacing.md, marginTop: spacing.lg },
@@ -291,7 +293,8 @@ const styles = StyleSheet.create({
   infoBlock: { marginTop: spacing.xl },
   infoBody: { marginTop: spacing.sm, maxWidth: "94%" },
   freshnessRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm, marginTop: spacing.sm },
-  relatedWrap: { marginTop: spacing["2xl"], paddingBottom: spacing.xl },
+  // Extra bottom room so the floating cart pill never covers the last row.
+  relatedWrap: { marginTop: spacing["2xl"], paddingBottom: spacing.xl + 64 },
   relatedEyebrow: { paddingHorizontal: spacing.base },
   relatedTitle: { paddingHorizontal: spacing.base, marginTop: spacing.xs, marginBottom: spacing.base },
   relatedScroll: { paddingHorizontal: spacing.base, gap: spacing.md },

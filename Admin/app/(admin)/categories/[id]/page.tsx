@@ -1,6 +1,6 @@
 "use client";
 
-import React, { use, useCallback, useEffect, useState } from "react";
+import React, { use, useCallback, useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { hasPermission } from "@/lib/permissions";
@@ -37,6 +37,8 @@ export default function CategoryDetailPage({ params }: { params: Promise<{ id: s
   const [activity, setActivity] = useState<CategoryActivityEntry[]>([]);
   const [products, setProducts] = useState<AdminProductListItem[] | null>(null);
   const [loading, setLoading] = useState(true);
+  // After the first load, refreshes are silent so the page does not blank out.
+  const loadedOnce = useRef(false);
   const [error, setError] = useState<string | null>(null);
 
   const [general, setGeneral] = useState({ name: "", slug: "", parent_id: "", description: "", status: "" });
@@ -51,7 +53,7 @@ export default function CategoryDetailPage({ params }: { params: Promise<{ id: s
   const load = useCallback(async () => {
     const token = getAccessToken();
     if (!token) return;
-    setLoading(true);
+    if (!loadedOnce.current) setLoading(true); // refreshes after an edit stay in place
     setError(null);
     try {
       const detail = await fetchAdminCategoryDetail(token, categoryId);
@@ -72,6 +74,7 @@ export default function CategoryDetailPage({ params }: { params: Promise<{ id: s
       setError(err instanceof CategoryApiError ? err.message : "Unable to load this category.");
     } finally {
       setLoading(false);
+      loadedOnce.current = true;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [categoryId]);

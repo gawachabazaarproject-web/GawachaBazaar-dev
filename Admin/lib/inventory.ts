@@ -124,6 +124,11 @@ export interface Location {
   type: string;
   city: string;
   status: string;
+  address_line_1?: string;
+  latitude?: number | null;
+  longitude?: number | null;
+  /** Delivery distance is measured from this location. */
+  is_packing_point?: boolean;
 }
 
 export const OPERATIONAL_STATUSES = ["IN_STOCK", "LOW_STOCK", "OUT_OF_STOCK", "EXPIRING", "EXPIRED", "INACTIVE"] as const;
@@ -208,6 +213,24 @@ export interface CreateLocationPayload {
   city: string;
   state: string;
   postal_code: string;
+  latitude?: number | null;
+  longitude?: number | null;
+}
+
+export async function updateLocationCoordinates(
+  accessToken: string,
+  id: number,
+  latitude: number | null,
+  longitude: number | null,
+): Promise<Location> {
+  return request(accessToken, `/inventory/locations/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify({ latitude, longitude }),
+  });
+}
+
+export async function setPackingPoint(accessToken: string, id: number): Promise<Location> {
+  return request(accessToken, `/inventory/locations/${id}/packing-point`, { method: "POST" });
 }
 
 export async function createLocation(accessToken: string, payload: CreateLocationPayload): Promise<Location> {

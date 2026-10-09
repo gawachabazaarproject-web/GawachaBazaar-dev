@@ -166,7 +166,8 @@ class InventoryReservationService:
                     item.variant_id, item.quantity, need,
                 )
                 raise ConflictError(
-                    f"Insufficient available stock for variant {item.variant_id}."
+                    f"Sorry, {item.product_name} ({item.variant_name}) doesn't have "
+                    "enough stock right now. Please lower the quantity or remove it."
                 )
 
         # order.created_at is server-generated (func.now()) and not

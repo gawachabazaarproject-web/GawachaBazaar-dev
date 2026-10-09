@@ -28,7 +28,14 @@ class AdService:
             .all()
         )
         return [
-            AdResponse(id=a.id, brand_name=a.brand_name, image_url=a.image_url, link_url=a.link_url)
+            AdResponse(
+                id=a.id,
+                brand_name=a.brand_name,
+                image_url=a.image_url,
+                link_url=a.link_url,
+                title=a.title,
+                subtitle=a.subtitle,
+            )
             for a in ads
         ]
 
@@ -48,6 +55,8 @@ class AdService:
             brand_name=data.brand_name,
             image_url=image_url,
             link_url=data.link_url or None,
+            title=(data.title or "").strip() or None,
+            subtitle=(data.subtitle or "").strip() or None,
             display_order=data.display_order,
             status="ACTIVE",
         )
@@ -74,6 +83,10 @@ class AdService:
             ad.brand_name = data.brand_name
         if data.link_url is not None:
             ad.link_url = data.link_url or None  # "" clears the link
+        if data.title is not None:
+            ad.title = data.title.strip() or None  # "" clears the text
+        if data.subtitle is not None:
+            ad.subtitle = data.subtitle.strip() or None
         if data.display_order is not None:
             ad.display_order = data.display_order
         if data.status is not None:
@@ -126,6 +139,8 @@ class AdService:
             brand_name=ad.brand_name,
             image_url=ad.image_url,
             link_url=ad.link_url,
+            title=ad.title,
+            subtitle=ad.subtitle,
             display_order=ad.display_order,
             status=ad.status,
             created_at=ad.created_at,

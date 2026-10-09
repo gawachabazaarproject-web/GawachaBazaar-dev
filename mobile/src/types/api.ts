@@ -121,6 +121,9 @@ export interface ProductVariantResponse {
   quantity: string;
   status: string;
   current_price: PriceResponse | null;
+  /** False when sold out - grey the item and block ordering. Optional so an
+   * older backend (no flag) is treated as in stock. */
+  in_stock?: boolean;
 }
 
 export interface ProductImageResponse {
@@ -142,6 +145,7 @@ export interface ProductSummaryResponse {
   default_variant_id: number | null;
   default_variant_unit: string | null;
   default_variant_quantity: string | null;
+  in_stock?: boolean;
 }
 
 export interface WishlistResponse {
@@ -208,6 +212,7 @@ export interface OrderItemResponse {
   quantity: string;
   unit_price: string;
   total_price: string;
+  image_url?: string | null;
 }
 
 export interface OrderAddressResponse {
@@ -335,6 +340,23 @@ export interface PaymentCheckoutResponse {
   test_mode: boolean;
 }
 
+/** What the Razorpay sheet needs to open - shared by an existing order's
+ * payment (PaymentCheckoutResponse) and a pay-first checkout (below). */
+export type RazorpayCheckoutParams = Omit<PaymentCheckoutResponse, "payment_id" | "order_id">;
+
+/** POST /payments/online/start - Razorpay is opened with this BEFORE any
+ * order exists; the order is created only after the payment succeeds. */
+export interface OnlineCheckoutResponse extends RazorpayCheckoutParams {
+  session_id: number;
+}
+
+/** POST /payments/online/{session_id}/confirm|verify - the order that was
+ * placed once the payment was confirmed. */
+export interface OnlineCheckoutCompleteResponse {
+  order: OrderDetailResponse;
+  payment: PaymentResponse;
+}
+
 /** Exactly what Razorpay Checkout's success handler returns - passed to
  * POST /payments/{id}/confirm unchanged. The backend verifies the signature
  * and re-checks the order with Razorpay; this alone never marks a payment
@@ -356,6 +378,8 @@ export interface AdResponse {
   brand_name: string;
   image_url: string;
   link_url: string | null;
+  title?: string | null;
+  subtitle?: string | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -580,4 +604,20 @@ export interface BazaarStatusResponse {
   orders_required: number;
   period: string;
   eligible_for_bazaar_plus: boolean;
+}
+
+// ---------------------------------------------------------------------------
+// Offers carousel (admin-managed promotions shown on Home)
+// ---------------------------------------------------------------------------
+export interface OfferResponse {
+  id: number;
+  title: string;
+  description: string;
+  image_url: string | null;
+  /** Code to apply at checkout; null = applied automatically. */
+  code: string | null;
+  discount_label: string;
+  fine_print: string | null;
+  audience: string | null;
+  ends_at: string | null;
 }

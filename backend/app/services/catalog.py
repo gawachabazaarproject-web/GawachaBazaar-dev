@@ -139,6 +139,9 @@ class CatalogService:
         current_prices = self._get_current_prices_for_variants(
             [v.id for v in default_variant_by_product.values()]
         )
+        stock_by_variant = self._get_available_stock_for_variants(
+            [v.id for v in default_variant_by_product.values()]
+        )
 
         items = []
         for p in products:
@@ -157,6 +160,11 @@ class CatalogService:
                     default_variant_id=default_variant.id if default_variant else None,
                     default_variant_unit=default_variant.unit if default_variant else None,
                     default_variant_quantity=default_variant.quantity if default_variant else None,
+                    in_stock=(
+                        stock_by_variant.get(default_variant.id, Decimal("0")) > 0
+                        if default_variant
+                        else False
+                    ),
                 )
             )
         return items
@@ -997,7 +1005,10 @@ class CatalogService:
         return get_current_prices_for_variants(self.db, variant_ids)
 
     def _to_variant_response(
-        self, variant: ProductVariant, current_price: Price | None = None
+        self,
+        variant: ProductVariant,
+        current_price: Price | None = None,
+        in_stock: bool = True,
     ) -> ProductVariantResponse:
         if current_price is None:
             current_price = self._get_current_prices_for_variants([variant.id]).get(
@@ -1015,6 +1026,7 @@ class CatalogService:
                 if current_price
                 else None
             ),
+            in_stock=in_stock,
         )
 
     def _to_product_response(
@@ -1028,8 +1040,13 @@ class CatalogService:
         prices_by_variant = self._get_current_prices_for_variants(
             [v.id for v in variants]
         )
+        stock_by_variant = self._get_available_stock_for_variants([v.id for v in variants])
         variant_responses = [
-            self._to_variant_response(v, prices_by_variant.get(v.id))
+            self._to_variant_response(
+                v,
+                prices_by_variant.get(v.id),
+                in_stock=stock_by_variant.get(v.id, Decimal("0")) > 0,
+            )
             for v in variants
         ]
         images = sorted(product.images, key=lambda i: (not i.is_primary, i.sort_order))

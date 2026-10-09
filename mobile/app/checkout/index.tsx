@@ -18,6 +18,8 @@ import { useDeliveryQuote } from "@/features/bazaar/useBazaar";
 import { usePlaceOrder, PlaceOrderResult } from "@/features/checkout/useCheckout";
 import { useCancelOrder } from "@/features/orders/useOrders";
 import { useOnlinePayment } from "@/features/payment/useOnlinePayment";
+import { useOnlineCheckout } from "@/features/checkout/useOnlineCheckout";
+import { usePendingPromoStore } from "@/store/pendingPromoStore";
 import { RazorpayCheckout } from "@/components/payment/RazorpayCheckout";
 import { formatMoney } from "@/utils/money";
 import { colors, spacing } from "@/theme";
@@ -31,6 +33,8 @@ export default function CheckoutScreen() {
   const placeOrder = usePlaceOrder();
   const cancelOrder = useCancelOrder();
   const online = useOnlinePayment();
+  // Pay-first: for online payment Razorpay opens BEFORE an order exists.
+  const onlineCheckout = useOnlineCheckout();
 
   const [selectedAddressId, setSelectedAddressId] = useState<number | null>(null);
   const { data: deliveryQuote } = useDeliveryQuote(selectedAddressId);
@@ -47,6 +51,19 @@ export default function CheckoutScreen() {
     if (!promoInput.trim()) return;
     evaluatePromo.mutate(promoInput.trim(), { onSuccess: setPromoEvaluation });
   };
+
+  // A code picked from the Home offers carousel is applied here, through the
+  // normal backend evaluation (the app never computes a discount itself).
+  const pendingPromo = usePendingPromoStore((s) => s.code);
+  const clearPendingPromo = usePendingPromoStore((s) => s.clear);
+  const cartHasItems = (cart?.items.length ?? 0) > 0;
+  useEffect(() => {
+    if (!pendingPromo || !cartHasItems) return;
+    setPromoInput(pendingPromo);
+    evaluatePromo.mutate(pendingPromo, { onSuccess: setPromoEvaluation });
+    clearPendingPromo();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingPromo, cartHasItems]);
 
   const handleRemovePromo = () => {
     setPromoInput("");
@@ -100,8 +117,35 @@ export default function CheckoutScreen() {
     if (result) showSuccessIfPaid(await online.retryForOrder(result.order.id));
   };
 
+  const handleOnlineCheckoutSuccess = async (payload: RazorpaySuccessPayload) => {
+    const outcome = await onlineCheckout.complete(payload);
+    if (outcome === "pending") {
+      // Razorpay has the payment but has not reported the capture yet - the
+      // webhook places the order the moment it does. Never tell them it failed.
+      Alert.alert("Payment received", "We're confirming it with your bank. Your order will appear in Orders in a moment.");
+      router.replace("/(tabs)/orders");
+    } else if (outcome) {
+      router.replace(`/checkout/success?orderId=${outcome.order.id}`);
+    }
+    // null -> onlineCheckout.error is shown above the Pay button; the cart is intact.
+  };
+
+  // The sheet closed without a success callback: no order was created. Re-check
+  // once anyway - a UPI app can take the money and lose the hand-off.
+  const handleOnlineCheckoutDismiss = async () => {
+    const outcome = await onlineCheckout.dismiss();
+    if (outcome) router.replace(`/checkout/success?orderId=${outcome.order.id}`);
+  };
+
   const handlePlaceOrder = () => {
     if (!selectedAddressId) return;
+    // Only the latest attempt's error should be on screen.
+    onlineCheckout.clearError();
+    placeOrder.reset();
+    if (paymentMethod === "UPI") {
+      void onlineCheckout.start(selectedAddressId, promoEvaluation?.eligible ? promoEvaluation.applied_code : null);
+      return;
+    }
     placeOrder.mutate(
       {
         addressId: selectedAddressId,
@@ -356,7 +400,7 @@ export default function CheckoutScreen() {
             description="UPI, cards, netbanking & wallets"
             icon="credit-card"
             selected={paymentMethod === "UPI"}
-            onPress={() => setPaymentMethod("UPI")}
+            onPress={() => { setPaymentMethod("UPI"); onlineCheckout.clearError(); placeOrder.reset(); }}
             extra={<PaymentBrands />}
           />
           <PaymentOption
@@ -364,7 +408,7 @@ export default function CheckoutScreen() {
             description="Verify freshness before paying at your door"
             icon="dollar-sign"
             selected={paymentMethod === "COD"}
-            onPress={() => setPaymentMethod("COD")}
+            onPress={() => { setPaymentMethod("COD"); onlineCheckout.clearError(); placeOrder.reset(); }}
           />
         </CheckoutSection>
 
@@ -473,6 +517,11 @@ export default function CheckoutScreen() {
             {toApiError(placeOrder.error).message}
           </Text>
         ) : null}
+        {onlineCheckout.error ? (
+          <Text variant="caption" color={colors.error} style={styles.footerNote}>
+            {onlineCheckout.error}
+          </Text>
+        ) : null}
         <View style={styles.placeOrderBar}>
           <View style={{ flex: 1 }}>
             <View style={styles.totalRow}>
@@ -489,17 +538,18 @@ export default function CheckoutScreen() {
             </Text>
           </View>
           <Pressable
-            style={[styles.placeOrderButton, (!selectedAddressId || placeOrder.isPending) && styles.disabled]}
+            style={[styles.placeOrderButton, (!selectedAddressId || placeOrder.isPending || onlineCheckout.busy) && styles.disabled]}
             onPress={handlePlaceOrder}
-            disabled={!selectedAddressId || placeOrder.isPending}
+            disabled={!selectedAddressId || placeOrder.isPending || onlineCheckout.busy}
           >
             <Text variant="bodyMedium" color={colors.textOnAccent}>
-              {placeOrder.isPending ? "Placing..." : "Place Order"}
+              {placeOrder.isPending || onlineCheckout.busy ? "Please wait..." : paymentMethod === "UPI" ? "Pay Now" : "Place Order"}
             </Text>
             <Feather name="arrow-right" size={16} color={colors.textOnAccent} />
           </Pressable>
         </View>
       </View>
+      <RazorpayCheckout checkout={onlineCheckout.checkout} onSuccess={handleOnlineCheckoutSuccess} onDismiss={handleOnlineCheckoutDismiss} />
     </Screen>
   );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { use, useCallback, useEffect, useState } from "react";
+import React, { use, useCallback, useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { hasPermission } from "@/lib/permissions";
@@ -12,6 +12,7 @@ import {
   PromotionRedemptionRow,
   PromotionTargetInput,
   activatePromotion,
+  uploadPromotionImage,
   disablePromotion,
   duplicatePromotion,
   fetchPromotionDetail,
@@ -27,6 +28,7 @@ import { StatusBadge } from "@/components/StatusBadge";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { Pagination } from "@/components/Pagination";
 import { Icon } from "@/components/icons";
+import { ImageDropzone } from "@/components/ImageDropzone";
 
 const inputClass = "w-full rounded border border-neutral-300 px-3 py-2 text-sm disabled:bg-neutral-50";
 
@@ -42,6 +44,8 @@ export default function PromotionDetailPage({ params }: { params: Promise<{ id: 
   const [categories, setCategories] = useState<Category[]>([]);
   const [products, setProducts] = useState<AdminProductListItem[]>([]);
   const [loading, setLoading] = useState(true);
+  // After the first load, refreshes are silent so the page does not blank out.
+  const loadedOnce = useRef(false);
   const [error, setError] = useState<string | null>(null);
 
   const [form, setForm] = useState<Record<string, string>>({});
@@ -56,6 +60,8 @@ export default function PromotionDetailPage({ params }: { params: Promise<{ id: 
   const [lifecycleAction, setLifecycleAction] = useState<"activate" | "pause" | "disable" | "duplicate" | null>(null);
   const [lifecycleLoading, setLifecycleLoading] = useState(false);
   const [lifecycleError, setLifecycleError] = useState<string | null>(null);
+  const [carouselBusy, setCarouselBusy] = useState(false);
+  const [carouselError, setCarouselError] = useState<string | null>(null);
 
   const canEdit = user && hasPermission(user.roles, "promotions.update");
   const canManageStatus = user && hasPermission(user.roles, "promotions.manage_status");
@@ -63,7 +69,7 @@ export default function PromotionDetailPage({ params }: { params: Promise<{ id: 
   const load = useCallback(async () => {
     const token = getAccessToken();
     if (!token) return;
-    setLoading(true);
+    if (!loadedOnce.current) setLoading(true); // refreshes after an edit stay in place
     setError(null);
     try {
       const detail = await fetchPromotionDetail(token, promotionId);
@@ -95,6 +101,7 @@ export default function PromotionDetailPage({ params }: { params: Promise<{ id: 
       setError(err instanceof PromotionApiError ? err.message : "Unable to load this promotion.");
     } finally {
       setLoading(false);
+      loadedOnce.current = true;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [promotionId]);
@@ -147,6 +154,30 @@ export default function PromotionDetailPage({ params }: { params: Promise<{ id: 
       return next;
     });
     setIsDirty(true);
+  };
+
+  // Carousel controls save immediately and independently of the main form.
+  const handleCarouselToggle = async (value: boolean) => {
+    const token = getAccessToken();
+    if (!token) return;
+    setCarouselBusy(true);
+    setCarouselError(null);
+    try {
+      await updatePromotion(token, promotionId, { show_in_carousel: value });
+      await load();
+    } catch (err) {
+      setCarouselError(err instanceof PromotionApiError ? err.message : "Unable to update the carousel setting.");
+    } finally {
+      setCarouselBusy(false);
+    }
+  };
+
+  const handleImageUpload = async (file: File) => {
+    const token = getAccessToken();
+    if (!token) return;
+    setCarouselError(null);
+    await uploadPromotionImage(token, promotionId, file);
+    await load();
   };
 
   const handleSave = async () => {
@@ -284,6 +315,30 @@ export default function PromotionDetailPage({ params }: { params: Promise<{ id: 
         <p className="mt-2 text-xs text-neutral-400">
           The coupon code and discount type cannot be changed after creation - duplicate this promotion to try a different one.
         </p>
+      </Section>
+
+      <Section title="In-app offers carousel">
+        <p className="mb-3 text-sm text-neutral-500">
+          Advertise this promotion on the app&apos;s Home screen. It appears only while it is live (Active, inside its dates, usage
+          left), using the customer-facing title and description above.
+        </p>
+        <label className="mb-4 flex items-center gap-2 text-sm text-neutral-700">
+          <input
+            type="checkbox"
+            checked={promotion.show_in_carousel}
+            disabled={!canEdit || carouselBusy}
+            onChange={(e) => void handleCarouselToggle(e.target.checked)}
+          />
+          Show in the app&apos;s offers carousel
+        </label>
+        <Field label="Banner photo (landscape works best, e.g. 1200x800)">
+          <ImageDropzone
+            currentUrl={promotion.image_url}
+            disabled={!canEdit}
+            onUpload={handleImageUpload}
+          />
+        </Field>
+        {carouselError && <p className="mt-2 text-sm text-status-danger">{carouselError}</p>}
       </Section>
 
       <Section title="Discount rules">

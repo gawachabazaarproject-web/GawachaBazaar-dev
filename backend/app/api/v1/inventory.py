@@ -106,6 +106,18 @@ def update_location(
     return InventoryService(db).update_location(location_id, payload)
 
 
+@router.post(
+    "/locations/{location_id}/packing-point",
+    response_model=InventoryLocationResponse,
+    summary="Admin: make this location the delivery-distance origin (packing point)",
+    dependencies=[Depends(require_roles(ADMIN))],
+)
+def set_packing_point(
+    location_id: int, db: Session = Depends(get_db)
+) -> InventoryLocationResponse:
+    return InventoryService(db).set_packing_point(location_id)
+
+
 # ---------------------------------------------------------------------------
 # Lots
 # ---------------------------------------------------------------------------

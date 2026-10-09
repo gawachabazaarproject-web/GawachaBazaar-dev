@@ -1,13 +1,18 @@
 from datetime import datetime
 from typing import TYPE_CHECKING
 
+from decimal import Decimal
+
 from sqlalchemy import (
     BigInteger,
+    Boolean,
     CheckConstraint,
     DateTime,
     Identity,
     Index,
+    Numeric,
     String,
+    text,
     UniqueConstraint,
     func,
 )
@@ -32,6 +37,13 @@ class InventoryLocation(Base):
         ),
         Index("ix_inventory_locations_type", "type"),
         Index("ix_inventory_locations_status", "status"),
+        # At most one location is the delivery-fee origin.
+        Index(
+            "uq_inventory_locations_one_packing_point",
+            "is_packing_point",
+            unique=True,
+            postgresql_where=text("is_packing_point"),
+        ),
     )
 
     id: Mapped[int] = mapped_column(
@@ -74,6 +86,13 @@ class InventoryLocation(Base):
     status: Mapped[str] = mapped_column(
         String(30),
         nullable=False,
+    )
+    # Map position, used for road-distance delivery pricing.
+    latitude: Mapped[Decimal | None] = mapped_column(Numeric(9, 6), nullable=True)
+    longitude: Mapped[Decimal | None] = mapped_column(Numeric(9, 6), nullable=True)
+    # The location delivery distance is measured from (see services/delivery.py).
+    is_packing_point: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("false")
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

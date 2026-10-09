@@ -16,7 +16,6 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
 
-
 _DOCS_PATHS = {"/docs", "/redoc", "/docs/oauth2-redirect"}
 _DOCS_CSP = (
     "default-src 'none'; "

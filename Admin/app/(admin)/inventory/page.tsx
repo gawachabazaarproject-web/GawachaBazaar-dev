@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { hasPermission } from "@/lib/permissions";
@@ -37,6 +37,8 @@ export default function InventoryPage() {
   const [locations, setLocations] = useState<Location[]>([]);
   const [data, setData] = useState<AdminInventoryLotListResponse | null>(null);
   const [loading, setLoading] = useState(true);
+  // After the first load, refreshes are silent so the page does not blank out.
+  const loadedOnce = useRef(false);
   const [error, setError] = useState<string | null>(null);
   const [receiveOpen, setReceiveOpen] = useState(false);
   const [warehouseOpen, setWarehouseOpen] = useState(false);
@@ -62,7 +64,7 @@ export default function InventoryPage() {
   const load = useCallback(async () => {
     const token = getAccessToken();
     if (!token) return;
-    setLoading(true);
+    if (!loadedOnce.current) setLoading(true); // refreshes after an edit stay in place
     setError(null);
     try {
       const result = await fetchAdminLots(token, {
@@ -78,6 +80,7 @@ export default function InventoryPage() {
       setError(err instanceof InventoryApiError ? err.message : "Unable to load inventory.");
     } finally {
       setLoading(false);
+      loadedOnce.current = true;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page, q, locationId, categoryId, operationalStatus]);

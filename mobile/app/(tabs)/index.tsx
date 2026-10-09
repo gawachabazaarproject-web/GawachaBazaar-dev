@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useRef, useState } from "react";
 import { Linking, Pressable, RefreshControl, ScrollView, StyleSheet, View } from "react-native";
 import { useRouter } from "expo-router";
 import { useQueryClient } from "@tanstack/react-query";
@@ -8,7 +8,6 @@ import { Screen } from "@/components/Screen";
 import { Text } from "@/components/Text";
 import { ProductCardData, productSummaryToCardData } from "@/components/ProductCard";
 import { ProductCardSkeleton, Skeleton } from "@/components/Skeleton";
-import { CART_BAR_CLEARANCE } from "@/components/CartBar";
 import { ShopHeader } from "@/components/ShopHeader";
 import { HorizontalProductCard } from "@/components/HorizontalProductCard";
 import { PromoCarousel } from "@/components/home/PromoCarousel";
@@ -18,6 +17,7 @@ import { ProductRail } from "@/components/home/ProductRail";
 import { BazaarSection } from "@/components/home/BazaarSection";
 import { VillageStory } from "@/components/home/VillageStory";
 import { ClosingCTA } from "@/components/home/ClosingCTA";
+import { HomeFooter } from "@/components/home/HomeFooter";
 import { WholesaleToggle } from "@/components/home/WholesaleToggle";
 import { BrandAdsCarousel } from "@/components/home/BrandAdsCarousel";
 import { WholesaleProductCard } from "@/components/home/WholesaleProductCard";
@@ -30,6 +30,7 @@ const HARVEST_SLUGS = ["ripe-tomatoes", "fresh-fenugreek", "green-peas", "chilli
 const SPECIALTY_SLUGS = ["fresh-oranges", "toned-milk", "toor-dal"];
 
 export default function HomeScreen() {
+  const scrollRef = useRef<ScrollView>(null);
   const router = useRouter();
   const queryClient = useQueryClient();
   const [refreshing, setRefreshing] = useState(false);
@@ -67,6 +68,7 @@ export default function HomeScreen() {
   return (
     <Screen edges={["top"]}>
       <ScrollView
+        ref={scrollRef}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.primary} />}
@@ -191,7 +193,7 @@ export default function HomeScreen() {
         />
 
         {/* Bazaar offer: 15+ items = free delivery, 6 Bazaars/week = Bazaar+ */}
-        {mode === "regular" ? <BazaarSection onStartPress={() => router.push("/(tabs)/categories")} /> : null}
+        {mode === "regular" ? <BazaarSection onStartPress={() => router.push("/bazaar" as never)} /> : null}
 
         {/* Vidarbha Regional Specialties */}
         {specialtyProducts.length > 0 ? (
@@ -220,13 +222,15 @@ export default function HomeScreen() {
         {mode === "regular" ? <VillageStory onPress={() => router.push("/(tabs)/categories")} /> : null}
 
         <ClosingCTA onPress={() => router.push("/(tabs)/categories")} />
+        <HomeFooter onBackToTop={() => scrollRef.current?.scrollTo({ y: 0, animated: true })} />
       </ScrollView>
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  scrollContent: { paddingBottom: spacing.xl + CART_BAR_CLEARANCE },
+  // No bottom padding: HomeFooter (dark panel) owns the bottom clearance.
+  scrollContent: { paddingBottom: 0 },
   searchBar: {
     flexDirection: "row",
     alignItems: "center",

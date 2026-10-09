@@ -39,7 +39,10 @@ export default function NewPromotionPage() {
   const [minQuantity, setMinQuantity] = useState("");
   const [customerScope, setCustomerScope] = useState("ALL");
   const [eligibleCustomerIds, setEligibleCustomerIds] = useState("");
-  const [status, setStatus] = useState("DRAFT");
+  // Active by default: a Draft code silently refuses to work for customers until
+  // someone remembers to activate it, which looked like "promo codes do not work".
+  const [status, setStatus] = useState("ACTIVE");
+  const [showInCarousel, setShowInCarousel] = useState(false);
   const [priority, setPriority] = useState("100");
   const [usageLimitTotal, setUsageLimitTotal] = useState("");
   const [usageLimitPerCustomer, setUsageLimitPerCustomer] = useState("");
@@ -124,6 +127,7 @@ export default function NewPromotionPage() {
       customer_scope: customerScope,
       eligible_customer_ids: eligibleIds,
       status,
+      show_in_carousel: showInCarousel,
       priority: Number(priority) || 100,
       usage_limit_total: usageLimitTotal ? Number(usageLimitTotal) : null,
       usage_limit_per_customer: usageLimitPerCustomer ? Number(usageLimitPerCustomer) : null,
@@ -277,10 +281,14 @@ export default function NewPromotionPage() {
           </div>
           <Field label="Initial status">
             <select value={status} onChange={(e) => setStatus(e.target.value)} className={inputClass}>
-              <option value="DRAFT">Draft (not visible or usable yet)</option>
               <option value="ACTIVE">Active (usable immediately, subject to schedule)</option>
+              <option value="DRAFT">Draft (customers cannot use it until you activate it)</option>
             </select>
           </Field>
+          <label className="mt-1 flex items-center gap-2 text-sm text-neutral-700">
+            <input type="checkbox" checked={showInCarousel} onChange={(e) => setShowInCarousel(e.target.checked)} />
+            Show in the app&apos;s offers carousel (add the banner photo on the next screen)
+          </label>
         </Section>
 
         {error && (

@@ -11,7 +11,7 @@ import { WishlistButton } from "./WishlistButton";
 import { useVariantStepper } from "@/features/cart/useCart";
 import { formatVariantSize } from "@/utils/money";
 import { getEmbellishment } from "@/utils/productEmbellishments";
-import { colors, shadows, spacing } from "@/theme";
+import { colors, fontFamily, shadows, spacing } from "@/theme";
 import { PriceResponse, ProductSummaryResponse, ProductVariantResponse } from "@/types/api";
 
 export interface ProductCardData {
@@ -36,6 +36,8 @@ export interface ProductCardData {
    * ProductSummaryResponse. Ignored once `variant` is set. */
   defaultVariantUnit?: string | null;
   defaultVariantQuantity?: string | null;
+  /** False when sold out (greyed out, cannot be added). Undefined = in stock. */
+  inStock?: boolean;
 }
 
 export interface ProductCardProps {
@@ -60,7 +62,9 @@ export function ProductCard({ product, onPress, index = 0 }: ProductCardProps) {
       ? product.variant.id
       : null
     : (product.defaultVariantId ?? null);
-  const isAvailable = addableVariantId !== null;
+  const inStock = product.variant ? product.variant.in_stock !== false : product.inStock !== false;
+  const isActive = addableVariantId !== null;
+  const isAvailable = isActive && inStock;
   const price = product.variant?.current_price ?? product.startingPrice ?? null;
   const { origin, mrp, badge } = getEmbellishment(product.slug);
   const tag = badge ?? origin ?? "Farm Fresh";
@@ -88,7 +92,7 @@ export function ProductCard({ product, onPress, index = 0 }: ProductCardProps) {
             RN gotcha: overflow:hidden on the same view as a shadow clips
             the shadow itself away, so the two responsibilities can't share
             one view. */}
-        <View style={styles.surface}>
+        <View style={[styles.surface, !inStock && styles.soldOut]}>
           <View style={styles.imageWrap}>
             <Image
               source={product.imageUrl ?? undefined}
@@ -111,14 +115,14 @@ export function ProductCard({ product, onPress, index = 0 }: ProductCardProps) {
             {!isAvailable ? (
               <View style={styles.unavailableOverlay}>
                 <Text variant="captionMedium" color={colors.textInverse}>
-                  Unavailable
+                  {isActive ? "Out of stock" : "Unavailable"}
                 </Text>
               </View>
             ) : null}
           </View>
 
-          <Text variant="h3" numberOfLines={1} style={styles.name}>
-            {product.name.toUpperCase()}
+          <Text variant="bodyMedium" color={colors.primary} numberOfLines={1} style={styles.name}>
+            {product.name}
           </Text>
           <View style={styles.footer}>
             <View style={styles.footerInfo}>
@@ -144,7 +148,13 @@ export function ProductCard({ product, onPress, index = 0 }: ProductCardProps) {
                 onDecrement={stepper.decrement}
                 disabled={stepper.isMutating}
               />
-            ) : null}
+            ) : (
+              <View style={styles.soldOutPill}>
+                <Text variant="captionMedium" color={colors.textMuted}>
+                  Sold out
+                </Text>
+              </View>
+            )}
           </View>
         </View>
       </PressableScale>
@@ -166,6 +176,7 @@ export function productSummaryToCardData(product: ProductSummaryResponse): Produ
     defaultVariantId: product.default_variant_id,
     defaultVariantUnit: product.default_variant_unit,
     defaultVariantQuantity: product.default_variant_quantity,
+    inStock: product.in_stock !== false,
   };
 }
 
@@ -182,6 +193,16 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     padding: spacing.sm,
     flex: 1,
+  },
+  // Sold out: the whole card fades to grey and cannot be added.
+  soldOut: { opacity: 0.55 },
+  soldOutPill: {
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: colors.divider,
+    backgroundColor: colors.background,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
   },
   imageWrap: {
     width: "100%",
@@ -212,7 +233,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  name: { marginTop: spacing.sm, paddingHorizontal: 2, fontSize: 15, lineHeight: 21 },
+  name: { marginTop: spacing.sm, paddingHorizontal: 2, fontFamily: fontFamily.devanagari, fontSize: 17, lineHeight: 23, letterSpacing: 0.2 },
   footer: {
     flexDirection: "row",
     alignItems: "flex-end",

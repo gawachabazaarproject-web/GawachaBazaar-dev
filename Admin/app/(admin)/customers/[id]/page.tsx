@@ -1,6 +1,6 @@
 "use client";
 
-import React, { use, useCallback, useEffect, useState } from "react";
+import React, { use, useCallback, useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { hasPermission } from "@/lib/permissions";
@@ -45,6 +45,8 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
   const [timeline, setTimeline] = useState<CustomerTimelineEvent[] | null>(null);
   const [notes, setNotes] = useState<CustomerNote[] | null>(null);
   const [loading, setLoading] = useState(true);
+  // After the first load, refreshes are silent so the page does not blank out.
+  const loadedOnce = useRef(false);
   const [error, setError] = useState<string | null>(null);
 
   const [statusAction, setStatusAction] = useState<"INACTIVE" | "SUSPENDED" | "ACTIVE" | null>(null);
@@ -64,7 +66,7 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
   const load = useCallback(async () => {
     const token = getAccessToken();
     if (!token) return;
-    setLoading(true);
+    if (!loadedOnce.current) setLoading(true); // refreshes after an edit stay in place
     setError(null);
     try {
       const detail = await fetchCustomerDetail(token, customerId);
@@ -78,6 +80,7 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
       setError(err instanceof CustomerApiError ? err.message : "Unable to load this customer.");
     } finally {
       setLoading(false);
+      loadedOnce.current = true;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [customerId, canManageNotes]);

@@ -21,7 +21,7 @@ from app.models.order import Order
 from app.models.order_item import OrderItem
 from app.models.product_variant import ProductVariant
 from app.schemas.bazaar import BazaarStatusResponse, DeliveryQuoteResponse
-from app.services.delivery import calculate_delivery_fee, distinct_product_count
+from app.services.delivery import calculate_delivery_fee, distinct_product_count, get_packing_point
 
 _NOT_COUNTED = ("CANCELLED", "EXPIRED")
 
@@ -64,7 +64,9 @@ class BazaarService:
             )
             if address:
                 lat, lon = address.latitude, address.longitude
-        quote = calculate_delivery_fee(self._cart_product_count(user_id), lat, lon)
+        quote = calculate_delivery_fee(
+            self._cart_product_count(user_id), lat, lon, origin=get_packing_point(self.db)
+        )
         return DeliveryQuoteResponse(
             fee=quote.fee,
             free_delivery=quote.free_delivery,

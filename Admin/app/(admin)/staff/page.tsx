@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState, useRef } from "react";
 import { useAuth } from "@/lib/auth-context";
 import {
   assignStaffRole,
@@ -31,6 +31,8 @@ export default function StaffPage() {
   const { getAccessToken } = useAuth();
   const [staff, setStaff] = useState<StaffListItem[] | null>(null);
   const [loading, setLoading] = useState(true);
+  // After the first load, refreshes are silent so the page does not blank out.
+  const loadedOnce = useRef(false);
   const [error, setError] = useState<string | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   const [rowBusy, setRowBusy] = useState<number | null>(null);
@@ -39,7 +41,7 @@ export default function StaffPage() {
   const load = useCallback(async () => {
     const token = getAccessToken();
     if (!token) return;
-    setLoading(true);
+    if (!loadedOnce.current) setLoading(true); // refreshes after an edit stay in place
     setError(null);
     try {
       setStaff(await fetchStaff(token));
@@ -47,6 +49,7 @@ export default function StaffPage() {
       setError(err instanceof StaffApiError ? err.message : "Unable to load staff.");
     } finally {
       setLoading(false);
+      loadedOnce.current = true;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

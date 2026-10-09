@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING
 
 from sqlalchemy import (
     BigInteger,
+    Boolean,
     CheckConstraint,
     DateTime,
     ForeignKey,
@@ -81,6 +82,10 @@ class Promotion(Base):
     customer_title: Mapped[str | None] = mapped_column(String(150), nullable=True)
     customer_description: Mapped[str | None] = mapped_column(Text, nullable=True)
     code: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    # Offers carousel on the app's Home screen (see app/api/v1/offers.py): the
+    # banner photo, and whether this promotion is advertised there at all.
+    image_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    show_in_carousel: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
     discount_type: Mapped[str] = mapped_column(String(20), nullable=False)
     discount_value: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
     max_discount_amount: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)

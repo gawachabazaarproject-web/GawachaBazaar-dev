@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { hasPermission } from "@/lib/permissions";
@@ -30,6 +30,8 @@ export default function PromotionsPage() {
   const [dashboard, setDashboard] = useState<PromotionsDashboard | null>(null);
   const [data, setData] = useState<PromotionListResponse | null>(null);
   const [loading, setLoading] = useState(true);
+  // After the first load, refreshes are silent so the page does not blank out.
+  const loadedOnce = useRef(false);
   const [error, setError] = useState<string | null>(null);
 
   const [page, setPage] = useState(1);
@@ -53,7 +55,7 @@ export default function PromotionsPage() {
   const load = useCallback(async () => {
     const token = getAccessToken();
     if (!token) return;
-    setLoading(true);
+    if (!loadedOnce.current) setLoading(true); // refreshes after an edit stay in place
     setError(null);
     try {
       const result = await fetchPromotions(token, {
@@ -67,6 +69,7 @@ export default function PromotionsPage() {
       setError(err instanceof PromotionApiError ? err.message : "Unable to load promotions.");
     } finally {
       setLoading(false);
+      loadedOnce.current = true;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page, q, effectiveStatus]);

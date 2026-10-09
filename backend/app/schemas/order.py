@@ -41,6 +41,8 @@ class OrderItemResponse(BaseSchema):
     quantity: Decimal
     unit_price: Decimal
     total_price: Decimal
+    # The product's primary photo today (not stored on the order line).
+    image_url: str | None = None
 
 
 class OrderAddressResponse(BaseSchema):

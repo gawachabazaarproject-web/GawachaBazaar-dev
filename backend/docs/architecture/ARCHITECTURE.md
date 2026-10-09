@@ -1,3 +1,10 @@
+> **Note (updated Oct 2026):** this file is the backend-only engineering memory written during the
+> phased build (snapshot of 2026-09-11). Authentication has since moved from JWT/refresh tokens to
+> **Firebase Authentication**, and delivery pricing, the Bazaar offer, ads/home slides, wishlist,
+> the packing point and the Admin/mobile clients were added. For the current whole-system picture
+> read [docs/ARCHITECTURE.md](../../../docs/ARCHITECTURE.md) and [docs/FEATURES.md](../../../docs/FEATURES.md);
+> use this file for backend history and phase-level detail.
+
 # Gawacha Bazaar — Backend Architecture (Engineering Memory)
 
 > **Purpose of this document**: This is the persistent source of truth for any engineer (human or AI)

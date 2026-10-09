@@ -1,136 +1,126 @@
-# GawachaBazaar — Customer Mobile App
+# Gawacha Bazaar - Customer Mobile App
 
-Phase 20 customer-facing MVP: React Native + Expo (Expo Router, TypeScript), consuming the
-existing GawachaBazaar FastAPI backend (Phases 1–19). This app does not implement any business
-logic of its own — every state machine (order, payment, fulfillment, refund) lives in the backend;
-the app only renders what the backend returns. See `docs/architecture/ARCHITECTURE.md` and
-`docs/api/*` in `backend/` for the system of record.
+React Native 0.86 + Expo 57 (Expo Router, TypeScript) customer app for the Gawacha Bazaar
+FastAPI backend. The app contains **no business rules**: prices, delivery fees, discounts and
+every status transition (order, payment, fulfillment, refund) come from the backend; the app
+only renders them. System overview: [../docs/ARCHITECTURE.md](../docs/ARCHITECTURE.md). Feature
+list: [../docs/FEATURES.md](../docs/FEATURES.md).
 
-## Running the app
+## Running
 
 ```bash
 cd mobile
 npm install
-npm run android         # or: npm run ios / npm run web
+npx expo start -c          # -c clears the Metro cache - use it after adding fonts/assets/packages
+npm run android            # builds and runs the dev client (expo run:android)
 ```
 
-The backend must be running (on port 8000, same machine as Metro) and reachable from your
-device/emulator - see the root `docker-compose.yml` or `backend/README.md`. No `.env` setup is
-needed for local dev: `src/api/client.ts` derives the backend's base URL automatically from the
-same host Expo Go/the dev client already used to reach Metro (`Constants.expoConfig.hostUri`), so
-it keeps working across DHCP/network changes without editing anything. `.env.example` documents
-`EXPO_PUBLIC_API_BASE_URL` as an explicit override, for cases with no dev-server host to derive
-from (a production/standalone build) or a backend on a different host/port.
+- Firebase Auth and Google sign-in are **native modules**, so use the **dev client**
+  (`expo-dev-client`, `npm run android`/`ios`), not Expo Go.
+- In development the API base URL is derived from the Metro host
+  (`Constants.expoConfig.hostUri`), so the backend on port 8000 on the same machine just works.
+  Set `EXPO_PUBLIC_API_BASE_URL` to override it (standalone builds use the values in `eas.json`).
+- Firebase and Google client IDs come from `EXPO_PUBLIC_FIREBASE_*` /
+  `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID` and `google-services.json`.
+- Builds: `eas.json` defines `development`, `preview` (APK) and `production` profiles.
 
-## Architecture
+Type-check with `npx tsc --noEmit`.
 
-```
+## Structure
+
+```text
 mobile/
-├── app/                     # Expo Router file-based routes (screens only - no business logic)
-│   ├── (auth)/              # Login, register - unauthenticated
-│   ├── (onboarding)/        # First-time address setup, shown once per account
-│   ├── (tabs)/              # Home, Categories, Search, Orders, Account
-│   ├── product/[id].tsx     # Product detail
-│   ├── category/[id].tsx    # Category product listing
-│   ├── cart/                # Cart
-│   ├── checkout/            # Checkout, order success
-│   ├── order/[id]/          # Order detail, cancellation, refund status
-│   ├── address/             # Address book CRUD
-│   ├── account/             # Profile, support, settings
-│   └── _layout.tsx          # Root: providers, fonts, splash
+├── app/                      Expo Router routes (screens only)
+│   ├── (auth)/               login, register, phone + OTP, verify-email, forgot-password, link-account
+│   ├── (onboarding)/         first-time address setup
+│   ├── (tabs)/               Home, Shop (categories), Search, Orders, Account
+│   ├── product/[id].tsx      product detail
+│   ├── category/[id].tsx     category listing
+│   ├── cart/                 cart
+│   ├── checkout/             checkout + success
+│   ├── order/[id]/           order details, cancel, refund status
+│   ├── wishlist.tsx          saved products
+│   ├── address/              address book
+│   ├── account/              profile, add-phone, settings, support
+│   ├── bulk/                 bulk requests: review, list, detail, success
+│   └── _layout.tsx           root: providers, fonts, splash, cart bar
 ├── src/
-│   ├── api/                 # The ONE HTTP layer - axios client, auth/refresh, per-domain modules
-│   ├── components/          # Reusable UI primitives (Button, ProductCard, Skeleton, ...)
-│   ├── features/            # Domain hooks (TanStack Query) grouped by feature
-│   ├── navigation/           # AppGate: auth/onboarding redirect logic (not a route)
-│   ├── store/                # Small global state (zustand): auth session, toast
-│   ├── theme/                # Design tokens - colors, type scale, spacing, motion
+│   ├── api/                  the single HTTP layer: axios client + one module per domain
+│   ├── auth/                 Firebase wrappers (native + web), error mapping, phone helpers
+│   ├── components/           shared UI (ProductCard, CartBar, Skeleton, ...); home/, cart/, checkout/, payment/
+│   ├── features/             TanStack Query hooks per domain: auth, address, bazaar, bulkOrders,
+│   │                         cart, catalog, checkout, orders, payment, wishlist
+│   ├── navigation/           AppGate: routes between auth / onboarding / main tabs
+│   ├── store/                zustand: auth session, toast, wholesale mode + bulk draft
+│   ├── theme/                design tokens: colors, typography, spacing, shadows, motion
 │   ├── hooks/, utils/, types/
-└── assets/                  # App icons/splash/logo (see Design system)
+├── assets/                   icons, splash, artwork (order/orders hero art, product imagery)
+├── plugins/                  Expo config plugins (Android release)
+└── eas.json, app.json, app.config.js
 ```
 
-Feature-oriented, matching the brief. Business rules are never re-implemented here - see
-`src/utils/statusPresentation.ts`, which is explicitly a presentation-only mapping from backend
-status strings to UI labels/colors, not a second state machine.
+## API layer
 
-## API integration
+`src/api/client.ts` is the only axios instance. It attaches the **Firebase ID token**
+(`Authorization: Bearer`) to every request. On `401 TOKEN_EXPIRED` it refreshes the token and
+retries once (concurrent failures share one refresh) instead of signing the user out.
+`src/api/errors.ts` turns every failure into one `ApiError` with a safe, user-facing message and
+the backend's stable `code`. Domain modules (`authApi`, `addressApi`, `catalogApi`, `cartApi`,
+`orderApi`, `paymentApi`, `wishlistApi`, `bazaarApi`, `bulkOrderApi`, `adsApi`, `homeSlidesApi`)
+mirror the backend routes 1:1. `src/types/api.ts` is the hand-maintained TypeScript mirror of the
+backend schemas - re-check it against `GET /openapi.json` when the backend changes.
 
-`src/api/client.ts` is the single Axios instance every request goes through: base URL from
-`EXPO_PUBLIC_API_BASE_URL`, bearer token attached automatically, and a single-flight refresh
-interceptor (concurrent 401s share one `/auth/refresh` call rather than each firing their own).
-`src/api/errors.ts` maps every backend/network failure into one `ApiError` with a safe,
-user-facing message - no screen ever renders a raw "500 Internal Server Error" or a stack trace.
+Server state lives in TanStack Query. The cart and wishlist use **optimistic updates** with
+rollback; Clear Cart, quantity steppers and hearts feel instant and recover on error.
 
-Per-domain modules (`authApi`, `addressApi`, `catalogApi`, `cartApi`, `orderApi`, `paymentApi`)
-wrap the actual, already-documented backend routes 1:1 - no invented endpoints. See
-`src/types/api.ts` for the TypeScript mirror of the backend's Pydantic schemas (kept in sync
-manually; re-verify against `GET /openapi.json` on the running backend if the backend changes).
+## Authentication flow
 
-**Small, targeted backend changes were made to support this app** - each the smallest fix for a
-genuine, confirmed gap, never a redesign:
-- `GET /catalog/products` gained an optional `q` query parameter (case-insensitive name search) -
-  the backend had no search capability at all before Phase 20.
-- `ProductSummaryResponse` (the catalog list/grid shape) gained `starting_price`,
-  `default_variant_id`, `default_variant_unit`, and `default_variant_quantity`, resolved from each
-  product's lowest-id active variant using the same current-price rule as everywhere else. Without
-  this, every Home/Category/Search grid card had no price, no addable variant, and no pack-size
-  label - `variant` is only ever populated on the full product-detail response.
-- `CartItemResponse` gained `product_id`, `product_slug`, and `primary_image_url`, resolved from
-  the item's product. Without this, the cart screen had no way to show a thumbnail or link a line
-  item back to its product page - it only ever carried variant-level fields.
-- A pre-existing transaction bug in `AuthService`'s `_transaction()` helper was fixed: it branched
-  on `db.in_transaction()` to decide between a real transaction and a savepoint, but SQLAlchemy
-  autobegins a transaction on a session's first read, so a preceding lookup (e.g. the credential
-  check in `authenticate()`) made that check true even when nothing had actually opened a
-  transaction the caller owned - routing every login down a savepoint path that released cleanly
-  but was never committed, silently rolling back on session close. This is a bug fix, not a new
-  endpoint or field.
+Firebase handles sign-in (email + password, Google, phone OTP). `src/store/authStore.ts`
+(zustand) holds the session; `AppGate` redirects between the auth screens, the one-time address
+onboarding and the main tabs. After a Firebase sign-in the app loads `/auth/me`; if the backend
+answers `ACCOUNT_NOT_REGISTERED` it calls `/auth/sync` and retries. Email/password accounts must
+verify their email. See [../deploy/FIREBASE_AUTH.md](../deploy/FIREBASE_AUTH.md).
 
-## Authentication
+## Payments
 
-`expo-secure-store` (Keychain/Keystore-backed) is the only place access/refresh tokens are
-persisted - never AsyncStorage. `src/store/authStore.ts` (zustand) owns session state
-(`restoring` → `authenticated`/`unauthenticated`); `src/navigation/AppGate.tsx` reacts to it and to
-whether the account has at least one saved address to decide between the auth screens, the
-one-time address-onboarding screen, and the main tab experience.
+Cash on Delivery or online via **Razorpay Checkout in a WebView**
+(`src/components/payment/RazorpayCheckout.tsx`, with a web variant). The app only relays
+Razorpay's result to the backend, which verifies the signature and re-checks the order; the app
+never decides an order is paid. If the backend has no Razorpay keys, online payment shows a clear
+"not available" message and COD still works. An unfinished payment can be completed from the order
+page.
 
 ## Design system
 
-- **Color**: `src/theme/colors.ts` - a deep pine-forest green primary and warm mustard-gold
-  accent, warm off-white background. Deliberately avoids generic "grocery green" and leaf/produce
-  iconography.
-- **Typography**: a two-typeface system (`src/theme/typography.ts`) - Noto Serif for headlines
-  (screen titles, section headers), Plus Jakarta Sans for everything read at speed (body copy,
-  labels, prices, buttons). No third face.
-- **Spacing/radius**: fixed scales (`src/theme/spacing.ts`) - no ad hoc pixel values in screens.
-- **Motion**: `src/theme/motion.ts` - two spring presets and three timing presets, plus
-  `PressableScale` (shared press-scale interaction) and staggered entrance fades on grids/lists.
-  Restrained - no decorative/continuous animation.
-- **Icons**: Feather (`@expo/vector-icons`) for all UI chrome. Category imagery is real photography
-  (`src/utils/categoryVisuals.ts`), not icons - see Known Limitations.
+- **Color** (`src/theme/colors.ts`): deep forest green primary, mustard-gold accent, warm cream
+  background, plus tokens `surfaceTint` and `brandGreen` used by the order screens.
+- **Typography** (`src/theme/typography.ts`): Bodoni Moda for headlines, Instrument Serif italic
+  for script accents, Plus Jakarta Sans for body/UI, Lora for numerals, Baloo 2 for Devanagari
+  (and the product-card names). Fonts are registered in `app/_layout.tsx` - add a font there
+  and restart Metro with `-c`.
+- **Spacing / radius / shadows / motion**: fixed scales in `src/theme`; no ad hoc pixel values
+  for layout.
+- **Icons**: Feather (`@expo/vector-icons`). Artwork (hero crates, order bag) lives in `assets/`.
 
-## Known limitations (genuine, not deferred silently)
+## Notable screens
 
-- **Online payment uses Razorpay Checkout in a WebView** (`src/components/payment/RazorpayCheckout.tsx`,
-  plus a `.web.tsx` variant using Razorpay's checkout.js). It works in Expo Go and standalone builds with
-  no native SDK. The app only relays Razorpay's success payload to `POST /payments/{id}/confirm`, and
-  the backend verifies the signature and re-checks the order with Razorpay. If the backend has no
-  Razorpay keys, "Pay online" gets a clear "not available" error and COD still works. A customer who
-  closes the sheet can finish from the checkout screen or from the order page ("Complete payment").
-- **Categories have no image field in the backend** (`app/models/category.py`), and products have
-  no subcategory/department field. `src/utils/categoryVisuals.ts` maps each category to a real
-  photo (hashed fallback for any category added later); `src/utils/categoryDepartments.ts` groups
-  each category's real products into hand-curated "department" tiles for the Categories screen.
-  The grouping and photography are a client-side presentation layer - every product and count
-  shown is real, and every department slug list exactly partitions its category's real catalog.
-- **Profile editing does not exist** - the backend has no profile-update endpoint, and none was
-  fabricated. See the Phase 20 report's Post-MVP Backlog.
-- **No email/SMS codes anywhere**: login is email-or-phone + password only. There is no
-  self-service password reset - the login screen tells customers to contact support, and an
-  admin sets a new password from the Admin panel (Customers → customer → Account information),
-  which signs the customer out of every device.
-- **No MRP/discount pricing.** `PriceTag` supports an optional struck-through MRP, but the backend
-  has no MRP field - only a single current price. `src/utils/productEmbellishments.ts` supplies an
-  illustrative MRP (and Marathi name/origin/ETA) per product, purely for presentation, clearly
-  separated from real backend data - every price shown is real, and MRP never fabricates a discount
-  larger than that illustrative value.
+- **Home**: hero carousel from `/home-slides`, regular/wholesale toggle, brand-ads carousel
+  (12:5 cards with brand name, title, subtitle and "See more" when the ad has a link), rails,
+  Bazaar section with free-delivery and Bazaar+ progress.
+- **Product detail**: gallery, variants, related products, sticky add footer with the floating
+  cart pill above it.
+- **Cart**: free-delivery progress, promo codes, delivery fee, optimistic Clear.
+- **Orders tab**: stats, filter, order-ID search, order cards. **Order details**: status card,
+  five-step tracker, items with photos, totals, payment, address, Reorder, Get help.
+- **Account**: profile, saved addresses, Wishlist (with count bubble), orders, bulk requests,
+  support, settings, log out.
+
+## Known limitations
+
+- Support is contact details only (no in-app chat); no push notifications.
+- Order tracker shows real times only for placed and delivered; other steps have no timestamp.
+- `src/utils/productEmbellishments.ts` supplies an illustrative MRP / Marathi name / origin /
+  ETA per product purely for presentation - prices actually charged are always the backend's.
+- Category photography/department grouping (`categoryVisuals.ts`, `categoryDepartments.ts`) is a
+  client-side presentation layer over real catalog data.
+- Order-level "Delivery fee" appears only when it is non-zero.

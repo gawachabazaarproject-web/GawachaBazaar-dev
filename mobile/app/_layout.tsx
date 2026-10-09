@@ -101,6 +101,7 @@ export default function RootLayout() {
               <Stack.Screen name="(tabs)" />
               <Stack.Screen name="product/[id]" options={{ presentation: "card" }} />
               <Stack.Screen name="category/[id]" options={{ presentation: "card" }} />
+              <Stack.Screen name="bazaar/index" options={{ presentation: "card" }} />
               <Stack.Screen name="cart/index" options={{ presentation: "modal" }} />
               <Stack.Screen name="checkout/index" options={{ presentation: "card" }} />
               <Stack.Screen name="checkout/success" options={{ presentation: "fullScreenModal", gestureEnabled: false }} />

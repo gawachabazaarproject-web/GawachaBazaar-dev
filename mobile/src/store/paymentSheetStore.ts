@@ -1,6 +1,6 @@
 import { MutableRefObject } from "react";
 import { create } from "zustand";
-import { PaymentCheckoutResponse, RazorpaySuccessPayload } from "@/types/api";
+import { RazorpayCheckoutParams, RazorpaySuccessPayload } from "@/types/api";
 
 export interface PaymentSheetHandlers {
   onSuccess: (result: RazorpaySuccessPayload) => void;
@@ -8,12 +8,12 @@ export interface PaymentSheetHandlers {
 }
 
 interface PaymentSheetState {
-  checkout: PaymentCheckoutResponse | null;
+  checkout: RazorpayCheckoutParams | null;
   /** A ref, so the screen's latest handlers are used without re-opening. */
   handlers: MutableRefObject<PaymentSheetHandlers> | null;
-  open: (checkout: PaymentCheckoutResponse, handlers: MutableRefObject<PaymentSheetHandlers>) => void;
+  open: (checkout: RazorpayCheckoutParams, handlers: MutableRefObject<PaymentSheetHandlers>) => void;
   /** Closes only if `checkout` is still the one showing. */
-  close: (checkout: PaymentCheckoutResponse) => void;
+  close: (checkout: RazorpayCheckoutParams) => void;
 }
 
 /** The one Razorpay Checkout sheet, rendered by RazorpaySheetHost at the

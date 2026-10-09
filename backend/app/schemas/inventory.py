@@ -95,6 +95,8 @@ class CreateInventoryLocationRequest(BaseSchema):
     state: str = Field(..., min_length=1, max_length=100)
     postal_code: str = Field(..., min_length=1, max_length=20)
     status: LocationStatus = Field(default="ACTIVE")
+    latitude: float | None = Field(default=None, ge=-90, le=90)
+    longitude: float | None = Field(default=None, ge=-180, le=180)
 
 
 class UpdateInventoryLocationRequest(BaseSchema):
@@ -107,6 +109,8 @@ class UpdateInventoryLocationRequest(BaseSchema):
     state: str | None = Field(default=None, min_length=1, max_length=100)
     postal_code: str | None = Field(default=None, min_length=1, max_length=20)
     status: LocationStatus | None = Field(default=None)
+    latitude: float | None = Field(default=None, ge=-90, le=90)
+    longitude: float | None = Field(default=None, ge=-180, le=180)
 
 
 class InventoryLocationResponse(BaseSchema):
@@ -120,6 +124,9 @@ class InventoryLocationResponse(BaseSchema):
     state: str
     postal_code: str
     status: str
+    latitude: float | None = None
+    longitude: float | None = None
+    is_packing_point: bool = False
     created_at: datetime
     updated_at: datetime
 

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState, useRef } from "react";
 import { useAuth } from "@/lib/auth-context";
 import {
   createHomeSlide,
@@ -25,6 +25,8 @@ export default function ContentPage() {
   const { getAccessToken } = useAuth();
   const [slides, setSlides] = useState<HomeSlide[] | null>(null);
   const [loading, setLoading] = useState(true);
+  // After the first load, refreshes are silent so the page does not blank out.
+  const loadedOnce = useRef(false);
   const [error, setError] = useState<string | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   const [editing, setEditing] = useState<HomeSlide | null>(null);
@@ -33,7 +35,7 @@ export default function ContentPage() {
   const load = useCallback(async () => {
     const token = getAccessToken();
     if (!token) return;
-    setLoading(true);
+    if (!loadedOnce.current) setLoading(true); // refreshes after an edit stay in place
     setError(null);
     try {
       setSlides(await fetchHomeSlides(token));
@@ -41,6 +43,7 @@ export default function ContentPage() {
       setError(err instanceof HomeSlideApiError ? err.message : "Unable to load slides.");
     } finally {
       setLoading(false);
+      loadedOnce.current = true;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

@@ -38,6 +38,9 @@ class Ad(Base):
     brand_name: Mapped[str] = mapped_column(String(150), nullable=False)
     image_url: Mapped[str] = mapped_column(Text, nullable=False)
     link_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Text shown over the card in the app (both optional).
+    title: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    subtitle: Mapped[str | None] = mapped_column(String(140), nullable=True)
     display_order: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
     status: Mapped[str] = mapped_column(String(20), nullable=False, server_default="ACTIVE")
     created_at: Mapped[datetime] = mapped_column(
