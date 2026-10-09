@@ -543,3 +543,17 @@ export interface ApiErrorBody {
   message: string;
   details: unknown;
 }
+
+// ---------------------------------------------------------------------------
+// Home hero carousel (admin-managed)
+// ---------------------------------------------------------------------------
+export interface HomeSlideResponse {
+  id: number;
+  label: string;
+  title: string;
+  script_suffix: string | null;
+  body: string;
+  image_url: string;
+  cta_label: string;
+  link_url: string | null;
+}

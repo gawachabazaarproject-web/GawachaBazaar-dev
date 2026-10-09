@@ -14,7 +14,8 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated";
 import { Text } from "../Text";
-import { CAMPAIGN_SLIDES } from "@/utils/campaignSlides";
+import { CAMPAIGN_SLIDES, CampaignSlide } from "@/utils/campaignSlides";
+import { useHomeSlides } from "@/features/catalog/useCatalog";
 import { colors, radius, spacing } from "@/theme";
 
 const SLIDE_HEIGHT = 480;
@@ -22,7 +23,8 @@ const POSTER_RADIUS = 20;
 const AUTO_MS = 5500;
 
 export interface PromoCarouselProps {
-  onSlidePress?: (slideId: string) => void;
+  /** `linkUrl` is the slide's admin-set link (in-app path or https URL), or null. */
+  onSlidePress?: (linkUrl: string | null) => void;
 }
 
 /**
@@ -33,6 +35,23 @@ export interface PromoCarouselProps {
  * HubSpec-style auto-advancing progress dot row.
  */
 export function PromoCarousel({ onSlidePress }: PromoCarouselProps) {
+  const { data, isError } = useHomeSlides();
+  // Admin-managed slides; the built-in set only if the request fails
+  // (offline/server down) so Home is never blank because of a hiccup.
+  const slides: CampaignSlide[] = data
+    ? data.map((s) => ({
+        id: String(s.id),
+        label: s.label,
+        title: s.title,
+        scriptSuffix: s.script_suffix ?? undefined,
+        body: s.body,
+        image: s.image_url,
+        ctaLabel: s.cta_label,
+        linkUrl: s.link_url,
+      }))
+    : isError
+      ? CAMPAIGN_SLIDES
+      : [];
   const { width: SLIDE_WIDTH } = useWindowDimensions();
   const scrollX = useSharedValue(0);
   const dotProgress = useSharedValue(0);
@@ -66,7 +85,7 @@ export function PromoCarousel({ onSlidePress }: PromoCarouselProps) {
   useEffect(() => {
     if (pausedRef.current) return;
     const id = setTimeout(() => {
-      goTo((active + 1) % CAMPAIGN_SLIDES.length);
+      goTo((active + 1) % slides.length);
     }, AUTO_MS);
     return () => clearTimeout(id);
   }, [active, goTo]);
@@ -79,6 +98,11 @@ export function PromoCarousel({ onSlidePress }: PromoCarouselProps) {
     },
     [restartProgress]
   );
+
+  if (slides.length === 0) {
+    // Loading (reserve the height so Home doesn't jump) or no active slides.
+    return data ? null : <View style={styles.wrap} />;
+  }
 
   return (
     <View style={styles.wrap}>
@@ -97,20 +121,21 @@ export function PromoCarousel({ onSlidePress }: PromoCarouselProps) {
           onMomentumEnd(e);
         }}
       >
-        {CAMPAIGN_SLIDES.map((slide, i) => (
+        {slides.map((slide, i) => (
           <Slide
             key={slide.id}
             slide={slide}
             index={i}
             slideWidth={SLIDE_WIDTH}
             scrollX={scrollX}
-            onPress={() => onSlidePress?.(slide.id)}
+            onPress={() => onSlidePress?.(slide.linkUrl ?? null)}
+            total={slides.length}
           />
         ))}
       </Animated.ScrollView>
 
       <View style={styles.indicatorRow}>
-        {CAMPAIGN_SLIDES.map((slide, i) => (
+        {slides.map((slide, i) => (
           <Pressable
             key={slide.id}
             onPress={() => {
@@ -123,7 +148,7 @@ export function PromoCarousel({ onSlidePress }: PromoCarouselProps) {
           </Pressable>
         ))}
         <Text variant="eyebrow" color="rgba(255,255,255,0.5)" style={styles.counter}>
-          {String(active + 1).padStart(2, "0")} / {String(CAMPAIGN_SLIDES.length).padStart(2, "0")}
+          {String(active + 1).padStart(2, "0")} / {String(slides.length).padStart(2, "0")}
         </Text>
       </View>
     </View>
@@ -141,12 +166,14 @@ function Slide({
   slideWidth,
   scrollX,
   onPress,
+  total,
 }: {
-  slide: (typeof CAMPAIGN_SLIDES)[number];
+  slide: CampaignSlide;
   index: number;
   slideWidth: number;
   scrollX: SharedValue<number>;
   onPress: () => void;
+  total: number;
 }) {
   const inputRange = [(index - 1) * slideWidth, index * slideWidth, (index + 1) * slideWidth];
 
@@ -188,7 +215,7 @@ function Slide({
         <View style={styles.content}>
           <Animated.View style={labelStyle}>
             <Text variant="eyebrow" color={colors.accentLight}>
-              {String(index + 1).padStart(2, "0")} / {String(CAMPAIGN_SLIDES.length).padStart(2, "0")} — {slide.label}
+              {String(index + 1).padStart(2, "0")} / {String(total).padStart(2, "0")} — {slide.label}
             </Text>
           </Animated.View>
           <Animated.View style={textStyle}>

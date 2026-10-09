@@ -27,7 +27,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: "Delivery", href: "/delivery", icon: "truck", permission: "delivery.read" },
   { label: "Payments", href: "/payments", icon: "credit-card", permission: "orders.refund" },
   { label: "Reports", href: "/reports", icon: "bar-chart", permission: "reports.read" },
-  { label: "Content", href: "/content", icon: "file-text", permission: "promotions.read" },
+  { label: "Home slides", href: "/content", icon: "file-text", permission: "ads.read" },
   { label: "Settings", href: "/settings", icon: "settings", permission: "settings.manage" },
   { label: "Audit Log", href: "/audit-log", icon: "shield", permission: "audit.read" },
   { label: "Staff", href: "/staff", icon: "users", permission: "staff.read" },

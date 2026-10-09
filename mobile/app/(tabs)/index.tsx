@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from "react";
-import { Pressable, RefreshControl, ScrollView, StyleSheet, View } from "react-native";
+import { Linking, Pressable, RefreshControl, ScrollView, StyleSheet, View } from "react-native";
 import { useRouter } from "expo-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { Feather } from "@expo/vector-icons";
@@ -12,7 +12,6 @@ import { CART_BAR_CLEARANCE } from "@/components/CartBar";
 import { ShopHeader } from "@/components/ShopHeader";
 import { HorizontalProductCard } from "@/components/HorizontalProductCard";
 import { PromoCarousel } from "@/components/home/PromoCarousel";
-import { BrandStatement } from "@/components/home/BrandStatement";
 import { CategoryPanel } from "@/components/home/CategoryPanel";
 import { SectionHeading } from "@/components/home/SectionHeading";
 import { ProductRail } from "@/components/home/ProductRail";
@@ -86,7 +85,13 @@ export default function HomeScreen() {
         </Pressable>
 
         <View style={styles.carouselWrap}>
-          <PromoCarousel onSlidePress={() => router.push("/(tabs)/categories")} />
+          <PromoCarousel
+            onSlidePress={(link) => {
+              if (link && /^https?:\/\//.test(link)) Linking.openURL(link).catch(() => undefined);
+              else if (link && link.startsWith("/")) router.push(link as never);
+              else router.push("/(tabs)/categories");
+            }}
+          />
         </View>
 
         <WholesaleToggle mode={mode} onChange={setMode} />
@@ -112,8 +117,6 @@ export default function HomeScreen() {
             </Pressable>
           </View>
         ) : null}
-
-        {mode === "regular" ? <BrandStatement /> : null}
 
         {/* Shop by category */}
         <SectionHeading index="01 / 05" eyebrow="EXPLORE" title="Shop by" scriptSuffix="category." onSeeAll={() => router.push("/(tabs)/categories")} />
@@ -168,8 +171,6 @@ export default function HomeScreen() {
           />
         )}
 
-        {mode === "regular" ? <VillageStory onPress={() => router.push("/(tabs)/categories")} /> : null}
-
         {/* Best sellers */}
         <ProductRail
           index="04 / 05"
@@ -212,6 +213,8 @@ export default function HomeScreen() {
           </View>
         ) : null}
 
+        {mode === "regular" ? <VillageStory onPress={() => router.push("/(tabs)/categories")} /> : null}
+
         <ClosingCTA onPress={() => router.push("/(tabs)/categories")} />
       </ScrollView>
     </Screen>
@@ -232,7 +235,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     height: 48,
   },
-  carouselWrap: { marginTop: spacing.lg },
+  carouselWrap: { marginTop: spacing.lg, marginBottom: spacing.xl },
   categoryRow: { paddingHorizontal: spacing.base, gap: spacing.sm, flexDirection: "row" },
   skeletonRail: { flexDirection: "row", gap: spacing.md, paddingHorizontal: spacing.base, marginTop: spacing.xl },
   specialties: { marginTop: spacing.xl },

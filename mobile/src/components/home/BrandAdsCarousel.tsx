@@ -109,7 +109,7 @@ export function BrandAdsCarousel() {
 }
 
 const styles = StyleSheet.create({
-  wrap: { marginTop: spacing.lg },
+  wrap: { marginTop: spacing.lg, marginBottom: spacing.xl },
   slide: { height: SLIDE_HEIGHT },
   image: {
     width: "100%",

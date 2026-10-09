@@ -11,6 +11,7 @@ table definitions.
 """
 
 from app.models.ad import Ad
+from app.models.home_slide import HomeSlide
 from app.models.address import Address
 from app.models.admin_action_log import AdminActionLog
 from app.models.batch import Batch
@@ -61,6 +62,7 @@ from app.models.wishlist_item import WishlistItem
 __all__ = [
     "WishlistItem",
     "Ad",
+    "HomeSlide",
     "Address",
     "AdminActionLog",
     "Batch",
