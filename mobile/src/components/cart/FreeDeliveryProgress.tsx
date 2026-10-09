@@ -4,7 +4,7 @@ import { Feather } from "@expo/vector-icons";
 import { Text } from "@/components/Text";
 import { colors, radius, spacing } from "@/theme";
 
-/** Bazaar progress: a basket of 15+ items ships free (the backend applies
+/** Bazaar progress: a basket of 15+ different products ships free (the backend applies
  * the same rule at checkout - see app/services/delivery.py). */
 export function FreeDeliveryProgress({ itemCount, minItems = 15 }: { itemCount: number; minItems?: number }) {
   const remaining = Math.max(0, minItems - itemCount);
@@ -24,7 +24,7 @@ export function FreeDeliveryProgress({ itemCount, minItems = 15 }: { itemCount: 
             </Text>
           ) : (
             <Text variant="caption" color={colors.textSecondary} style={{ flex: 1 }}>
-              Add {remaining} more {remaining === 1 ? "item" : "items"} for{" "}
+              Add {remaining} more different {remaining === 1 ? "product" : "products"} for{" "}
               <Text variant="caption" color={colors.primary} style={styles.bold}>
                 FREE Delivery
               </Text>

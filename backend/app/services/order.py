@@ -69,7 +69,7 @@ from app.schemas.order import (
 from app.schemas.payment import PaymentResponse
 from app.schemas.refund import AdminRefundResponse
 from app.services.admin_audit import AdminAuditService
-from app.services.delivery import calculate_delivery_fee, item_count_for_quantities
+from app.services.delivery import calculate_delivery_fee, distinct_product_count
 from app.services.inventory_reservation import InventoryReservationService
 from app.services.order_state import (
     IllegalOrderTransitionError,
@@ -545,11 +545,11 @@ class OrderService:
         if data.promo_code and evaluation.code_was_invalid:
             raise BusinessValidationError(evaluation.message)
 
-        # Delivery fee: free for a Bazaar (15+ units), otherwise base + per-km.
+        # Delivery fee: free for a Bazaar (15+ different products), otherwise base + per-km.
         # Computed here from the real cart and the real address - the same
         # function the cart's quote endpoint uses - never from the client.
         delivery_quote = calculate_delivery_fee(
-            item_count_for_quantities(i.quantity for i in items),
+            distinct_product_count(variants[i.variant_id].product_id for i in items),
             address.latitude,
             address.longitude,
         )

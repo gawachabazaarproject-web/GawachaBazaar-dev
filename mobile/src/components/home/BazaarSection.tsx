@@ -3,8 +3,7 @@ import { Pressable, StyleSheet, View } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Feather } from "@expo/vector-icons";
 import { Text } from "../Text";
-import { useCartItemCount } from "@/features/cart/useCart";
-import { useBazaarStatus } from "@/features/bazaar/useBazaar";
+import { useBazaarStatus, useCartProductCount } from "@/features/bazaar/useBazaar";
 import { useAuthStore } from "@/store/authStore";
 import { colors, radius, spacing } from "@/theme";
 
@@ -12,7 +11,6 @@ import { colors, radius, spacing } from "@/theme";
  * the live values from /bazaar/status win whenever they are available. */
 const DEFAULT_MIN_ITEMS = 15;
 const DEFAULT_ORDERS_REQUIRED = 6;
-const DEFAULT_WINDOW_DAYS = 7;
 
 export interface BazaarSectionProps {
   onStartPress: () => void;
@@ -20,18 +18,17 @@ export interface BazaarSectionProps {
 
 /**
  * "Bazaar" offer card: fill a basket with 15+ items for free delivery, and
- * place six such Bazaars in a week to become eligible for Gawacha Bazaar+.
+ * place six such Bazaars in a month to become eligible for Gawacha Bazaar+.
  * Progress is real - cart units from the live cart, Bazaar orders from the
  * backend's rolling-window count (GET /bazaar/status).
  */
 export function BazaarSection({ onStartPress }: BazaarSectionProps) {
   const signedIn = useAuthStore((s) => s.status === "authenticated");
-  const cartItems = useCartItemCount();
+  const cartItems = useCartProductCount();
   const { data: status } = useBazaarStatus();
 
   const minItems = status?.free_delivery_min_items ?? DEFAULT_MIN_ITEMS;
   const ordersRequired = status?.orders_required ?? DEFAULT_ORDERS_REQUIRED;
-  const windowDays = status?.window_days ?? DEFAULT_WINDOW_DAYS;
   const bazaarOrders = Math.min(status?.bazaar_orders_in_window ?? 0, ordersRequired);
   const eligible = status?.eligible_for_bazaar_plus ?? false;
 
@@ -59,7 +56,7 @@ export function BazaarSection({ onStartPress }: BazaarSectionProps) {
           </Text>
         </Text>
         <Text variant="body" color="rgba(255,255,255,0.78)" style={styles.sub}>
-          Pick {minItems} or more items in one basket and we deliver it free.
+          Pick {minItems} different products in one basket and we deliver it free.
         </Text>
 
         {/* The hook: 15+ -> free delivery */}
@@ -72,7 +69,7 @@ export function BazaarSection({ onStartPress }: BazaarSectionProps) {
               </Text>
             </Text>
             <Text variant="eyebrow" color="rgba(255,255,255,0.6)">
-              ITEMS
+              PRODUCTS
             </Text>
           </View>
           <Feather name="arrow-right" size={22} color="rgba(255,255,255,0.45)" />
@@ -97,7 +94,7 @@ export function BazaarSection({ onStartPress }: BazaarSectionProps) {
                 ? "Your basket is a Bazaar - delivery is free"
                 : cartItems === 0
                   ? "Your basket is empty - start your Bazaar"
-                  : `${remaining} more ${remaining === 1 ? "item" : "items"} for free delivery`}
+                  : `${remaining} more different ${remaining === 1 ? "product" : "products"} for free delivery`}
             </Text>
             <Text variant="bodySmall" color={colors.accentLight}>
               {Math.min(cartItems, minItems)}/{minItems}
@@ -119,7 +116,7 @@ export function BazaarSection({ onStartPress }: BazaarSectionProps) {
             </Text>
           </View>
           <Text variant="caption" color="rgba(255,255,255,0.6)">
-            {bazaarOrders}/{ordersRequired} this week
+            {bazaarOrders}/{ordersRequired} this month
           </Text>
         </View>
         <Text variant="bodyMedium" color={colors.textInverse} style={styles.plusTitle}>
@@ -127,8 +124,8 @@ export function BazaarSection({ onStartPress }: BazaarSectionProps) {
         </Text>
         <Text variant="bodySmall" color="rgba(255,255,255,0.7)" style={styles.plusBody}>
           {eligible
-            ? "Six Bazaars in a week - thank you for shopping the village way."
-            : `Place ${ordersRequired} Bazaars (${minItems}+ items each) within ${windowDays} days to become eligible.`}
+            ? "Six Bazaars this month - thank you for shopping the village way."
+            : `Place ${ordersRequired} Bazaars (${minItems}+ different products each) in a month to become eligible.`}
         </Text>
 
         <View style={styles.stampRow}>

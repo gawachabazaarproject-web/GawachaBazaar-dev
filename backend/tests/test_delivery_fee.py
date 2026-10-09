@@ -5,7 +5,7 @@ from decimal import Decimal
 import pytest
 
 from app.core.config import settings
-from app.services.delivery import calculate_delivery_fee, haversine_km, item_count_for_quantities
+from app.services.delivery import calculate_delivery_fee, distinct_product_count, haversine_km
 
 
 @pytest.fixture(autouse=True)
@@ -51,9 +51,24 @@ def test_absurd_coordinate_is_capped():
     assert quote.fee == Decimal("20") + Decimal("10") * 30
 
 
-def test_fractional_quantities_round_up():
-    assert item_count_for_quantities([Decimal("0.5"), Decimal("0.5"), Decimal("0.5")]) == 2
-    assert item_count_for_quantities([Decimal("14"), Decimal("1")]) == 15
+def test_same_product_in_several_sizes_counts_once():
+    # 15 cart lines but only 3 different products -> not a Bazaar.
+    assert distinct_product_count([1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3]) == 3
+    assert not calculate_delivery_fee(distinct_product_count([1] * 15), 21.2, 79.1).free_delivery
+
+
+def test_fifteen_different_products_is_a_bazaar():
+    assert calculate_delivery_fee(distinct_product_count(range(15)), 21.2, 79.1).free_delivery
+
+
+def test_month_start_is_first_of_month_in_ist():
+    from datetime import UTC, datetime
+
+    from app.services.bazaar import month_start
+
+    # 2026-10-31 20:00 UTC is already 2026-11-01 01:30 in IST.
+    start = month_start(datetime(2026, 10, 31, 20, 0, tzinfo=UTC))
+    assert (start.year, start.month, start.day, start.hour) == (2026, 11, 1, 0)
 
 
 def test_haversine_known_distance():

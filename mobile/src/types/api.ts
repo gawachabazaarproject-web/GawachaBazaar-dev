@@ -578,6 +578,6 @@ export interface BazaarStatusResponse {
   cart_item_count: number;
   bazaar_orders_in_window: number;
   orders_required: number;
-  window_days: number;
+  period: string;
   eligible_for_bazaar_plus: boolean;
 }

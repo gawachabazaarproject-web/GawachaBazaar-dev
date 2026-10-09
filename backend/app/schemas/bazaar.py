@@ -22,11 +22,12 @@ class DeliveryQuoteResponse(BaseSchema):
 
 
 class BazaarStatusResponse(BaseSchema):
-    """Progress toward Gawacha Bazaar+ - rolling window of Bazaar orders."""
+    """Progress toward Gawacha Bazaar+ - Bazaar orders in the current month."""
 
     free_delivery_min_items: int
+    # Different products currently in the cart.
     cart_item_count: int
     bazaar_orders_in_window: int
     orders_required: int
-    window_days: int
+    period: str  # "month" - resets on the 1st
     eligible_for_bazaar_plus: bool

@@ -50,15 +50,17 @@ class Settings(BaseSettings):
     RAZORPAY_TIMEOUT_SECONDS: float = 10.0
 
     # Delivery pricing + the "Bazaar" offer. A basket with at least
-    # FREE_DELIVERY_MIN_ITEMS units ships free; smaller baskets pay
+    # FREE_DELIVERY_MIN_ITEMS DIFFERENT PRODUCTS ships free (a product bought
+    # in several sizes/quantities still counts once); smaller baskets pay
     # DELIVERY_BASE_FEE + DELIVERY_PER_KM per km of straight-line distance
     # from the packing point to the delivery address (distance counted up
     # to DELIVERY_MAX_CHARGED_KM, so one bad coordinate can never produce a
     # absurd fee). PACKING_POINT_LATITUDE/LONGITUDE must be set for the
     # per-km part to apply; without them (or without GPS on the address)
-    # only the base fee is charged. Customers who place BAZAAR_PLUS_ORDERS_REQUIRED
-    # Bazaar orders (>= FREE_DELIVERY_MIN_ITEMS units) within
-    # BAZAAR_PLUS_WINDOW_DAYS days become eligible for Gawacha Bazaar+.
+    # only the base fee is charged. A customer with BAZAAR_PLUS_ORDERS_REQUIRED
+    # Bazaar orders (each with >= FREE_DELIVERY_MIN_ITEMS different products)
+    # in the current calendar month (BAZAAR_TIMEZONE) is eligible for
+    # Gawacha Bazaar+.
     FREE_DELIVERY_MIN_ITEMS: int = 15
     DELIVERY_BASE_FEE: Decimal = Decimal("20")
     DELIVERY_PER_KM: Decimal = Decimal("10")
@@ -66,7 +68,7 @@ class Settings(BaseSettings):
     PACKING_POINT_LATITUDE: float | None = None
     PACKING_POINT_LONGITUDE: float | None = None
     BAZAAR_PLUS_ORDERS_REQUIRED: int = 6
-    BAZAAR_PLUS_WINDOW_DAYS: int = 7
+    BAZAAR_TIMEZONE: str = "Asia/Kolkata"
 
     # Cloudinary (image uploads). Empty string means "not configured" -
     # ImageUploadService raises a clear, honest error rather than silently

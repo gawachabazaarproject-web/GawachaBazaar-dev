@@ -1,12 +1,13 @@
 """Delivery pricing and the "Bazaar" offer.
 
 Rule (all values configurable, see app/core/config.py):
-  * A basket of FREE_DELIVERY_MIN_ITEMS (15) or more units - a "Bazaar" -
-    ships free.
+  * A basket of FREE_DELIVERY_MIN_ITEMS (15) or more DIFFERENT PRODUCTS - a
+    "Bazaar" - ships free.
   * Anything smaller pays DELIVERY_BASE_FEE (Rs 20) plus DELIVERY_PER_KM
     (Rs 10) per km from the packing point to the delivery address.
 
-"Items" means units: the sum of the cart line quantities.
+"Items" means distinct products: the same product in two sizes, or in a
+bigger quantity, still counts once.
 
 `calculate_delivery_fee` is pure (no DB) so the rule is trivial to test and
 the quote shown in the app and the fee charged at checkout can never drift:
@@ -43,11 +44,9 @@ def haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     return 2 * _EARTH_RADIUS_KM * math.asin(min(1.0, math.sqrt(a)))
 
 
-def item_count_for_quantities(quantities) -> int:
-    """Units in a basket; fractional quantities (e.g. 0.5 kg) round up so a
-    basket never counts for less than it holds."""
-    total = sum((Decimal(str(q)) for q in quantities), Decimal("0"))
-    return int(total.to_integral_value(rounding=ROUND_CEILING))
+def distinct_product_count(product_ids) -> int:
+    """Number of different products in a basket."""
+    return len(set(product_ids))
 
 
 def calculate_delivery_fee(

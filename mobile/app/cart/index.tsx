@@ -41,7 +41,7 @@ export default function CartScreen() {
   const { data: allData } = useProducts({});
 
   const items = cart?.items ?? [];
-  const cartUnits = items.reduce((sum, item) => sum + Math.round(Number.parseFloat(item.quantity)), 0);
+  const cartProducts = new Set(items.map((item) => item.product_id)).size;
   const defaultAddress = addresses?.find((a) => a.is_default) ?? addresses?.[0];
   const allProducts = allData?.pages.flatMap((p) => p.items) ?? [];
 
@@ -103,7 +103,7 @@ export default function CartScreen() {
 
         {isLoading ? null : (
           <>
-            <FreeDeliveryProgress itemCount={cartUnits} />
+            <FreeDeliveryProgress itemCount={cartProducts} />
 
             <View style={styles.basketHeader}>
               <View style={styles.marketRow}>
