@@ -40,6 +40,10 @@ class ProductVariant(Base):
             name="ck_product_variants_quantity",
         ),
         CheckConstraint(
+            "reserve_level IS NULL OR reserve_level >= 0",
+            name="ck_product_variants_reserve_level",
+        ),
+        CheckConstraint(
             "status IN ('ACTIVE', 'INACTIVE', 'ARCHIVED')",
             name="ck_product_variants_status",
         ),
@@ -72,6 +76,12 @@ class ProductVariant(Base):
     quantity: Mapped[Decimal] = mapped_column(
         Numeric(12, 3),
         nullable=False,
+    )
+    # Stock the shop wants to keep in reserve; at/below it (or close to it) the
+    # admin is alerted. NULL = the default reserve (app/services/stock_levels.py).
+    reserve_level: Mapped[Decimal | None] = mapped_column(
+        Numeric(12, 3),
+        nullable=True,
     )
     status: Mapped[str] = mapped_column(
         String(30),

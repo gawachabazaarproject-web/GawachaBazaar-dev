@@ -6,6 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { hasPermission, Permission } from "@/lib/permissions";
 import { fetchAdminOrders } from "@/lib/orders";
+import { fetchStockAlerts, StockAlerts } from "@/lib/inventory";
 import { useOrderEvents } from "@/lib/realtime-context";
 import { Icon, IconName } from "./icons";
 
@@ -65,7 +66,37 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
     if (event.resource === "order") refreshPending();
   });
 
-  const badgeFor = (href: string) => (href === "/orders" ? pendingOrders : 0);
+  // Items that are out of stock, at/below their reserve level, or close to it.
+  // Polled every minute and re-checked after every page change, so a restock
+  // (or a sale that drains an item) shows up without a refresh.
+  const canSeeInventory = hasPermission(roles, "inventory.read");
+  const [stockAlerts, setStockAlerts] = useState<StockAlerts | null>(null);
+  const [bellOpen, setBellOpen] = useState(false);
+  // Banner dismissal holds until the number of alerts goes up again.
+  const [dismissedAt, setDismissedAt] = useState(0);
+  const refreshStock = useCallback(() => {
+    const token = getAccessToken();
+    if (!token || !canSeeInventory) return;
+    fetchStockAlerts(token)
+      .then(setStockAlerts)
+      .catch(() => undefined);
+  }, [getAccessToken, canSeeInventory]);
+  useEffect(() => {
+    refreshStock();
+    const timer = window.setInterval(refreshStock, 60_000);
+    return () => window.clearInterval(timer);
+  }, [refreshStock]);
+  useEffect(() => {
+    refreshStock();
+    setBellOpen(false);
+  }, [pathname, refreshStock]);
+  const alertCount = stockAlerts?.count ?? 0;
+  useEffect(() => {
+    if (alertCount < dismissedAt) setDismissedAt(alertCount);
+  }, [alertCount, dismissedAt]);
+
+  const badgeFor = (href: string) => (href === "/orders" ? pendingOrders : href === "/inventory" ? alertCount : 0);
+  const badgeLabel = (href: string) => (href === "/inventory" ? "items need restocking" : "pending orders");
 
   const handleLogout = async () => {
     await logout();
@@ -118,8 +149,10 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
                 {!collapsed && <span className="flex-1">{item.label}</span>}
                 {!collapsed && badgeFor(item.href) > 0 && (
                   <span
-                    className="min-w-[22px] rounded-full bg-secondary-400 px-1.5 py-0.5 text-center text-xs font-bold text-primary-900"
-                    aria-label={`${badgeFor(item.href)} pending orders`}
+                    className={`min-w-[22px] rounded-full px-1.5 py-0.5 text-center text-xs font-bold ${
+                      item.href === "/inventory" ? "bg-status-danger text-white" : "bg-secondary-400 text-primary-900"
+                    }`}
+                    aria-label={`${badgeFor(item.href)} ${badgeLabel(item.href)}`}
                   >
                     {badgeFor(item.href) > 99 ? "99+" : badgeFor(item.href)}
                   </span>
@@ -153,12 +186,60 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
             <span>Search orders, products, customers...</span>
           </div>
           <div className="flex items-center gap-4">
-            <button
-              className="rounded p-2 text-neutral-500 hover:bg-neutral-100"
-              aria-label="Notifications"
-            >
-              <Icon name="bell" size={18} />
-            </button>
+            <div className="relative">
+              <button
+                onClick={() => setBellOpen((o) => !o)}
+                className="relative rounded p-2 text-neutral-500 hover:bg-neutral-100"
+                aria-label={alertCount > 0 ? `Notifications - ${alertCount} stock alert${alertCount === 1 ? "" : "s"}` : "Notifications"}
+              >
+                <Icon name="bell" size={18} />
+                {alertCount > 0 && (
+                  <span className="absolute -right-0.5 -top-0.5 min-w-[18px] rounded-full bg-status-danger px-1 text-center text-[10px] font-bold leading-[18px] text-white">
+                    {alertCount > 9 ? "9+" : alertCount}
+                  </span>
+                )}
+              </button>
+              {bellOpen && (
+                <div className="absolute right-0 top-11 z-40 w-80 rounded border border-neutral-200 bg-white p-3 shadow-xl">
+                  <p className="mb-2 font-display text-sm font-semibold text-primary-900">Stock alerts</p>
+                  {!stockAlerts || stockAlerts.count === 0 ? (
+                    <p className="py-4 text-center text-sm text-neutral-500">Everything is comfortably above its reserve.</p>
+                  ) : (
+                    <ul className="max-h-72 divide-y divide-neutral-100 overflow-y-auto">
+                      {stockAlerts.items.map((a) => (
+                        <li key={a.variant_id}>
+                          <Link
+                            href={`/products/${a.product_id}`}
+                            className="flex items-center justify-between gap-2 py-2 text-sm hover:bg-neutral-50"
+                          >
+                            <span className="min-w-0">
+                              <span className="block truncate font-medium text-primary-900">{a.product_name}</span>
+                              <span className="block text-xs text-neutral-500">
+                                {a.variant_name} · reserve {Number(a.reserve_level)} {a.unit}
+                              </span>
+                            </span>
+                            <span
+                              className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold ${
+                                a.level === "OUT"
+                                  ? "bg-status-dangerLight text-status-danger"
+                                  : a.level === "BELOW"
+                                    ? "bg-status-warningLight text-status-warning"
+                                    : "bg-neutral-100 text-neutral-600"
+                              }`}
+                            >
+                              {a.level === "OUT" ? "Out" : `${Number(a.available)} left`}
+                            </span>
+                          </Link>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  <Link href="/inventory" className="mt-2 block text-xs font-semibold text-primary-700 hover:underline">
+                    Open inventory →
+                  </Link>
+                </div>
+              )}
+            </div>
             <div className="flex items-center gap-2 border-l border-neutral-200 pl-4">
               <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary-100 text-primary-800">
                 <Icon name="user" size={16} />
@@ -172,6 +253,43 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
             </div>
           </div>
         </header>
+
+        {stockAlerts && alertCount > 0 && alertCount > dismissedAt && (
+          <div
+            role="alert"
+            className="flex items-center justify-between gap-4 border-b border-status-warning/30 bg-status-warningLight px-6 py-2.5 text-sm text-primary-900"
+          >
+            <p>
+              <strong>
+                {alertCount} item{alertCount === 1 ? " needs" : "s need"} restocking
+              </strong>
+              {" - "}
+              {[
+                stockAlerts.out_count > 0 ? `${stockAlerts.out_count} out of stock` : null,
+                stockAlerts.below_count > 0 ? `${stockAlerts.below_count} at or below reserve` : null,
+                stockAlerts.near_count > 0 ? `${stockAlerts.near_count} close to reserve` : null,
+              ]
+                .filter(Boolean)
+                .join(", ")}
+              .
+            </p>
+            <div className="flex shrink-0 items-center gap-3">
+              <Link href="/dashboard" className="font-semibold text-primary-800 hover:underline">
+                See which
+              </Link>
+              <Link href="/inventory" className="font-semibold text-primary-800 hover:underline">
+                Inventory
+              </Link>
+              <button
+                onClick={() => setDismissedAt(alertCount)}
+                className="rounded px-1.5 text-lg leading-none text-neutral-500 hover:bg-white/60"
+                aria-label="Dismiss until more items run low"
+              >
+                ×
+              </button>
+            </div>
+          </div>
+        )}
 
         <main className="flex-1 overflow-y-auto p-6">{children}</main>
       </div>

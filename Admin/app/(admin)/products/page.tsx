@@ -3,11 +3,13 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
+import { hasPermission } from "@/lib/permissions";
 import {
   AdminProductListItem,
   AdminProductListResponse,
   Category,
   CatalogApiError,
+  deleteProduct,
   fetchAdminProducts,
   fetchCategories,
   PRODUCT_STATUSES,
@@ -19,13 +21,18 @@ import { ErrorState } from "@/components/ErrorState";
 import { TableSkeleton } from "@/components/TableSkeleton";
 import { Pagination } from "@/components/Pagination";
 import { StatusBadge } from "@/components/StatusBadge";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 
 const PAGE_SIZE = 20;
 const LOW_STOCK_THRESHOLD = 10;
 
 export default function ProductsPage() {
-  const { getAccessToken } = useAuth();
+  const { getAccessToken, user } = useAuth();
   const router = useRouter();
+  const canDelete = user && hasPermission(user.roles, "products.delete");
+  const [toDelete, setToDelete] = useState<AdminProductListItem | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const [data, setData] = useState<AdminProductListResponse | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -72,6 +79,22 @@ export default function ProductsPage() {
   useEffect(() => {
     load();
   }, [load]);
+
+  const handleDelete = async () => {
+    const token = getAccessToken();
+    if (!token || !toDelete) return;
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      await deleteProduct(token, toDelete.id);
+      setToDelete(null);
+      await load();
+    } catch (err) {
+      setDeleteError(err instanceof CatalogApiError ? err.message : "Unable to delete this product.");
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   const clearFilters = () => {
     setQ("");
@@ -182,11 +205,17 @@ export default function ProductsPage() {
                     <th className="px-4 py-2 font-medium">Stock</th>
                     <th className="px-4 py-2 font-medium">Status</th>
                     <th className="px-4 py-2 font-medium">Updated</th>
+                    {canDelete && <th className="px-4 py-2" />}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-neutral-100">
                   {data.items.map((product) => (
-                    <ProductRow key={product.id} product={product} onClick={() => router.push(`/products/${product.id}`)} />
+                    <ProductRow
+                      key={product.id}
+                      product={product}
+                      onClick={() => router.push(`/products/${product.id}`)}
+                      onDelete={canDelete ? () => { setDeleteError(null); setToDelete(product); } : undefined}
+                    />
                   ))}
                 </tbody>
               </table>
@@ -195,11 +224,23 @@ export default function ProductsPage() {
           </>
         )}
       </div>
+
+      <ConfirmDialog
+        open={toDelete !== null}
+        title={`Delete "${toDelete?.name ?? ""}"?`}
+        description="This permanently removes the product with its variants, prices, photos and stock records. It can't be undone. Products that already appear in orders can't be deleted - archive those instead."
+        confirmLabel="Delete product"
+        danger
+        loading={deleting}
+        error={deleteError}
+        onConfirm={handleDelete}
+        onCancel={() => setToDelete(null)}
+      />
     </div>
   );
 }
 
-function ProductRow({ product, onClick }: { product: AdminProductListItem; onClick: () => void }) {
+function ProductRow({ product, onClick, onDelete }: { product: AdminProductListItem; onClick: () => void; onDelete?: () => void }) {
   const stock = Number.parseFloat(product.total_available_stock);
   return (
     <tr onClick={onClick} className="cursor-pointer hover:bg-neutral-50">
@@ -232,6 +273,19 @@ function ProductRow({ product, onClick }: { product: AdminProductListItem; onCli
         <StatusBadge status={product.status} />
       </td>
       <td className="px-4 py-3 text-neutral-500">{formatDate(product.updated_at)}</td>
+      {onDelete && (
+        <td className="px-4 py-3 text-right">
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onDelete();
+            }}
+            className="text-xs font-semibold text-status-danger hover:underline"
+          >
+            Delete
+          </button>
+        </td>
+      )}
     </tr>
   );
 }

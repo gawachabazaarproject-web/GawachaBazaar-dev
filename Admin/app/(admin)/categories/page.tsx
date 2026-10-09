@@ -3,10 +3,12 @@
 import React, { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
+import { hasPermission } from "@/lib/permissions";
 import {
   AdminCategoryListItem,
   CategoryApiError,
   CATEGORY_STATUSES,
+  deleteCategory,
   fetchAdminCategories,
 } from "@/lib/categories";
 import { formatDate } from "@/lib/format";
@@ -15,6 +17,7 @@ import { EmptyState } from "@/components/EmptyState";
 import { ErrorState } from "@/components/ErrorState";
 import { TableSkeleton } from "@/components/TableSkeleton";
 import { StatusBadge } from "@/components/StatusBadge";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 
 // Categories are a small list by nature (a grocery catalog has dozens, not
 // thousands) - fetching one full page lets the hierarchy render correctly
@@ -54,8 +57,12 @@ function buildTree(items: AdminCategoryListItem[]): TreeRow[] {
 }
 
 export default function CategoriesPage() {
-  const { getAccessToken } = useAuth();
+  const { getAccessToken, user } = useAuth();
   const router = useRouter();
+  const canDelete = user && hasPermission(user.roles, "categories.delete");
+  const [toDelete, setToDelete] = useState<AdminCategoryListItem | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const [items, setItems] = useState<AdminCategoryListItem[] | null>(null);
   const [loading, setLoading] = useState(true);
@@ -94,6 +101,22 @@ export default function CategoriesPage() {
   }, [load]);
 
   const rows = useMemo(() => (items ? buildTree(items) : []), [items]);
+
+  const handleDelete = async () => {
+    const token = getAccessToken();
+    if (!token || !toDelete) return;
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      await deleteCategory(token, toDelete.id);
+      setToDelete(null);
+      await load();
+    } catch (err) {
+      setDeleteError(err instanceof CategoryApiError ? err.message : "Unable to delete this category.");
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   const clearFilters = () => {
     setQ("");
@@ -172,6 +195,7 @@ export default function CategoriesPage() {
                   <th className="px-4 py-2 font-medium">Products</th>
                   <th className="px-4 py-2 font-medium">Status</th>
                   <th className="px-4 py-2 font-medium">Updated</th>
+                  {canDelete && <th className="px-4 py-2" />}
                 </tr>
               </thead>
               <tbody className="divide-y divide-neutral-100">
@@ -199,6 +223,20 @@ export default function CategoriesPage() {
                       <StatusBadge status={row.status} />
                     </td>
                     <td className="px-4 py-3 text-neutral-500">{formatDate(row.updated_at)}</td>
+                    {canDelete && (
+                      <td className="px-4 py-3 text-right">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setDeleteError(null);
+                            setToDelete(row);
+                          }}
+                          className="text-xs font-semibold text-status-danger hover:underline"
+                        >
+                          Delete
+                        </button>
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>
@@ -206,6 +244,18 @@ export default function CategoriesPage() {
           </div>
         )}
       </div>
+
+      <ConfirmDialog
+        open={toDelete !== null}
+        title={`Delete the "${toDelete?.name ?? ""}" category?`}
+        description="This permanently removes the category. It only works while the category has no products and no sub-categories - move or delete those first."
+        confirmLabel="Delete category"
+        danger
+        loading={deleting}
+        error={deleteError}
+        onConfirm={handleDelete}
+        onCancel={() => setToDelete(null)}
+      />
     </div>
   );
 }

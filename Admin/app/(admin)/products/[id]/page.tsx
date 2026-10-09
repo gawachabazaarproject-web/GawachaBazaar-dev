@@ -11,6 +11,7 @@ import {
   createPrice,
   createVariant,
   deleteImage,
+  deleteProduct,
   fetchAdminProductDetail,
   fetchCategories,
   fetchProductActivity,
@@ -27,6 +28,7 @@ import { ErrorState } from "@/components/ErrorState";
 import { StatusBadge } from "@/components/StatusBadge";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { ImageDropzone } from "@/components/ImageDropzone";
+import { ReserveLevelEditor } from "@/components/ReserveLevelEditor";
 import { Icon } from "@/components/icons";
 
 export default function ProductDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -49,6 +51,10 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
   const [isDirty, setIsDirty] = useState(false);
 
   const canEdit = user && hasPermission(user.roles, "products.update");
+  const canDelete = user && hasPermission(user.roles, "products.delete");
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const canManageMedia = user && hasPermission(user.roles, "products.manage_media");
   const canManagePricing = user && hasPermission(user.roles, "products.manage_pricing");
 
@@ -93,6 +99,22 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
     window.addEventListener("beforeunload", handler);
     return () => window.removeEventListener("beforeunload", handler);
   }, [isDirty]);
+
+  const handleDelete = async () => {
+    const token = getAccessToken();
+    if (!token) return;
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      await deleteProduct(token, productId);
+      setIsDirty(false);
+      router.push("/products");
+    } catch (err) {
+      setDeleteError(err instanceof CatalogApiError ? err.message : "Unable to delete this product.");
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   const handleBack = () => {
     if (isDirty && !window.confirm("You have unsaved changes. Leave without saving?")) return;
@@ -156,6 +178,17 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
               ` · ${formatMoney(firstVariant.current_price.price, firstVariant.current_price.currency)}`}
           </p>
         </div>
+        {canDelete && (
+          <button
+            onClick={() => {
+              setDeleteError(null);
+              setDeleteOpen(true);
+            }}
+            className="shrink-0 rounded border border-status-danger/40 px-3 py-1.5 text-sm font-semibold text-status-danger hover:bg-status-dangerLight"
+          >
+            Delete product
+          </button>
+        )}
       </div>
 
       <Section title="General">
@@ -232,19 +265,63 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
 
       <VariantsSection product={product} canManagePricing={!!canManagePricing} canEdit={!!canEdit} onChange={load} />
 
+      <ConfirmDialog
+        open={deleteOpen}
+        title={`Delete "${product.name}"?`}
+        description="This permanently removes the product with its variants, prices, photos and stock records. It can't be undone. Products that already appear in orders can't be deleted - archive those instead."
+        confirmLabel="Delete product"
+        danger
+        loading={deleting}
+        error={deleteError}
+        onConfirm={handleDelete}
+        onCancel={() => setDeleteOpen(false)}
+      />
+
       <Section title="Inventory">
         <p className="mb-2 text-sm text-neutral-500">
-          Stock is managed in the Inventory module - shown here read-only.
+          Stock is managed in the Inventory module. Set how much to keep in reserve for each variant - you&apos;ll be alerted when
+          stock is at or below it, or getting close.
         </p>
         <div className="divide-y divide-neutral-100">
-          {product.variant_stock.map((vs) => (
-            <div key={vs.variant_id} className="flex items-center justify-between py-2 text-sm">
-              <span className="text-neutral-700">{vs.variant_name} ({vs.sku})</span>
-              <span className={Number(vs.available_quantity) === 0 ? "font-semibold text-status-danger" : "text-neutral-800"}>
-                {vs.available_quantity} units
-              </span>
-            </div>
-          ))}
+          {product.variant_stock.map((vs) => {
+            const variant = product.variants.find((v) => v.id === vs.variant_id);
+            return (
+              <div key={vs.variant_id} className="py-3 text-sm">
+                <div className="flex items-center justify-between">
+                  <span className="text-neutral-700">{vs.variant_name} ({vs.sku})</span>
+                  <span className="flex items-center gap-2">
+                    <span className={Number(vs.available_quantity) === 0 ? "font-semibold text-status-danger" : "text-neutral-800"}>
+                      {Number(vs.available_quantity)} {variant?.unit ?? "units"} available
+                    </span>
+                    {vs.stock_level !== "OK" && (
+                      <span
+                        className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
+                          vs.stock_level === "OUT"
+                            ? "bg-status-dangerLight text-status-danger"
+                            : vs.stock_level === "BELOW"
+                              ? "bg-status-warningLight text-status-warning"
+                              : "bg-neutral-100 text-neutral-600"
+                        }`}
+                      >
+                        {vs.stock_level === "OUT" ? "Out of stock" : vs.stock_level === "BELOW" ? "Below reserve" : "Close to reserve"}
+                      </span>
+                    )}
+                  </span>
+                </div>
+                <div className="mt-2">
+                  <ReserveLevelEditor
+                    key={`${vs.variant_id}-${vs.reserve_level ?? "default"}`}
+                    variantId={vs.variant_id}
+                    reserveLevel={vs.reserve_level}
+                    effectiveReserve={vs.effective_reserve}
+                    unit={variant?.unit ?? ""}
+                    canEdit={!!canEdit}
+                    onSaved={load}
+                  />
+                </div>
+              </div>
+            );
+          })}
         </div>
         <a href="/inventory" className="mt-3 inline-block text-sm font-semibold text-primary-700 hover:underline">
           View inventory →

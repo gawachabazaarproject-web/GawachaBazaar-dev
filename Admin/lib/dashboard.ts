@@ -19,11 +19,16 @@ export interface DashboardAttentionOrder {
 }
 
 export interface DashboardLowStock {
+  product_id: number;
   variant_id: number;
   product_name: string;
   variant_name: string;
   unit: string;
   available: string;
+  /** The reserve in force for this item. */
+  reserve_level: string;
+  /** OUT / BELOW (at or under the reserve) / NEAR (running close to it). */
+  level: "OUT" | "BELOW" | "NEAR";
 }
 
 export interface DashboardDeliveryIssue {

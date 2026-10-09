@@ -133,6 +133,7 @@ class CreateProductVariantRequest(BaseSchema):
     sku: str = Field(..., min_length=1, max_length=100)
     unit: VariantUnit
     quantity: Decimal = Field(..., gt=0, max_digits=12, decimal_places=3)
+    reserve_level: Decimal | None = Field(default=None, ge=0, max_digits=12, decimal_places=3)
     status: VariantStatus = Field(default="ACTIVE")
 
 
@@ -143,6 +144,8 @@ class UpdateProductVariantRequest(BaseSchema):
     quantity: Decimal | None = Field(
         default=None, gt=0, max_digits=12, decimal_places=3
     )
+    # Stock to keep in reserve; send null to go back to the default.
+    reserve_level: Decimal | None = Field(default=None, ge=0, max_digits=12, decimal_places=3)
     status: VariantStatus | None = Field(default=None)
 
 

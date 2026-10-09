@@ -72,6 +72,10 @@ export interface VariantStock {
   sku: string;
   status: string;
   available_quantity: string;
+  /** Stock to keep in reserve (null = default), the value in force, and where stock stands. */
+  reserve_level: string | null;
+  effective_reserve: string | null;
+  stock_level: "OUT" | "BELOW" | "NEAR" | "OK";
 }
 
 export interface AdminProductDetail {
@@ -210,6 +214,8 @@ export interface CreateVariantPayload {
   unit: string;
   quantity: string;
   status: string;
+  /** Stock to keep in reserve; null/omitted = the default. */
+  reserve_level?: string | null;
 }
 
 export async function createVariant(accessToken: string, productId: number, payload: CreateVariantPayload) {
@@ -292,4 +298,11 @@ export async function uploadProductImage(
     throw new CatalogApiError(response.status, body?.message ?? "Upload failed.");
   }
   return response.json();
+}
+
+
+/** Permanently deletes a product. Refused (409) when it has order/quote/supplier
+ * history - archive it instead. */
+export async function deleteProduct(accessToken: string, id: number): Promise<void> {
+  await request<void>(accessToken, `/catalog/products/${id}`, { method: "DELETE" });
 }

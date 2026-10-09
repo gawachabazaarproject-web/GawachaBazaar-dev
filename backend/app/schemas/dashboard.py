@@ -30,11 +30,15 @@ class DashboardAttentionOrderResponse(BaseSchema):
 
 
 class DashboardLowStockResponse(BaseSchema):
+    product_id: int
     variant_id: int
     product_name: str
     variant_name: str
     unit: str
     available: Decimal
+    # The reserve in force for this item and where it stands: OUT / BELOW / NEAR.
+    reserve_level: Decimal
+    level: str
 
 
 class DashboardDeliveryIssueResponse(BaseSchema):

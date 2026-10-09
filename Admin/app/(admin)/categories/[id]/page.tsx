@@ -10,6 +10,7 @@ import {
   CategoryApiError,
   CATEGORY_STATUSES,
   CategoryRef,
+  deleteCategory,
   deleteCategoryImage,
   fetchAdminCategories,
   fetchAdminCategoryDetail,
@@ -49,6 +50,10 @@ export default function CategoryDetailPage({ params }: { params: Promise<{ id: s
   const [archiving, setArchiving] = useState(false);
 
   const canEdit = user && hasPermission(user.roles, "categories.update");
+  const canDelete = user && hasPermission(user.roles, "categories.delete");
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     const token = getAccessToken();
@@ -137,6 +142,22 @@ export default function CategoryDetailPage({ params }: { params: Promise<{ id: s
       setGeneralError(err instanceof CategoryApiError ? err.message : "Unable to archive this category.");
     } finally {
       setArchiving(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    const token = getAccessToken();
+    if (!token) return;
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      await deleteCategory(token, categoryId);
+      setIsDirty(false);
+      router.push("/categories");
+    } catch (err) {
+      setDeleteError(err instanceof CategoryApiError ? err.message : "Unable to delete this category.");
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -370,6 +391,38 @@ export default function CategoryDetailPage({ params }: { params: Promise<{ id: s
           </div>
         )}
       </Section>
+
+      {canDelete && (
+        <div className="mb-4 flex items-center justify-between rounded border border-status-danger/30 bg-white p-4">
+          <div>
+            <p className="font-display text-base font-semibold text-primary-900">Delete this category</p>
+            <p className="text-sm text-neutral-500">
+              Permanently removes it. Only possible while it has no products or sub-categories.
+            </p>
+          </div>
+          <button
+            onClick={() => {
+              setDeleteError(null);
+              setDeleteOpen(true);
+            }}
+            className="shrink-0 rounded border border-status-danger/40 px-3 py-1.5 text-sm font-semibold text-status-danger hover:bg-status-dangerLight"
+          >
+            Delete category
+          </button>
+        </div>
+      )}
+
+      <ConfirmDialog
+        open={deleteOpen}
+        title="Delete this category?"
+        description="This permanently removes the category. It can't be undone. It only works while the category has no products and no sub-categories."
+        confirmLabel="Delete category"
+        danger
+        loading={deleting}
+        error={deleteError}
+        onConfirm={handleDelete}
+        onCancel={() => setDeleteOpen(false)}
+      />
 
       <ConfirmDialog
         open={archiveOpen}

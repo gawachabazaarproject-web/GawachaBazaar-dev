@@ -178,3 +178,17 @@ export async function uploadCategoryImage(accessToken: string, id: number, file:
 export async function deleteCategoryImage(accessToken: string, id: number): Promise<CategoryRef> {
   return request<CategoryRef>(accessToken, `/catalog/categories/${id}/image`, { method: "DELETE" });
 }
+
+
+/** Permanently deletes an EMPTY category. Refused (409) while it still has
+ * products or sub-categories - the message says which. */
+export async function deleteCategory(accessToken: string, id: number): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/catalog/categories/${id}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!response.ok) {
+    const body = await response.json().catch(() => null);
+    throw new CategoryApiError(response.status, body?.message ?? "Unable to delete this category.");
+  }
+}

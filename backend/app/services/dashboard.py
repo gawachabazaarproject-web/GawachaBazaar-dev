@@ -7,17 +7,13 @@ avoids depending on an OS timezone database inside the container.
 """
 
 from datetime import UTC, datetime, timedelta, timezone
-from decimal import Decimal
 
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.models.fulfillment import Fulfillment
-from app.models.inventory_lot import InventoryLot
 from app.models.order import Order
 from app.models.payment import Payment
-from app.models.product import Product
-from app.models.product_variant import ProductVariant
 from app.models.refund import Refund
 from app.models.user import User
 from app.schemas.dashboard import (
@@ -27,7 +23,7 @@ from app.schemas.dashboard import (
     DashboardSummaryResponse,
     DashboardTilesResponse,
 )
-from app.services.inventory import DEFAULT_LOW_STOCK_THRESHOLD
+from app.services.stock_alerts import list_stock_alerts
 
 BUSINESS_TZ = timezone(timedelta(hours=5, minutes=30), name="IST")
 
@@ -115,30 +111,20 @@ class DashboardService:
         ]
 
     def _low_stock(self) -> list[DashboardLowStockResponse]:
-        """Per variant, summed across every active lot - one nearly-empty lot
-        is not "low stock" if another lot of the same variant is full."""
-        available = func.sum(InventoryLot.quantity - InventoryLot.reserved_quantity)
-        rows = (
-            self.db.query(
-                ProductVariant.id, Product.name, ProductVariant.name, ProductVariant.unit, available
-            )
-            .join(InventoryLot, InventoryLot.variant_id == ProductVariant.id)
-            .join(Product, Product.id == ProductVariant.product_id)
-            .filter(InventoryLot.status != "INACTIVE", ProductVariant.status == "ACTIVE")
-            .group_by(ProductVariant.id, Product.name, ProductVariant.name, ProductVariant.unit)
-            .having(available < DEFAULT_LOW_STOCK_THRESHOLD)
-            .order_by(available.asc())
-            .all()
-        )
+        """Items out of stock, at/below their reserve level, or close to it -
+        one rule shared with the header alerts (app/services/stock_alerts.py)."""
         return [
             DashboardLowStockResponse(
-                variant_id=variant_id,
-                product_name=product_name,
-                variant_name=variant_name,
-                unit=unit,
-                available=max(Decimal(avail), Decimal("0")),
+                product_id=a.product_id,
+                variant_id=a.variant_id,
+                product_name=a.product_name,
+                variant_name=a.variant_name,
+                unit=a.unit,
+                available=a.available,
+                reserve_level=a.reserve_level,
+                level=a.level,
             )
-            for variant_id, product_name, variant_name, unit, avail in rows
+            for a in list_stock_alerts(self.db)
         ]
 
     def _delivery_issues(self, now: datetime) -> list[DashboardDeliveryIssueResponse]:

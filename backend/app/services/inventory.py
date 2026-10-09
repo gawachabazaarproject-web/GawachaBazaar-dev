@@ -43,6 +43,9 @@ from app.schemas.admin_inventory import (
     ReceiveStockRequest,
     ReconcileStockRequest,
     RelatedOrderResponse,
+    RemoveStockRequest,
+    StockAlertItemResponse,
+    StockAlertsResponse,
     TransferStockRequest,
     TransferStockResponse,
 )
@@ -62,6 +65,14 @@ from app.schemas.inventory import (
     UpdateInventoryLocationRequest,
 )
 from app.services.admin_audit import AdminAuditService
+from app.services.stock_alerts import count_by_level, list_stock_alerts
+from app.services.stock_levels import (
+    BELOW,
+    DEFAULT_RESERVE,
+    NEAR,
+    effective_reserve,
+    stock_level,
+)
 
 _ACTIVE = "ACTIVE"
 _INACTIVE = "INACTIVE"
@@ -74,7 +85,7 @@ _DEPLETED = "DEPLETED"
 # useful signal, NOT a claim that 10 units is Gawacha's actual reorder
 # policy. A genuine implementation needs a real reorder_level field added
 # to the domain model first - flagged, not silently worked around.
-DEFAULT_LOW_STOCK_THRESHOLD = Decimal("10")
+DEFAULT_LOW_STOCK_THRESHOLD = DEFAULT_RESERVE
 EXPIRING_SOON_DAYS = 7
 
 # Movement direction: centralizes the ONE place quantity sign is decided.
@@ -597,7 +608,14 @@ class InventoryService:
     # never a second stock-mutation code path.
     # ------------------------------------------------------------------
 
-    def _operational_status(self, lot_status: str, on_hand: Decimal, reserved: Decimal, expiry: date | None) -> str:
+    def _operational_status(
+        self,
+        lot_status: str,
+        on_hand: Decimal,
+        reserved: Decimal,
+        expiry: date | None,
+        reserve_level: Decimal | None = None,
+    ) -> str:
         if lot_status == _INACTIVE:
             return "INACTIVE"
         available = on_hand - reserved
@@ -609,7 +627,8 @@ class InventoryService:
                 return "EXPIRING"
         if available <= 0:
             return "OUT_OF_STOCK"
-        if available < DEFAULT_LOW_STOCK_THRESHOLD:
+        # At/below the variant's reserve level, or running close to it.
+        if stock_level(available, reserve_level) in (BELOW, NEAR):
             return "LOW_STOCK"
         return "IN_STOCK"
 
@@ -638,8 +657,10 @@ class InventoryService:
             available=lot.quantity - lot.reserved_quantity,
             lot_status=lot.status,
             operational_status=self._operational_status(
-                lot.status, lot.quantity, lot.reserved_quantity, batch.expiry_date
+                lot.status, lot.quantity, lot.reserved_quantity, batch.expiry_date, variant.reserve_level
             ),
+            reserve_level=variant.reserve_level,
+            effective_reserve=effective_reserve(variant.reserve_level),
             last_movement_at=last_movement,
             updated_at=lot.updated_at,
         )
@@ -785,8 +806,10 @@ class InventoryService:
             available=lot.quantity - lot.reserved_quantity,
             lot_status=lot.status,
             operational_status=self._operational_status(
-                lot.status, lot.quantity, lot.reserved_quantity, batch.expiry_date
+                lot.status, lot.quantity, lot.reserved_quantity, batch.expiry_date, lot.variant.reserve_level
             ),
+            reserve_level=lot.variant.reserve_level,
+            effective_reserve=effective_reserve(lot.variant.reserve_level),
             created_at=lot.created_at,
             updated_at=lot.updated_at,
             recent_movements=[StockMovementResponse.model_validate(m) for m in recent_movements],
@@ -819,11 +842,17 @@ class InventoryService:
         expired_batches_count = 0
         seen_batches_expiring: set[int] = set()
         seen_batches_expired: set[int] = set()
+        reserve_by_variant = {
+            vid: reserve
+            for vid, reserve in self.db.query(ProductVariant.id, ProductVariant.reserve_level)
+            .filter(ProductVariant.id.in_({lot.variant_id for lot in active_lots}))
+            .all()
+        } if active_lots else {}
         for lot in active_lots:
             available = lot.quantity - lot.reserved_quantity
             if available <= 0:
                 out_of_stock_count += 1
-            elif available < DEFAULT_LOW_STOCK_THRESHOLD:
+            elif stock_level(available, reserve_by_variant.get(lot.variant_id)) in (BELOW, NEAR):
                 low_stock_count += 1
             batch = batches.get(lot.batch_id)
             if batch and batch.expiry_date:
@@ -961,6 +990,66 @@ class InventoryService:
         except IntegrityError as exc:
             self.db.rollback()
             raise ConflictError("Could not reconcile stock due to a conflicting update.") from exc
+        self.db.refresh(lot)
+        last_movement = self._last_movement_by_lot([lot.id]).get(lot.id)
+        return self._enrich_lot(lot, last_movement)
+
+    def stock_alerts(self) -> StockAlertsResponse:
+        alerts = list_stock_alerts(self.db)
+        counts = count_by_level(alerts)
+        return StockAlertsResponse(
+            count=len(alerts),
+            out_count=counts["OUT"],
+            below_count=counts["BELOW"],
+            near_count=counts["NEAR"],
+            items=[
+                StockAlertItemResponse(
+                    product_id=a.product_id, variant_id=a.variant_id, product_name=a.product_name,
+                    variant_name=a.variant_name, unit=a.unit, available=a.available,
+                    reserve_level=a.reserve_level, level=a.level,
+                )
+                for a in alerts[:20]
+            ],
+        )
+
+    def remove_stock(
+        self, lot_id: int, data: RemoveStockRequest, admin_user_id: int
+    ) -> AdminInventoryLotListItemResponse:
+        """Takes stock out of a lot (spoilage, damage, a mistaken receipt...).
+        Omit `quantity` to remove everything available. Stock already promised
+        to customer orders (reserved) is never touched. Recorded as an
+        ADJUSTMENT_OUT movement through the same `apply_movement` core as every
+        other change, with the reason on the movement and in the audit log."""
+        lot = self.db.query(InventoryLot).filter(InventoryLot.id == lot_id).with_for_update().first()
+        if not lot:
+            raise NotFoundError("Inventory lot not found.")
+        available = lot.quantity - lot.reserved_quantity
+        if available <= 0:
+            raise BusinessValidationError("There is no available stock in this lot to remove.")
+        quantity = data.quantity if data.quantity is not None else available
+        if quantity > available:
+            raise BusinessValidationError(
+                f"Only {available} is available to remove - the rest is reserved for customer orders."
+            )
+
+        self.apply_movement(
+            lot, "ADJUSTMENT_OUT", quantity, admin_user_id,
+            reference_type="stock_removal", remarks=f"Stock removed: {data.reason}",
+        )
+        AdminAuditService(self.db).record(
+            admin_user_id=admin_user_id,
+            action="inventory.remove",
+            resource_type="inventory_lot",
+            resource_id=lot.id,
+            previous_state=str(lot.quantity + quantity),
+            new_state=str(lot.quantity),
+            reason=data.reason,
+        )
+        try:
+            self.db.commit()
+        except IntegrityError as exc:
+            self.db.rollback()
+            raise ConflictError("Could not remove stock due to a conflicting update.") from exc
         self.db.refresh(lot)
         last_movement = self._last_movement_by_lot([lot.id]).get(lot.id)
         return self._enrich_lot(lot, last_movement)

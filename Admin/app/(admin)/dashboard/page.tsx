@@ -132,20 +132,42 @@ export default function DashboardPage() {
 
         <Panel
           title={data && data.low_stock_count > data.low_stock.length ? `Low stock (${data.low_stock_count})` : "Low stock"}
-          empty="Nothing is running low."
+          empty="Every item is comfortably above its reserve."
           loading={!data}
           footer={<Link href="/inventory" className="text-xs font-semibold text-primary-700 hover:underline">Open inventory →</Link>}
         >
           {data?.low_stock.map((item) => (
-            <div key={item.variant_id} className="flex items-center justify-between py-2.5 text-sm">
-              <div>
-                <p className="font-medium text-primary-900">{item.product_name}</p>
-                <p className="text-xs text-neutral-500">{item.variant_name}</p>
+            <Link
+              key={item.variant_id}
+              href={`/products/${item.product_id}`}
+              className="flex items-center justify-between gap-3 py-2.5 text-sm hover:bg-neutral-50"
+              title="Open product to restock or change its reserve level"
+            >
+              <div className="min-w-0">
+                <p className="truncate font-medium text-primary-900">{item.product_name}</p>
+                <p className="text-xs text-neutral-500">
+                  {item.variant_name} · reserve {Number(item.reserve_level)} {item.unit}
+                </p>
               </div>
-              <span className={Number(item.available) <= 0 ? "font-semibold text-status-danger" : "text-status-warning"}>
-                {Number(item.available) <= 0 ? "Out of stock" : `${Number(item.available)} ${item.unit} left`}
-              </span>
-            </div>
+              <div className="shrink-0 text-right">
+                <span
+                  className={`inline-block rounded-full px-2 py-0.5 text-xs font-semibold ${
+                    item.level === "OUT"
+                      ? "bg-status-dangerLight text-status-danger"
+                      : item.level === "BELOW"
+                        ? "bg-status-warningLight text-status-warning"
+                        : "bg-neutral-100 text-neutral-600"
+                  }`}
+                >
+                  {item.level === "OUT" ? "Out of stock" : item.level === "BELOW" ? "Below reserve" : "Close to reserve"}
+                </span>
+                {item.level !== "OUT" && (
+                  <p className="mt-0.5 text-xs text-neutral-500">
+                    {Number(item.available)} {item.unit} left
+                  </p>
+                )}
+              </div>
+            </Link>
           ))}
         </Panel>
 

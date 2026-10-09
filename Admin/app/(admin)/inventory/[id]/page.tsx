@@ -19,9 +19,11 @@ import { formatDate, formatDateTime } from "@/lib/format";
 import { ErrorState } from "@/components/ErrorState";
 import { StatusBadge } from "@/components/StatusBadge";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { RemoveStockDialog } from "@/components/RemoveStockDialog";
+import { ReserveLevelEditor } from "@/components/ReserveLevelEditor";
 import { Icon } from "@/components/icons";
 
-type ActiveDialog = "adjust" | "reconcile" | "transfer" | null;
+type ActiveDialog = "adjust" | "reconcile" | "transfer" | "remove" | null;
 
 export default function InventoryLotDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -101,6 +103,14 @@ export default function InventoryLotDetailPage({ params }: { params: Promise<{ i
         {canAdjust && (
           <ActionButton onClick={() => setDialog("adjust")} icon="package" label="Adjust stock" />
         )}
+        {canAdjust && (
+          <button
+            onClick={() => setDialog("remove")}
+            className="flex items-center gap-1.5 rounded border border-status-danger/40 px-3 py-1.5 text-sm font-semibold text-status-danger hover:bg-status-dangerLight"
+          >
+            Remove stock
+          </button>
+        )}
         {canReconcile && (
           <ActionButton onClick={() => setDialog("reconcile")} icon="file-text" label="Reconcile" />
         )}
@@ -108,6 +118,21 @@ export default function InventoryLotDetailPage({ params }: { params: Promise<{ i
           <ActionButton onClick={() => setDialog("transfer")} icon="truck" label="Transfer" />
         )}
       </div>
+
+      <Section title="Reserve level">
+        <p className="mb-3 text-sm text-neutral-500">
+          How much of this item you want to keep in reserve. You&apos;ll be alerted when available stock is at or below it, or
+          getting close.
+        </p>
+        <ReserveLevelEditor
+          variantId={lot.variant_id}
+          reserveLevel={lot.reserve_level}
+          effectiveReserve={lot.effective_reserve}
+          unit={lot.unit}
+          canEdit={!!canAdjust}
+          onSaved={load}
+        />
+      </Section>
 
       <Section title="Warehouse">
         <Row label="Name" value={lot.location_name} />
@@ -168,6 +193,7 @@ export default function InventoryLotDetailPage({ params }: { params: Promise<{ i
       </Section>
 
       <AdjustDialog open={dialog === "adjust"} lot={lot} onClose={() => setDialog(null)} onDone={load} />
+      <RemoveStockDialog open={dialog === "remove"} lot={lot} onClose={() => setDialog(null)} onDone={load} />
       <ReconcileDialog open={dialog === "reconcile"} lot={lot} onClose={() => setDialog(null)} onDone={load} />
       <TransferDialog open={dialog === "transfer"} lot={lot} locations={locations} onClose={() => setDialog(null)} onDone={load} />
     </div>

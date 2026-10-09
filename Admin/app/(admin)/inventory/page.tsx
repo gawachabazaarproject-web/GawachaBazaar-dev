@@ -25,6 +25,7 @@ import { Pagination } from "@/components/Pagination";
 import { StatusBadge } from "@/components/StatusBadge";
 import { ReceiveStockDialog } from "@/components/ReceiveStockDialog";
 import { AddWarehouseDialog } from "@/components/AddWarehouseDialog";
+import { RemoveStockDialog } from "@/components/RemoveStockDialog";
 
 const PAGE_SIZE = 20;
 
@@ -42,6 +43,8 @@ export default function InventoryPage() {
   const [error, setError] = useState<string | null>(null);
   const [receiveOpen, setReceiveOpen] = useState(false);
   const [warehouseOpen, setWarehouseOpen] = useState(false);
+  const [removing, setRemoving] = useState<AdminInventoryLotListItem | null>(null);
+  const canAdjust = user && hasPermission(user.roles, "inventory.adjust");
 
   const [page, setPage] = useState(1);
   const [q, setQ] = useState("");
@@ -200,12 +203,14 @@ export default function InventoryPage() {
                     <th className="px-4 py-2 text-right font-medium">Reserved</th>
                     <th className="px-4 py-2 text-right font-medium">Available</th>
                     <th className="px-4 py-2 font-medium">Status</th>
+                    <th className="px-4 py-2 text-right font-medium">Reserve</th>
                     <th className="px-4 py-2 font-medium">Last movement</th>
+                    {canAdjust && <th className="px-4 py-2" />}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-neutral-100">
                   {data.items.map((lot) => (
-                    <LotRow key={lot.id} lot={lot} onClick={() => router.push(`/inventory/${lot.id}`)} />
+                    <LotRow key={lot.id} lot={lot} onClick={() => router.push(`/inventory/${lot.id}`)} onRemove={canAdjust ? () => setRemoving(lot) : undefined} />
                   ))}
                 </tbody>
               </table>
@@ -216,6 +221,7 @@ export default function InventoryPage() {
       </div>
 
       <ReceiveStockDialog open={receiveOpen} onClose={() => setReceiveOpen(false)} onReceived={refreshAll} />
+      <RemoveStockDialog open={removing !== null} lot={removing} onClose={() => setRemoving(null)} onDone={refreshAll} />
       <AddWarehouseDialog
         open={warehouseOpen}
         onClose={() => setWarehouseOpen(false)}
@@ -254,7 +260,7 @@ function Metric({
   );
 }
 
-function LotRow({ lot, onClick }: { lot: AdminInventoryLotListItem; onClick: () => void }) {
+function LotRow({ lot, onClick, onRemove }: { lot: AdminInventoryLotListItem; onClick: () => void; onRemove?: () => void }) {
   return (
     <tr onClick={onClick} className="cursor-pointer hover:bg-neutral-50">
       <td className="px-4 py-3">
@@ -271,7 +277,22 @@ function LotRow({ lot, onClick }: { lot: AdminInventoryLotListItem; onClick: () 
       <td className="px-4 py-3 text-right text-neutral-600">{lot.reserved}</td>
       <td className="px-4 py-3 text-right font-semibold text-primary-900">{lot.available}</td>
       <td className="px-4 py-3"><StatusBadge status={lot.operational_status} /></td>
+      <td className="px-4 py-3 text-right text-neutral-600">{lot.effective_reserve !== null ? Number(lot.effective_reserve) : "—"}</td>
       <td className="px-4 py-3 text-neutral-500">{lot.last_movement_at ? formatDateTime(lot.last_movement_at) : "—"}</td>
+      {onRemove && (
+        <td className="px-4 py-3 text-right">
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onRemove();
+            }}
+            disabled={Number(lot.available) <= 0}
+            className="text-xs font-semibold text-status-danger hover:underline disabled:text-neutral-300 disabled:no-underline"
+          >
+            Remove stock
+          </button>
+        </td>
+      )}
     </tr>
   );
 }

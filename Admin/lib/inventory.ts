@@ -25,6 +25,9 @@ export interface AdminInventoryLotListItem {
   available: string;
   lot_status: string;
   operational_status: string;
+  /** Stock to keep in reserve for this item (null = default) and the value in force. */
+  reserve_level: string | null;
+  effective_reserve: string | null;
   last_movement_at: string | null;
   updated_at: string;
 }
@@ -98,6 +101,9 @@ export interface AdminInventoryLotDetail {
   available: string;
   lot_status: string;
   operational_status: string;
+  /** Stock to keep in reserve for this item (null = default) and the value in force. */
+  reserve_level: string | null;
+  effective_reserve: string | null;
   created_at: string;
   updated_at: string;
   recent_movements: StockMovement[];
@@ -294,4 +300,41 @@ export async function transferStock(
   payload: { source_lot_id: number; destination_location_id: number; quantity: string; remarks?: string },
 ): Promise<{ source_lot: AdminInventoryLotListItem; destination_lot: AdminInventoryLotListItem }> {
   return request(accessToken, "/inventory/admin/transfer", { method: "POST", body: JSON.stringify(payload) });
+}
+
+
+/** Take stock out of a lot. Omit `quantity` to remove everything available. */
+export async function removeStock(
+  accessToken: string,
+  lotId: number,
+  payload: { quantity?: string; reason: string },
+): Promise<AdminInventoryLotListItem> {
+  return request(accessToken, `/inventory/admin/lots/${lotId}/remove`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export interface StockAlertItem {
+  product_id: number;
+  variant_id: number;
+  product_name: string;
+  variant_name: string;
+  unit: string;
+  available: string;
+  reserve_level: string;
+  level: "OUT" | "BELOW" | "NEAR";
+}
+
+export interface StockAlerts {
+  count: number;
+  out_count: number;
+  below_count: number;
+  near_count: number;
+  items: StockAlertItem[];
+}
+
+/** Items out of stock, at/below their reserve level, or close to it. */
+export async function fetchStockAlerts(accessToken: string): Promise<StockAlerts> {
+  return request(accessToken, "/inventory/admin/stock-alerts");
 }

@@ -21,6 +21,8 @@ from app.schemas.admin_inventory import (
     InventoryDashboardResponse,
     ReceiveStockRequest,
     ReconcileStockRequest,
+    RemoveStockRequest,
+    StockAlertsResponse,
     TransferStockRequest,
     TransferStockResponse,
 )
@@ -373,6 +375,32 @@ def admin_receive_stock(
     db: Session = Depends(get_db),
 ) -> AdminInventoryLotListItemResponse:
     return InventoryService(db).receive_stock(payload, current_user.id)
+
+
+@router.post(
+    "/admin/lots/{lot_id}/remove",
+    response_model=AdminInventoryLotListItemResponse,
+    summary="Remove stock from a lot (all available, or a quantity) with a reason",
+)
+def admin_remove_stock(
+    lot_id: int,
+    payload: RemoveStockRequest,
+    current_user: User = Depends(require_permission("inventory.adjust")),
+    db: Session = Depends(get_db),
+) -> AdminInventoryLotListItemResponse:
+    return InventoryService(db).remove_stock(lot_id, payload, current_user.id)
+
+
+@router.get(
+    "/admin/stock-alerts",
+    response_model=StockAlertsResponse,
+    summary="Items out of stock, at/below their reserve level, or close to it",
+)
+def admin_stock_alerts(
+    current_user: User = Depends(require_permission("inventory.read")),
+    db: Session = Depends(get_db),
+) -> StockAlertsResponse:
+    return InventoryService(db).stock_alerts()
 
 
 @router.post(

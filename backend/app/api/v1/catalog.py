@@ -300,6 +300,32 @@ def create_product(
     return CatalogService(db).create_product(payload, current_user.id)
 
 
+@router.delete(
+    "/products/{product_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Permanently delete a product (refused if it has order/quote/supplier history - archive it instead)",
+)
+def delete_product(
+    product_id: int,
+    current_user: User = Depends(require_permission("products.delete")),
+    db: Session = Depends(get_db),
+) -> None:
+    CatalogService(db).delete_product(product_id, current_user.id)
+
+
+@router.delete(
+    "/categories/{category_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Permanently delete an empty category (refused while it still has products or sub-categories)",
+)
+def delete_category(
+    category_id: int,
+    current_user: User = Depends(require_permission("categories.delete")),
+    db: Session = Depends(get_db),
+) -> None:
+    CatalogService(db).delete_category(category_id, current_user.id)
+
+
 @router.patch(
     "/products/{product_id}",
     response_model=ProductResponse,

@@ -59,6 +59,11 @@ class VariantStockResponse(BaseSchema):
     sku: str
     status: str
     available_quantity: Decimal
+    # Stock to keep in reserve (None = default) and where available stock stands
+    # against it: OUT / BELOW / NEAR / OK (see app/services/stock_levels.py).
+    reserve_level: Decimal | None = None
+    effective_reserve: Decimal | None = None
+    stock_level: str = "OK"
 
 
 class ProductActivityEntryResponse(BaseSchema):

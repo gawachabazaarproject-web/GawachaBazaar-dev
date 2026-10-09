@@ -14,12 +14,23 @@ from sqlalchemy.orm import Session, aliased, joinedload, selectinload
 
 from app.exceptions.base import BusinessValidationError, ConflictError, NotFoundError
 from app.models.admin_action_log import AdminActionLog
+from app.models.batch import Batch
+from app.models.bulk_order_request_item import BulkOrderRequestItem
+from app.models.cart_item import CartItem
 from app.models.category import Category
 from app.models.inventory_lot import InventoryLot
+from app.models.inventory_reservation_item import InventoryReservationItem
+from app.models.order_item import OrderItem
+from app.models.packaging_input import PackagingInput
+from app.models.packaging_output import PackagingOutput
 from app.models.price import Price
 from app.models.product import Product
 from app.models.product_image import ProductImage
 from app.models.product_variant import ProductVariant
+from app.models.quality_check import QualityCheck
+from app.models.quote_item import QuoteItem
+from app.models.stock_movement import StockMovement
+from app.models.supplier_product import SupplierProduct
 from app.models.user import User
 from app.schemas.admin_catalog import (
     AdminCategoryDetailResponse,
@@ -55,6 +66,7 @@ from app.schemas.catalog import (
 )
 from app.services.admin_audit import AdminAuditService
 from app.services.pricing import get_current_prices_for_variants
+from app.services.stock_levels import effective_reserve, stock_level
 
 _ACTIVE = "ACTIVE"
 
@@ -649,6 +661,9 @@ class CatalogService:
                 sku=v.sku,
                 status=v.status,
                 available_quantity=stock_by_variant.get(v.id, Decimal("0")),
+                reserve_level=v.reserve_level,
+                effective_reserve=effective_reserve(v.reserve_level),
+                stock_level=stock_level(stock_by_variant.get(v.id, Decimal("0")), v.reserve_level),
             )
             for v in product.variants
         ]
@@ -745,6 +760,7 @@ class CatalogService:
             sku=data.sku,
             unit=data.unit,
             quantity=data.quantity,
+            reserve_level=data.reserve_level,
             status=data.status,
         )
         self.db.add(variant)
@@ -890,6 +906,109 @@ class CatalogService:
         )
         self.db.delete(image)
         self.db.commit()
+
+    # ------------------------------------------------------------------
+    # Admin: permanent deletes
+    # ------------------------------------------------------------------
+
+    def delete_category(self, category_id: int, admin_user_id: int) -> None:
+        """Permanently removes a category - only when nothing depends on it.
+        Never silently takes products with it."""
+        category = self.get_category_or_404(category_id)
+        product_count = self.db.query(Product.id).filter(Product.category_id == category.id).count()
+        if product_count:
+            raise ConflictError(
+                f"This category still has {product_count} product(s). Move or delete them first."
+            )
+        child_count = self.db.query(Category.id).filter(Category.parent_id == category.id).count()
+        if child_count:
+            noun = "sub-category" if child_count == 1 else "sub-categories"
+            raise ConflictError(f"This category has {child_count} {noun}. Delete or move them first.")
+        AdminAuditService(self.db).record(
+            admin_user_id=admin_user_id,
+            action="category.delete",
+            resource_type="category",
+            resource_id=category.id,
+            reason=f"name={category.name}",
+        )
+        self.db.delete(category)
+        try:
+            self.db.commit()
+        except IntegrityError as exc:
+            self.db.rollback()
+            raise ConflictError("This category is still referenced and cannot be deleted.") from exc
+
+    def delete_product(self, product_id: int, admin_user_id: int) -> None:
+        """Permanently removes a product with its variants, prices, photos and
+        stock records - but ONLY if it never took part in an order, quote,
+        bulk request, supplier listing or packaging run. Anything with that
+        history must be archived instead, so past orders keep making sense."""
+        product = self.get_product_or_404(product_id)
+        variant_ids = [v.id for v in product.variants]
+        lot_ids = (
+            [r[0] for r in self.db.query(InventoryLot.id).filter(InventoryLot.variant_id.in_(variant_ids)).all()]
+            if variant_ids
+            else []
+        )
+
+        def used(query) -> bool:
+            return query.first() is not None
+
+        has_history = bool(
+            (variant_ids and used(self.db.query(OrderItem.id).filter(OrderItem.variant_id.in_(variant_ids))))
+            or (variant_ids and used(self.db.query(QuoteItem.id).filter(QuoteItem.variant_id.in_(variant_ids))))
+            or used(self.db.query(BulkOrderRequestItem.id).filter(BulkOrderRequestItem.product_id == product.id))
+            or used(self.db.query(SupplierProduct.id).filter(SupplierProduct.product_id == product.id))
+            or (
+                lot_ids
+                and (
+                    used(
+                        self.db.query(InventoryReservationItem.id).filter(
+                            InventoryReservationItem.inventory_lot_id.in_(lot_ids)
+                        )
+                    )
+                    or used(self.db.query(PackagingInput.id).filter(PackagingInput.inventory_lot_id.in_(lot_ids)))
+                    or used(self.db.query(PackagingOutput.id).filter(PackagingOutput.inventory_lot_id.in_(lot_ids)))
+                )
+            )
+        )
+        if has_history:
+            raise ConflictError(
+                "This product has order, quote or supplier history, so it can't be deleted without "
+                "breaking those records. Set its status to Archived to hide it from customers instead."
+            )
+
+        # Nothing depends on it: clear its stock records, then the product.
+        if lot_ids:
+            self.db.query(StockMovement).filter(StockMovement.inventory_lot_id.in_(lot_ids)).delete(
+                synchronize_session=False
+            )
+            self.db.query(InventoryLot).filter(InventoryLot.id.in_(lot_ids)).delete(synchronize_session=False)
+        batch_ids = [r[0] for r in self.db.query(Batch.id).filter(Batch.product_id == product.id).all()]
+        if batch_ids:
+            self.db.query(QualityCheck).filter(QualityCheck.batch_id.in_(batch_ids)).delete(synchronize_session=False)
+            self.db.query(Batch).filter(Batch.id.in_(batch_ids)).delete(synchronize_session=False)
+        if variant_ids:
+            self.db.query(CartItem).filter(CartItem.variant_id.in_(variant_ids)).delete(synchronize_session=False)
+            self.db.query(Price).filter(Price.variant_id.in_(variant_ids)).delete(synchronize_session=False)
+            self.db.query(ProductVariant).filter(ProductVariant.id.in_(variant_ids)).delete(synchronize_session=False)
+
+        AdminAuditService(self.db).record(
+            admin_user_id=admin_user_id,
+            action="product.delete",
+            resource_type="product",
+            resource_id=product.id,
+            reason=f"name={product.name}",
+        )
+        self.db.expire(product)
+        self.db.query(Product).filter(Product.id == product.id).delete(synchronize_session=False)
+        try:
+            self.db.commit()
+        except IntegrityError as exc:
+            self.db.rollback()
+            raise ConflictError(
+                "This product is still referenced by other records and cannot be deleted. Archive it instead."
+            ) from exc
 
     # ------------------------------------------------------------------
     # Admin: Price management

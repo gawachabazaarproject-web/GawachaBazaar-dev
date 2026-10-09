@@ -46,6 +46,9 @@ class AdminInventoryLotListItemResponse(BaseSchema):
     available: Decimal
     lot_status: str
     operational_status: LotOperationalStatus
+    # Stock to keep in reserve for this item (None = default) and the value in force.
+    reserve_level: Decimal | None = None
+    effective_reserve: Decimal | None = None
     last_movement_at: datetime | None
     updated_at: datetime
 
@@ -89,6 +92,8 @@ class AdminInventoryLotDetailResponse(BaseSchema):
     available: Decimal
     lot_status: str
     operational_status: LotOperationalStatus
+    reserve_level: Decimal | None = None
+    effective_reserve: Decimal | None = None
     created_at: datetime
     updated_at: datetime
     recent_movements: list[StockMovementResponse]
@@ -135,6 +140,14 @@ class ReceiveStockRequest(BaseSchema):
     remarks: str | None = Field(default=None)
 
 
+class RemoveStockRequest(BaseSchema):
+    """Take stock out of a lot. Leave `quantity` out to remove all available
+    stock; a reason is always required (it goes on the movement + audit log)."""
+
+    quantity: Decimal | None = Field(default=None, gt=0, max_digits=12, decimal_places=3)
+    reason: str = Field(..., min_length=1, max_length=200)
+
+
 class ReconcileStockRequest(BaseSchema):
     """Physical-count reconciliation - computes the ADJUSTMENT_IN/OUT
     movement from the difference server-side (never client-supplied
@@ -166,3 +179,24 @@ class TransferStockRequest(BaseSchema):
 class TransferStockResponse(BaseSchema):
     source_lot: AdminInventoryLotListItemResponse
     destination_lot: AdminInventoryLotListItemResponse
+
+
+class StockAlertItemResponse(BaseSchema):
+    product_id: int
+    variant_id: int
+    product_name: str
+    variant_name: str
+    unit: str
+    available: Decimal
+    reserve_level: Decimal
+    level: str  # OUT / BELOW / NEAR
+
+
+class StockAlertsResponse(BaseSchema):
+    """Light summary for the Admin's header alerts (polled every minute)."""
+
+    count: int
+    out_count: int
+    below_count: int
+    near_count: int
+    items: list[StockAlertItemResponse]
