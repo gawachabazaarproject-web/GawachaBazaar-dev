@@ -144,6 +144,11 @@ export interface ProductSummaryResponse {
   default_variant_quantity: string | null;
 }
 
+export interface WishlistResponse {
+  items: ProductSummaryResponse[];
+  product_ids: number[];
+}
+
 export interface ProductResponse {
   id: number;
   name: string;

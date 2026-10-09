@@ -17,7 +17,7 @@ const TAB_BAR_CONTENT_HEIGHT = 64;
  * never ends up hidden behind the floating CartBar (tab bar height + bar
  * height + a safety margin covering the tallest realistic safe-area
  * inset). Import this instead of guessing a magic number per screen. */
-export const CART_BAR_CLEARANCE = TAB_BAR_CONTENT_HEIGHT + 56 + 60;
+export const CART_BAR_CLEARANCE = TAB_BAR_CONTENT_HEIGHT + 56 + 76;
 
 /**
  * Persistent floating checkout bar (see DESIGN.md "Floating Bottom
@@ -45,7 +45,7 @@ export function CartBar() {
   const itemCount = cart?.items.reduce((sum, i) => sum + Math.round(Number.parseFloat(i.quantity)), 0) ?? 0;
   if (!cart || itemCount === 0 || hiddenOnScreen || wholesaleMode === "wholesale") return null;
 
-  const bottomOffset = inTabs ? TAB_BAR_CONTENT_HEIGHT + insets.bottom : insets.bottom + spacing.base;
+  const bottomOffset = inTabs ? TAB_BAR_CONTENT_HEIGHT + insets.bottom + spacing.xs : insets.bottom + spacing.xl;
 
   return (
     <Animated.View

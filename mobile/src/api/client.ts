@@ -17,6 +17,11 @@ const BACKEND_PORT = 8000;
  * to derive from (a production/standalone build, or web).
  */
 function resolveBaseUrl(): string {
+  // Optional: force a dev build onto another backend (e.g. the deployed one,
+  // which sits next to its database and is far faster than a laptop backend
+  // talking to a remote DB). Unset = the normal Metro-host behaviour below.
+  const override = process.env.EXPO_PUBLIC_API_URL_OVERRIDE;
+  if (override) return override;
   const hostUri = Constants.expoConfig?.hostUri;
   const host = hostUri?.split(":")[0];
   if (host) return `http://${host}:${BACKEND_PORT}/api/v1`;
@@ -73,6 +78,15 @@ export const apiClient = axios.create({
   baseURL: BASE_URL,
   timeout: 15000,
 });
+
+/** Fire-and-forget ping to the dependency-free /health route so a sleeping
+ * host (Render's free tier spins down when idle) starts waking while the
+ * splash screen and font load run, instead of on the first real request. */
+export function warmBackend(): void {
+  if (!BASE_URL) return;
+  const root = BASE_URL.replace(/\/api\/v1\/?$/, "");
+  axios.get(`${root}/health`, { timeout: 60000 }).catch(() => undefined);
+}
 
 /** No Bearer token: the pre-Firebase account migration is anonymous. */
 const AUTH_EXEMPT_PATHS = ["/auth/legacy-migrate"];

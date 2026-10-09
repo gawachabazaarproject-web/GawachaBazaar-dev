@@ -37,14 +37,21 @@ export function DeliveryInstructionCard() {
               accessibilityState={{ selected: active }}
             >
               <Feather name={opt.icon} size={16} color={active ? colors.primary : colors.textSecondary} />
-              <View>
-                <Text variant="bodySmall" color={active ? colors.primary : colors.textPrimary}>
+              <View style={{ flex: 1 }}>
+                <Text variant="bodySmall" color={colors.textPrimary} style={{ fontWeight: "600" }}>
                   {opt.label}
                 </Text>
                 <Text variant="caption" color={colors.textSecondary}>
                   {opt.sub}
                 </Text>
               </View>
+              {active ? (
+                <View style={styles.check}>
+                  <Feather name="check" size={12} color={colors.textInverse} />
+                </View>
+              ) : (
+                <View style={styles.radio} />
+              )}
             </Pressable>
           );
         })}
@@ -56,20 +63,22 @@ export function DeliveryInstructionCard() {
 const styles = StyleSheet.create({
   card: {
     marginHorizontal: spacing.base,
-    marginTop: spacing.xl,
-    paddingTop: spacing.lg,
+    marginTop: spacing.lg,
+    paddingTop: spacing.md,
     borderTopWidth: 1,
     borderColor: colors.divider,
   },
-  title: { marginBottom: spacing.md },
+  check: { width: 22, height: 22, borderRadius: 11, backgroundColor: colors.primary, alignItems: "center", justifyContent: "center" },
+  radio: { width: 22, height: 22, borderRadius: 11, borderWidth: 1.5, borderColor: colors.border },
+  title: { marginBottom: spacing.sm },
   row: { flexDirection: "row", gap: spacing.sm },
   option: {
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
     gap: spacing.sm,
-    padding: spacing.md,
-    borderRadius: radius.card,
+    padding: spacing.sm,
+    borderRadius: 14,
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.background,

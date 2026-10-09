@@ -23,9 +23,11 @@ import {
   PlusJakartaSans_700Bold,
   PlusJakartaSans_800ExtraBold,
 } from "@expo-google-fonts/plus-jakarta-sans";
+import { Lora_600SemiBold, Lora_700Bold } from "@expo-google-fonts/lora";
 import { Baloo2_500Medium, Baloo2_600SemiBold, Baloo2_700Bold } from "@expo-google-fonts/baloo-2";
 import { ReducedMotionConfig, ReduceMotion } from "react-native-reanimated";
 import { queryClient } from "@/api/queryClient";
+import { warmBackend } from "@/api/client";
 import { useAuthStore } from "@/store/authStore";
 import { ToastHost } from "@/components/ToastHost";
 import { CartBar } from "@/components/CartBar";
@@ -61,6 +63,8 @@ export default function RootLayout() {
     PlusJakartaSans_600SemiBold,
     PlusJakartaSans_700Bold,
     PlusJakartaSans_800ExtraBold,
+    Lora_600SemiBold,
+    Lora_700Bold,
     Baloo2_500Medium,
     Baloo2_600SemiBold,
     Baloo2_700Bold,
@@ -69,6 +73,7 @@ export default function RootLayout() {
   const authStatus = useAuthStore((s) => s.status);
 
   useEffect(() => {
+    warmBackend();
     restoreSession();
   }, [restoreSession]);
 

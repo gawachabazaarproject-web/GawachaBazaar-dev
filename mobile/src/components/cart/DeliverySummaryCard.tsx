@@ -2,7 +2,7 @@ import React from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { Text } from "@/components/Text";
-import { colors, radius, spacing } from "@/theme";
+import { colors, spacing } from "@/theme";
 
 export interface DeliverySummaryCardProps {
   addressLabel: string;
@@ -10,52 +10,45 @@ export interface DeliverySummaryCardProps {
   onChangePress: () => void;
 }
 
-/** Compact delivery-address summary at the top of the cart - real
- * address data, "Estimated in 25 mins" is the same illustrative ETA
- * framing used elsewhere in the app. */
+/** Delivery-address block at the top of the cart - real address data;
+ * "Estimated in 25 mins" is the same illustrative ETA used elsewhere. */
 export function DeliverySummaryCard({ addressLabel, addressLine, onChangePress }: DeliverySummaryCardProps) {
   return (
-    <View style={styles.card}>
-      <View style={styles.iconWrap}>
-        <Feather name="map-pin" size={14} color={colors.primary} />
+    <Pressable onPress={onChangePress} accessibilityRole="button" accessibilityLabel="Change delivery address">
+      <View style={styles.row}>
+        <Feather name="map-pin" size={22} color={colors.accentDark} />
+        <View style={styles.textCol}>
+          <Text variant="label" color={colors.textSecondary} style={styles.eyebrow}>
+            DELIVERING TO
+          </Text>
+          <View style={styles.titleRow}>
+            <Text variant="h3" numberOfLines={1} style={styles.title}>
+              {addressLine || addressLabel}
+            </Text>
+            <Feather name="chevron-down" size={16} color={colors.textPrimary} />
+          </View>
+        </View>
       </View>
-      <View style={{ flex: 1 }}>
-        <Text variant="label" color={colors.textSecondary}>
-          DELIVERING TO {addressLabel.toUpperCase()}
-        </Text>
-        <Text variant="bodyMedium" numberOfLines={1}>
-          {addressLine}
-        </Text>
-        <Text variant="caption" color={colors.textSecondary}>
-          Estimated in 25 mins from Saoner Mandi Hub
-        </Text>
-      </View>
-      <Pressable onPress={onChangePress}>
-        <Text variant="bodySmall" color={colors.primary}>
-          Change
-        </Text>
-      </Pressable>
-    </View>
+      <Text
+        variant="caption"
+        color={colors.textSecondary}
+        numberOfLines={1}
+        adjustsFontSizeToFit
+        minimumFontScale={0.8}
+        style={styles.eta}
+      >
+        Estimated in 25 mins from Saoner Mandi Hub
+      </Text>
+    </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
-  card: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.sm,
-    marginHorizontal: spacing.base,
-    marginTop: spacing.sm,
-    paddingVertical: spacing.base,
-    borderBottomWidth: 1,
-    borderColor: colors.divider,
-  },
-  iconWrap: {
-    width: 32,
-    height: 32,
-    borderRadius: radius.card,
-    backgroundColor: colors.primaryLight,
-    alignItems: "center",
-    justifyContent: "center",
-  },
+  row: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
+  textCol: { flexShrink: 1 },
+  eyebrow: { letterSpacing: 1.2 },
+  titleRow: { flexDirection: "row", alignItems: "center", gap: spacing.xs },
+  title: { flexShrink: 1 },
+  // Indented to line up with the text column (icon 20 + gap 8).
+  eta: { marginTop: 3, marginLeft: 28, fontSize: 11.5 },
 });

@@ -56,8 +56,10 @@ from app.models.supplier_evaluation import SupplierEvaluation
 from app.models.supplier_product import SupplierProduct
 from app.models.user import User
 from app.models.user_role import UserRole
+from app.models.wishlist_item import WishlistItem
 
 __all__ = [
+    "WishlistItem",
     "Ad",
     "Address",
     "AdminActionLog",
