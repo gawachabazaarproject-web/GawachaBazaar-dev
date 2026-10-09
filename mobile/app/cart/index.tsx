@@ -41,6 +41,7 @@ export default function CartScreen() {
   const { data: allData } = useProducts({});
 
   const items = cart?.items ?? [];
+  const cartUnits = items.reduce((sum, item) => sum + Math.round(Number.parseFloat(item.quantity)), 0);
   const defaultAddress = addresses?.find((a) => a.is_default) ?? addresses?.[0];
   const allProducts = allData?.pages.flatMap((p) => p.items) ?? [];
 
@@ -102,10 +103,7 @@ export default function CartScreen() {
 
         {isLoading ? null : (
           <>
-            <FreeDeliveryProgress
-              cartTotal={Number.parseFloat(cart?.total_amount ?? "0")}
-              currency={cart?.currency ?? "INR"}
-            />
+            <FreeDeliveryProgress itemCount={cartUnits} />
 
             <View style={styles.basketHeader}>
               <View style={styles.marketRow}>

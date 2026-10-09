@@ -10,6 +10,8 @@ import { CartItemResponse } from "@/types/api";
 export interface BasketSummaryCardProps {
   items: CartItemResponse[];
   totalAmount: string | null;
+  /** Delivery charge from the backend quote; null while loading. 0 = free. */
+  deliveryFee?: number | null;
   currency: string | null;
   slotLabel: string;
   paymentLabel: string;
@@ -18,7 +20,7 @@ export interface BasketSummaryCardProps {
 /** Collapsible order summary - real cart items/prices. Expanded: item
  * rows with thumbnails and subtotal; collapsed: delivery slot and payment
  * method at a glance. */
-export function BasketSummaryCard({ items, totalAmount, currency, slotLabel, paymentLabel }: BasketSummaryCardProps) {
+export function BasketSummaryCard({ items, totalAmount, deliveryFee = null, currency, slotLabel, paymentLabel }: BasketSummaryCardProps) {
   const [expanded, setExpanded] = useState(true);
   const cur = currency ?? "INR";
 
@@ -67,9 +69,13 @@ export function BasketSummaryCard({ items, totalAmount, currency, slotLabel, pay
             <Text variant="body" color={colors.textSecondary}>
               Mandi Direct Delivery Fee
             </Text>
-            <Text variant="bodyMedium" color={colors.success}>
-              FREE
-            </Text>
+            {deliveryFee !== null && deliveryFee > 0 ? (
+              <Text variant="bodyMedium">{formatMoney(deliveryFee, cur)}</Text>
+            ) : (
+              <Text variant="bodyMedium" color={colors.success}>
+                {deliveryFee === null ? "-" : "FREE"}
+              </Text>
+            )}
           </View>
         </>
       ) : (

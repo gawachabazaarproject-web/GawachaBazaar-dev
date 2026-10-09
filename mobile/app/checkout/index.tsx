@@ -14,6 +14,7 @@ import { BasketSummaryCard } from "@/components/checkout/BasketSummaryCard";
 import { ImpactCard } from "@/components/checkout/ImpactCard";
 import { useCart, useEvaluatePromo } from "@/features/cart/useCart";
 import { useAddresses } from "@/features/address/useAddresses";
+import { useDeliveryQuote } from "@/features/bazaar/useBazaar";
 import { usePlaceOrder, PlaceOrderResult } from "@/features/checkout/useCheckout";
 import { useCancelOrder } from "@/features/orders/useOrders";
 import { useOnlinePayment } from "@/features/payment/useOnlinePayment";
@@ -32,6 +33,7 @@ export default function CheckoutScreen() {
   const online = useOnlinePayment();
 
   const [selectedAddressId, setSelectedAddressId] = useState<number | null>(null);
+  const { data: deliveryQuote } = useDeliveryQuote(selectedAddressId);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("COD");
   const [result, setResult] = useState<PlaceOrderResult | null>(null);
   const [day, setDay] = useState<Day>("today");
@@ -234,7 +236,15 @@ export default function CheckoutScreen() {
   // checkout will actually charge - cart.total_amount never includes a
   // discount, since discounting only ever happens as part of order
   // creation on the backend (see PromotionService.evaluate_for_cart).
-  const total = promoEvaluation?.eligible ? promoEvaluation.final_total : cart.total_amount ?? "0";
+  // The delivery fee comes from the backend quote (free for a 15+ item
+  // Bazaar; otherwise base + per-km) and is added on top - the order
+  // itself is priced again server-side at checkout with the same rule.
+  const deliveryFee = Number.parseFloat(deliveryQuote?.fee ?? "0");
+  const goodsTotal = promoEvaluation?.eligible ? promoEvaluation.final_total : cart.total_amount ?? "0";
+  const total = String(Number.parseFloat(goodsTotal) + deliveryFee);
+  const deliveryLabel = deliveryQuote && !deliveryQuote.free_delivery
+    ? `Delivery ${formatMoney(deliveryFee, cart.currency ?? "INR")}`
+    : "Free delivery";
 
   return (
     <Screen edges={["top", "bottom"]}>
@@ -427,6 +437,7 @@ export default function CheckoutScreen() {
           <BasketSummaryCard
             items={cart.items}
             totalAmount={cart.total_amount}
+            deliveryFee={deliveryQuote ? deliveryFee : null}
             currency={cart.currency}
             slotLabel={slotSummary(day, slot)}
             paymentLabel={paymentMethod === "UPI" ? "Pay online" : "Cash / UPI on Delivery"}
@@ -474,7 +485,7 @@ export default function CheckoutScreen() {
               </Text>
             </View>
             <Text variant="caption" color={colors.primaryLight} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>
-              Free delivery • {slotSummary(day, slot)}
+              {deliveryLabel} • {slotSummary(day, slot)}
             </Text>
           </View>
           <Pressable

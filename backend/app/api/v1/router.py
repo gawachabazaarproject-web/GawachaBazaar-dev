@@ -9,6 +9,7 @@ from fastapi import APIRouter
 
 from app.api.v1.addresses import router as addresses_router
 from app.api.v1.ads import router as ads_router
+from app.api.v1.bazaar import router as bazaar_router
 from app.api.v1.home_slides import router as home_slides_router
 from app.api.v1.auth import router as auth_router
 from app.api.v1.bulk_orders import admin_router as bulk_orders_admin_router
@@ -132,6 +133,7 @@ api_router.include_router(staff_router, prefix="/staff", tags=["staff"])
 # ADMIN-gated management for everything else - gated by ads.* permissions).
 api_router.include_router(ads_router, prefix="/ads", tags=["ads"])
 api_router.include_router(home_slides_router, prefix="/home-slides", tags=["home-slides"])
+api_router.include_router(bazaar_router, prefix="/bazaar", tags=["bazaar"])
 
 # Live order/fulfillment/payment/refund status events (WebSocket). See
 # app/core/realtime.py for the in-process connection registry and message

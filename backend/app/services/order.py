@@ -69,6 +69,7 @@ from app.schemas.order import (
 from app.schemas.payment import PaymentResponse
 from app.schemas.refund import AdminRefundResponse
 from app.services.admin_audit import AdminAuditService
+from app.services.delivery import calculate_delivery_fee, item_count_for_quantities
 from app.services.inventory_reservation import InventoryReservationService
 from app.services.order_state import (
     IllegalOrderTransitionError,
@@ -544,7 +545,15 @@ class OrderService:
         if data.promo_code and evaluation.code_was_invalid:
             raise BusinessValidationError(evaluation.message)
 
-        total_amount = evaluation.final_total
+        # Delivery fee: free for a Bazaar (15+ units), otherwise base + per-km.
+        # Computed here from the real cart and the real address - the same
+        # function the cart's quote endpoint uses - never from the client.
+        delivery_quote = calculate_delivery_fee(
+            item_count_for_quantities(i.quantity for i in items),
+            address.latitude,
+            address.longitude,
+        )
+        total_amount = evaluation.final_total + delivery_quote.fee
 
         order = Order(
             user_id=user_id,
@@ -553,6 +562,7 @@ class OrderService:
             status="PENDING",
             subtotal_amount=subtotal_amount,
             discount_amount=evaluation.discount_amount,
+            delivery_fee=delivery_quote.fee,
             total_amount=total_amount,
             currency=currency,
             promotion_id=evaluation.promotion.id if evaluation.promotion else None,

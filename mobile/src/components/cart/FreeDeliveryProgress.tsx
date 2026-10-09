@@ -2,18 +2,13 @@ import React from "react";
 import { StyleSheet, View } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { Text } from "@/components/Text";
-import { formatMoney } from "@/utils/money";
 import { colors, radius, spacing } from "@/theme";
 
-/** Illustrative free-delivery threshold (explicitly authorized) - the
- * backend has no delivery-fee concept at all (checkout never charges
- * one), so this is presentational encouragement only, computed from the
- * real cart total against a made-up target. */
-const FREE_DELIVERY_THRESHOLD = 300;
-
-export function FreeDeliveryProgress({ cartTotal, currency = "INR" }: { cartTotal: number; currency?: string }) {
-  const remaining = Math.max(0, FREE_DELIVERY_THRESHOLD - cartTotal);
-  const progress = Math.min(1, cartTotal / FREE_DELIVERY_THRESHOLD);
+/** Bazaar progress: a basket of 15+ items ships free (the backend applies
+ * the same rule at checkout - see app/services/delivery.py). */
+export function FreeDeliveryProgress({ itemCount, minItems = 15 }: { itemCount: number; minItems?: number }) {
+  const remaining = Math.max(0, minItems - itemCount);
+  const progress = Math.min(1, itemCount / minItems);
   const unlocked = remaining <= 0;
 
   return (
@@ -25,11 +20,11 @@ export function FreeDeliveryProgress({ cartTotal, currency = "INR" }: { cartTota
         <View style={styles.textRow}>
           {unlocked ? (
             <Text variant="caption" color={colors.success} style={{ flex: 1 }}>
-              You've unlocked free delivery
+              Your Bazaar is full - free delivery
             </Text>
           ) : (
             <Text variant="caption" color={colors.textSecondary} style={{ flex: 1 }}>
-              Add {formatMoney(remaining, currency)} more for{" "}
+              Add {remaining} more {remaining === 1 ? "item" : "items"} for{" "}
               <Text variant="caption" color={colors.primary} style={styles.bold}>
                 FREE Delivery
               </Text>

@@ -15,6 +15,7 @@ import { PromoCarousel } from "@/components/home/PromoCarousel";
 import { CategoryPanel } from "@/components/home/CategoryPanel";
 import { SectionHeading } from "@/components/home/SectionHeading";
 import { ProductRail } from "@/components/home/ProductRail";
+import { BazaarSection } from "@/components/home/BazaarSection";
 import { VillageStory } from "@/components/home/VillageStory";
 import { ClosingCTA } from "@/components/home/ClosingCTA";
 import { WholesaleToggle } from "@/components/home/WholesaleToggle";
@@ -188,6 +189,9 @@ export default function HomeScreen() {
               : undefined
           }
         />
+
+        {/* Bazaar offer: 15+ items = free delivery, 6 Bazaars/week = Bazaar+ */}
+        {mode === "regular" ? <BazaarSection onStartPress={() => router.push("/(tabs)/categories")} /> : null}
 
         {/* Vidarbha Regional Specialties */}
         {specialtyProducts.length > 0 ? (

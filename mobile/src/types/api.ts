@@ -226,6 +226,7 @@ export interface OrderResponse {
   status: OrderStatus;
   subtotal_amount: string;
   discount_amount: string;
+  delivery_fee: string;
   total_amount: string;
   applied_promo_code: string | null;
   currency: string;
@@ -556,4 +557,27 @@ export interface HomeSlideResponse {
   image_url: string;
   cta_label: string;
   link_url: string | null;
+}
+
+// ---------------------------------------------------------------------------
+// Bazaar offer (free delivery at 15+ items, Gawacha Bazaar+)
+// ---------------------------------------------------------------------------
+export interface DeliveryQuoteResponse {
+  fee: string;
+  free_delivery: boolean;
+  item_count: number;
+  free_delivery_min_items: number;
+  items_to_free_delivery: number;
+  distance_km: number | null;
+  distance_estimated: boolean;
+  currency: string;
+}
+
+export interface BazaarStatusResponse {
+  free_delivery_min_items: number;
+  cart_item_count: number;
+  bazaar_orders_in_window: number;
+  orders_required: number;
+  window_days: number;
+  eligible_for_bazaar_plus: boolean;
 }
