@@ -1,6 +1,13 @@
 from datetime import datetime
 
-from sqlalchemy import BigInteger, DateTime, ForeignKey, Identity, UniqueConstraint, func
+from sqlalchemy import (
+    BigInteger,
+    DateTime,
+    ForeignKey,
+    Identity,
+    UniqueConstraint,
+    func,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base

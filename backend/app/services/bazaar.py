@@ -21,7 +21,11 @@ from app.models.order import Order
 from app.models.order_item import OrderItem
 from app.models.product_variant import ProductVariant
 from app.schemas.bazaar import BazaarStatusResponse, DeliveryQuoteResponse
-from app.services.delivery import calculate_delivery_fee, distinct_product_count, get_packing_point
+from app.services.delivery import (
+    calculate_delivery_fee,
+    distinct_product_count,
+    get_packing_point,
+)
 
 _NOT_COUNTED = ("CANCELLED", "EXPIRED")
 

@@ -1,7 +1,6 @@
 from datetime import datetime
-from typing import TYPE_CHECKING
-
 from decimal import Decimal
+from typing import TYPE_CHECKING
 
 from sqlalchemy import (
     BigInteger,
@@ -12,9 +11,9 @@ from sqlalchemy import (
     Index,
     Numeric,
     String,
-    text,
     UniqueConstraint,
     func,
+    text,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 

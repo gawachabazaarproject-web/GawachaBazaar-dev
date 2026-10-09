@@ -1,3 +1,4 @@
+# ruff: noqa: F811  (pytest fixtures imported from another test module)
 """Pay-first online checkout: Razorpay opens BEFORE any order exists, and the
 order is placed only after the payment succeeds (app/services/checkout_session.py).
 

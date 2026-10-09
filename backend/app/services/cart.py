@@ -271,7 +271,9 @@ class CartService:
             product_name=product.name,
             variant_name=variant.name,
             sku=variant.sku,
-            quantity=item.quantity,
+            # Same 3-decimal scale as the stored column (and GET /cart), so an add/update
+            # response reads "2.000", not the request's "2".
+            quantity=item.quantity.quantize(Decimal("0.001")),
             unit_price=price.price if price else None,
             line_total=self._line_total(item.quantity, price.price) if price else None,
             currency=price.currency if price else None,

@@ -4,7 +4,11 @@ from sqlalchemy.orm import Session
 
 from app.exceptions.base import BusinessValidationError, NotFoundError
 from app.models.home_slide import HomeSlide
-from app.schemas.home_slide import AdminHomeSlideResponse, HomeSlideResponse, UpdateHomeSlideRequest
+from app.schemas.home_slide import (
+    AdminHomeSlideResponse,
+    HomeSlideResponse,
+    UpdateHomeSlideRequest,
+)
 from app.services.admin_audit import AdminAuditService
 
 _VALID_STATUSES = ("ACTIVE", "INACTIVE")

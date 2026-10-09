@@ -11,7 +11,6 @@ table definitions.
 """
 
 from app.models.ad import Ad
-from app.models.home_slide import HomeSlide
 from app.models.address import Address
 from app.models.admin_action_log import AdminActionLog
 from app.models.batch import Batch
@@ -20,11 +19,12 @@ from app.models.bulk_order_request import BulkOrderRequest
 from app.models.bulk_order_request_item import BulkOrderRequestItem
 from app.models.cart import Cart
 from app.models.cart_item import CartItem
-from app.models.checkout_session import CheckoutSession
 from app.models.category import Category
+from app.models.checkout_session import CheckoutSession
 from app.models.customer_note import CustomerNote
 from app.models.farm import Farm
 from app.models.fulfillment import Fulfillment
+from app.models.home_slide import HomeSlide
 from app.models.inventory_location import InventoryLocation
 from app.models.inventory_lot import InventoryLot
 from app.models.inventory_reservation import InventoryReservation
