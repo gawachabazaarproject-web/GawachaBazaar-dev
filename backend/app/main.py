@@ -97,7 +97,7 @@ def create_application() -> FastAPI:
     """Application factory for FastAPI."""
     app = FastAPI(
         title=settings.APP_NAME,
-        version="0.1.0",
+        version="1.0.0",
         description="Gawacha Bazaar - Production Backend Service",
         docs_url="/docs" if not settings.is_production else None,
         redoc_url="/redoc" if not settings.is_production else None,

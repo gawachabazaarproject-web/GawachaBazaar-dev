@@ -1,6 +1,6 @@
 [project]
 name = "gawachabazaar-backend"
-version = "0.1.0"
+version = "1.0.0"
 description = "Gawacha Bazaar - Production Backend Service"
 readme = "README.md"
 requires-python = ">=3.11"

@@ -5,7 +5,8 @@
   "build": {
     "development": {
       "developmentClient": true,
-      "distribution": "internal"
+      "distribution": "internal",
+      "channel": "development"
     },
     "preview": {
       "distribution": "internal",
@@ -21,7 +22,8 @@
         "EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID": "853340583825",
         "EXPO_PUBLIC_FIREBASE_APP_ID": "1:853340583825:web:16be2aad373fc79bee0c30",
         "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "853340583825-a7lu38kmj7ierapa571grhd40hefm346.apps.googleusercontent.com"
-      }
+      },
+      "channel": "preview"
     },
     "production": {
       "autoIncrement": true,
@@ -34,7 +36,8 @@
         "EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID": "853340583825",
         "EXPO_PUBLIC_FIREBASE_APP_ID": "1:853340583825:web:16be2aad373fc79bee0c30",
         "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "853340583825-a7lu38kmj7ierapa571grhd40hefm346.apps.googleusercontent.com"
-      }
+      },
+      "channel": "production"
     }
   },
   "submit": {

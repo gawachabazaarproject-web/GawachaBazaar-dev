@@ -6,6 +6,9 @@ import { Feather } from "@expo/vector-icons";
 import { Screen } from "@/components/Screen";
 import { Text } from "@/components/Text";
 import { CART_BAR_CLEARANCE } from "@/components/CartBar";
+import { AppUpdateRow } from "@/components/account/AppUpdateRow";
+import { runningUpdateLabel } from "@/features/updates/useAppUpdates";
+import Constants from "expo-constants";
 import { useAuthStore } from "@/store/authStore";
 import { useWishlist } from "@/features/wishlist/useWishlist";
 import { colors, fontFamily, spacing } from "@/theme";
@@ -150,6 +153,8 @@ export default function AccountScreen() {
           </View>
         ))}
 
+        <AppUpdateRow />
+
         {/* Log out */}
         <Pressable style={styles.logout} onPress={handleLogout} accessibilityRole="button">
           <Feather name="log-out" size={22} color={colors.error} />
@@ -160,7 +165,8 @@ export default function AccountScreen() {
         </Pressable>
 
         <Text variant="caption" color={colors.textMuted} align="center" style={styles.version}>
-          GawachaBazaar v1.0.0
+          GawachaBazaar v{Constants.expoConfig?.version ?? "1.0.0"}
+          {runningUpdateLabel() ? ` · update ${runningUpdateLabel()}` : ""}
         </Text>
       </ScrollView>
     </Screen>

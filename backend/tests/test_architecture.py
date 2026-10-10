@@ -23,7 +23,7 @@ def test_application_factory_and_import() -> None:
     """Verify application factory creates a valid FastAPI instance with lifespan."""
     test_app = create_application()
     assert test_app.title == "GawachaBazaar"
-    assert test_app.version == "0.1.0"
+    assert test_app.version == "1.0.0"
 
 
 def test_health_endpoint(client: TestClient) -> None:
