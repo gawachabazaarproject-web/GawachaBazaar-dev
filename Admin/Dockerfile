@@ -18,7 +18,7 @@ ENV NEXT_PUBLIC_API_BASE_URL=${NEXT_PUBLIC_API_BASE_URL} \
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 RUN test -n "$NEXT_PUBLIC_API_BASE_URL" || (echo "NEXT_PUBLIC_API_BASE_URL build arg is required" && exit 1)
-RUN npm run build
+RUN npx next build --webpack
 
 FROM node:22-alpine AS runner
 WORKDIR /app
