@@ -25,6 +25,9 @@ export const fontFamily = {
   semibold: "PlusJakartaSans_600SemiBold",
   bold: "PlusJakartaSans_700Bold",
   extraBold: "PlusJakartaSans_800ExtraBold",
+  // numerals (prices, quantities) - Lora: sturdy serif with clear lining figures
+  numeric: "Lora_700Bold",
+  numericSemi: "Lora_600SemiBold",
   // Devanagari (Marathi) family - Baloo 2
   devanagari: "Baloo2_600SemiBold",
   devanagariBold: "Baloo2_700Bold",
@@ -68,10 +71,10 @@ export const typography: Record<string, TypeStyle> = {
   // label-xs
   label: { fontFamily: fontFamily.bold, fontSize: 10, lineHeight: 13, letterSpacing: 0.4 },
   // price-lg
-  price: { fontFamily: fontFamily.bold, fontSize: 16, lineHeight: 20, letterSpacing: -0.32 },
-  priceLarge: { fontFamily: fontFamily.bold, fontSize: 24, lineHeight: 30, letterSpacing: -0.4 },
+  price: { fontFamily: fontFamily.numeric, fontSize: 17, lineHeight: 22 },
+  priceLarge: { fontFamily: fontFamily.numeric, fontSize: 26, lineHeight: 32 },
   // title-sm
-  priceSmall: { fontFamily: fontFamily.bold, fontSize: 13, lineHeight: 16 },
+  priceSmall: { fontFamily: fontFamily.numeric, fontSize: 14, lineHeight: 18 },
   // title-md
   button: { fontFamily: fontFamily.semibold, fontSize: 15, lineHeight: 20 },
 };

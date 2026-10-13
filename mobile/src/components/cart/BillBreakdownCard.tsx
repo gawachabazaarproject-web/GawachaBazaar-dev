@@ -1,20 +1,15 @@
 import React, { useMemo } from "react";
-import { Pressable, StyleSheet, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 import { Text } from "@/components/Text";
 import { formatMoney } from "@/utils/money";
 import { getEmbellishment } from "@/utils/productEmbellishments";
 import { colors, spacing } from "@/theme";
-import { CartItemResponse, DeliveryQuote } from "@/types/api";
-import { distanceLabel, withDelivery } from "@/utils/delivery";
+import { CartItemResponse } from "@/types/api";
 
 export interface BillBreakdownCardProps {
   items: CartItemResponse[];
   totalAmount: string | null;
   currency: string | null;
-  /** Delivery quote for the selected address; undefined while loading. */
-  delivery?: DeliveryQuote;
-  deliveryLoading?: boolean;
-  onPinLocation?: () => void;
 }
 
 /**
@@ -22,12 +17,10 @@ export interface BillBreakdownCardProps {
  * the illustrative per-product MRP layer (productEmbellishments.ts) -
  * items with no MRP entry simply contribute nothing to it, so the
  * number is never inflated beyond what's actually shown on-screen.
- * The delivery fee is the backend's own quote (base + per km by road to the
- * selected address) - the same number checkout will charge.
+ * "Delivery Partner Fee: FREE" is honest, not illustrative - the backend
+ * genuinely never charges one.
  */
-export function BillBreakdownCard({ items, totalAmount, currency, delivery, deliveryLoading, onPinLocation }: BillBreakdownCardProps) {
-  const grandTotal = withDelivery(totalAmount, delivery);
-  const km = distanceLabel(delivery);
+export function BillBreakdownCard({ items, totalAmount, currency }: BillBreakdownCardProps) {
   const { mrpTotal, savings } = useMemo(() => {
     let mrp = 0;
     for (const item of items) {
@@ -44,20 +37,13 @@ export function BillBreakdownCard({ items, totalAmount, currency, delivery, deli
       <Text variant="h3" style={styles.title}>
         Bill Breakdown
       </Text>
-      <Row label={`Item Total${mrpTotal > 0 ? ` (MRP ${formatMoney(mrpTotal, currency ?? "INR")})` : ""}`} value={formatMoney(totalAmount ?? "0", currency ?? "INR")} />
+      <Row label={`Item Total (${items.length} ${items.length === 1 ? "item" : "items"})`} value={formatMoney(mrpTotal > 0 ? mrpTotal : Number.parseFloat(totalAmount ?? "0"), currency ?? "INR")} />
       {savings > 0 ? <Row label="Farm Direct Savings" value={`-${formatMoney(savings, currency ?? "INR")}`} valueColor={colors.success} /> : null}
-      {delivery?.needs_location ? (
-        <Row label="Delivery charge" value="Pin location" valueColor={colors.error} onPress={onPinLocation} />
-      ) : (
-        <Row
-          label={`Delivery Partner Fee${km ? ` (${km})` : ""}`}
-          value={delivery?.fee ? formatMoney(delivery.fee, currency ?? "INR") : deliveryLoading ? "Calculating..." : "-"}
-        />
-      )}
+      <Row label="Delivery Partner Fee" value="FREE" valueColor={colors.success} />
       <View style={styles.divider} />
       <View style={styles.totalRow}>
-        <Text variant="bodyMedium">Total Bill Amount</Text>
-        <Text variant="h3">{formatMoney(grandTotal, currency ?? "INR")}</Text>
+        <Text variant="bodyMedium">Total Amount</Text>
+        <Text variant="price">{formatMoney(totalAmount ?? "0", currency ?? "INR")}</Text>
       </View>
       {savings > 0 ? (
         <Text variant="caption" color={colors.success} style={styles.savedNote}>
@@ -68,28 +54,28 @@ export function BillBreakdownCard({ items, totalAmount, currency, delivery, deli
   );
 }
 
-function Row({ label, value, valueColor, onPress }: { label: string; value: string; valueColor?: string; onPress?: () => void }) {
+function Row({ label, value, valueColor }: { label: string; value: string; valueColor?: string }) {
   return (
-    <Pressable style={styles.row} onPress={onPress} disabled={!onPress}>
-      <Text variant="body" color={colors.textSecondary}>
+    <View style={styles.row}>
+      <Text variant="bodySmall" color={colors.textSecondary}>
         {label}
       </Text>
-      <Text variant="bodyMedium" color={valueColor ?? colors.textPrimary}>
+      <Text variant="priceSmall" color={valueColor ?? colors.textPrimary}>
         {value}
       </Text>
-    </Pressable>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   card: {
     marginHorizontal: spacing.base,
-    marginTop: spacing.xl,
-    paddingTop: spacing.lg,
+    marginTop: spacing.lg,
+    paddingTop: spacing.md,
     borderTopWidth: 1,
     borderColor: colors.divider,
   },
-  title: { marginBottom: spacing.md },
+  title: { marginBottom: spacing.sm },
   row: { flexDirection: "row", justifyContent: "space-between", marginBottom: spacing.sm },
   divider: { height: 1, backgroundColor: colors.divider, marginVertical: spacing.sm },
   totalRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },

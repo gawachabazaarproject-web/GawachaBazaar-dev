@@ -50,6 +50,8 @@ class CreatePromotionRequest(BaseSchema):
     customer_title: str | None = Field(default=None, max_length=150)
     customer_description: str | None = Field(default=None)
     code: str | None = Field(default=None, min_length=3, max_length=50)
+    image_url: str | None = Field(default=None, max_length=2000)
+    show_in_carousel: bool = Field(default=False)
     discount_type: DiscountType
     discount_value: Decimal = Field(..., gt=0, max_digits=12, decimal_places=2)
     max_discount_amount: Decimal | None = Field(default=None, gt=0, max_digits=12, decimal_places=2)
@@ -88,6 +90,8 @@ class UpdatePromotionRequest(BaseSchema):
     customer_title: str | None = Field(default=None, max_length=150)
     customer_description: str | None = Field(default=None)
     code: str | None = Field(default=None, min_length=3, max_length=50)
+    image_url: str | None = Field(default=None, max_length=2000)
+    show_in_carousel: bool | None = Field(default=None)
     discount_type: DiscountType | None = Field(default=None)
     discount_value: Decimal | None = Field(default=None, gt=0, max_digits=12, decimal_places=2)
     max_discount_amount: Decimal | None = Field(default=None, gt=0, max_digits=12, decimal_places=2)
@@ -162,6 +166,8 @@ class PromotionDetailResponse(BaseSchema):
     customer_title: str | None
     customer_description: str | None
     code: str | None
+    image_url: str | None
+    show_in_carousel: bool
     discount_type: str
     discount_value: Decimal
     max_discount_amount: Decimal | None

@@ -7,7 +7,7 @@ import { Text } from "@/components/Text";
 import { ShopHeader } from "@/components/ShopHeader";
 import { ProductGrid } from "@/components/ProductGrid";
 import { EmptyState } from "@/components/EmptyState";
-import { FilterChip } from "@/components/FilterChip";
+import { CategoryShowcaseGrid, PopularSearchPill, SearchHero, SectionLabel, SEARCH_PAD } from "@/components/search/SearchHome";
 import { FreshnessStoryCard } from "@/components/FreshnessStoryCard";
 import { RecommendationRail } from "@/components/RecommendationRail";
 import { MiniProductTile } from "@/components/MiniProductTile";
@@ -16,12 +16,14 @@ import { useAllProducts, useCategories, useProducts } from "@/features/catalog/u
 import { useAddresses } from "@/features/address/useAddresses";
 import { useRecentSearches } from "@/features/catalog/useRecentSearches";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
+import { useVoiceSearch } from "@/hooks/useVoiceSearch";
 import { RELATED_PRODUCTS, DEFAULT_QUICK_SEARCH_TERMS } from "@/utils/relatedProducts";
 import { colors, radius, spacing, typography } from "@/theme";
 
 export default function SearchScreen() {
   const router = useRouter();
   const [query, setQuery] = useState("");
+  const voice = useVoiceSearch(setQuery);
   const debouncedQuery = useDebouncedValue(query.trim(), 350);
   const { recent, addRecent, clearRecent } = useRecentSearches();
   const { data: addresses } = useAddresses();
@@ -69,23 +71,11 @@ export default function SearchScreen() {
         onCartPress={() => router.push("/cart")}
       />
 
-      {!searchEnabled ? (
-        <View style={styles.heroWrap}>
-          <Text variant="eyebrow" color={colors.accentDark}>
-            SEARCH
-          </Text>
-          <Text variant="displayL" style={styles.heroTitle}>
-            What are you{"\n"}
-            <Text variant="script" color={colors.primary}>
-              looking for?
-            </Text>
-          </Text>
-        </View>
-      ) : null}
+      {!searchEnabled ? <SearchHero /> : null}
 
       <View style={[styles.searchRow, !searchEnabled && styles.searchRowHero]}>
         <View style={[styles.searchField, !searchEnabled && styles.searchFieldHero]}>
-          <Feather name="search" size={16} color={colors.textMuted} />
+          <Feather name="search" size={22} color={colors.primaryDark} />
           <TextInput
             style={styles.searchInput}
             placeholder="Search for atta, rice, milk..."
@@ -95,25 +85,31 @@ export default function SearchScreen() {
             onSubmitEditing={handleSubmit}
             returnKeyType="search"
             autoCapitalize="none"
-            autoFocus
           />
           {query.length > 0 ? (
             <Pressable onPress={() => setQuery("")} hitSlop={8} accessibilityRole="button" accessibilityLabel="Clear search">
               <Feather name="x" size={16} color={colors.textMuted} />
             </Pressable>
           ) : null}
+          <Pressable
+            onPress={voice.toggle}
+            hitSlop={8}
+            style={styles.micButton}
+            accessibilityRole="button"
+            accessibilityLabel={voice.listening ? "Stop voice search" : "Search by voice"}
+          >
+            <Feather name="mic" size={22} color={voice.listening ? colors.primary : colors.textMuted} />
+          </Pressable>
         </View>
       </View>
 
       {!searchEnabled ? (
         <ScrollView showsVerticalScrollIndicator={false}>
-          <View style={styles.section}>
-            <Text variant="eyebrow" color={colors.accentDark}>
-              POPULAR SEARCHES
-            </Text>
-            <View style={styles.chipRow}>
+          <View style={styles.popularSection}>
+            <SectionLabel>POPULAR SEARCHES</SectionLabel>
+            <View style={styles.pillRow}>
               {DEFAULT_QUICK_SEARCH_TERMS.map((term) => (
-                <FilterChip key={term} label={term} selected={false} onPress={() => handleQuickTerm(term)} />
+                <PopularSearchPill key={term} term={term} onPress={() => handleQuickTerm(term)} />
               ))}
             </View>
           </View>
@@ -147,18 +143,14 @@ export default function SearchScreen() {
           ) : null}
 
           {categories && categories.length > 0 ? (
-            <View style={styles.section}>
-              <Text variant="eyebrow" color={colors.accentDark}>
-                BROWSE BY CATEGORY
-              </Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.categoryRow}>
-                {categories.map((category) => (
-                  <Pressable key={category.id} style={styles.categoryChip} onPress={() => router.push(`/category/${category.id}`)}>
-                    <Text variant="bodySmall">{category.name}</Text>
-                    <Feather name="arrow-up-right" size={12} color={colors.textSecondary} />
-                  </Pressable>
-                ))}
-              </ScrollView>
+            <View style={styles.categorySection}>
+              <SectionLabel>BROWSE BY CATEGORY</SectionLabel>
+              <View style={styles.categoryGridWrap}>
+                <CategoryShowcaseGrid
+                  categories={categories}
+                  onPress={(id) => router.push(`/category/${id}`)}
+                />
+              </View>
             </View>
           ) : null}
         </ScrollView>
@@ -208,10 +200,8 @@ export default function SearchScreen() {
 }
 
 const styles = StyleSheet.create({
-  heroWrap: { paddingHorizontal: spacing.base, marginTop: spacing.xl },
-  heroTitle: { marginTop: spacing.sm },
-  searchRow: { paddingHorizontal: spacing.base, marginTop: spacing.sm },
-  searchRowHero: { marginTop: spacing.xl },
+  searchRow: { paddingHorizontal: SEARCH_PAD, marginTop: spacing.sm },
+  searchRowHero: { marginTop: 0 },
   searchField: {
     flexDirection: "row",
     alignItems: "center",
@@ -222,7 +212,32 @@ const styles = StyleSheet.create({
     borderRadius: radius.card,
     paddingHorizontal: spacing.md,
   },
-  searchFieldHero: { height: 56, borderColor: colors.textPrimary },
+  // Landing design: white pill, soft shadow, no outline.
+  searchFieldHero: {
+    height: 51,
+    borderRadius: 26,
+    borderWidth: 0,
+    paddingHorizontal: 16,
+    shadowColor: "#143326",
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 4,
+  },
+  micButton: {
+    height: 28,
+    width: 50,
+    marginLeft: spacing.sm,
+    marginRight: -16,
+    alignItems: "center",
+    justifyContent: "center",
+    borderLeftWidth: 1,
+    borderLeftColor: colors.divider,
+  },
+  popularSection: { marginTop: 42 },
+  pillRow: { flexDirection: "row", flexWrap: "wrap", gap: 10, paddingHorizontal: SEARCH_PAD, marginTop: 20 },
+  categorySection: { marginTop: 42, paddingBottom: 28 },
+  categoryGridWrap: { marginTop: 22 },
   searchInput: { flex: 1, marginLeft: spacing.sm, ...typography.body, color: colors.textPrimary, padding: 0 },
   section: { paddingHorizontal: spacing.base, marginTop: spacing["2xl"] },
   chipRow: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm, marginTop: spacing.base },

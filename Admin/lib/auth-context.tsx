@@ -111,6 +111,39 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
   }, [rejectSession]);
 
+  // The SDK's own refresh timer is throttled in background tabs and stops
+  // across sleep, so the cached token can outlive its 1h life and the next
+  // save fails with TOKEN_EXPIRED. Re-check whenever the tab comes back, the
+  // network returns, and every few minutes; getIdToken() only hits the
+  // network when the token is near expiry.
+  useEffect(() => {
+    if (missingFirebaseConfig.length) return;
+    const auth = firebaseAuth();
+    const refresh = () => {
+      const fbUser = auth.currentUser;
+      if (!fbUser) return;
+      fbUser
+        .getIdToken()
+        .then((token) => {
+          tokenRef.current = token;
+        })
+        .catch(() => undefined);
+    };
+    const onVisible = () => {
+      if (document.visibilityState === "visible") refresh();
+    };
+    const timer = window.setInterval(refresh, 5 * 60 * 1000);
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("focus", refresh);
+    window.addEventListener("online", refresh);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("focus", refresh);
+      window.removeEventListener("online", refresh);
+    };
+  }, []);
+
   const login = useCallback(async (identifier: string, password: string) => {
     setState((s) => ({ ...s, error: null }));
     const auth = firebaseAuth();

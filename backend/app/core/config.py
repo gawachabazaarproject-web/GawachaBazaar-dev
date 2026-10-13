@@ -49,17 +49,35 @@ class Settings(BaseSettings):
     RAZORPAY_BASE_URL: str = "https://api.razorpay.com/v1"
     RAZORPAY_TIMEOUT_SECONDS: float = 10.0
 
-    # Delivery fee = DELIVERY_BASE_FEE + DELIVERY_PER_KM * driving km from the
-    # warehouse (see app/services/delivery.py). Without warehouse coordinates
-    # checkout refuses rather than guessing a fee. The default routing host is
-    # the free OSRM demo server - point DELIVERY_ROUTING_BASE_URL at your own
-    # OSRM/compatible instance for production traffic.
-    WAREHOUSE_LATITUDE: float | None = None
-    WAREHOUSE_LONGITUDE: float | None = None
+    # Delivery pricing + the "Bazaar" offer. A basket with at least
+    # FREE_DELIVERY_MIN_ITEMS DIFFERENT PRODUCTS ships free (a product bought
+    # in several sizes/quantities still counts once); smaller baskets pay
+    # DELIVERY_BASE_FEE + DELIVERY_PER_KM per km of road distance
+    # from the packing point to the delivery address (distance counted up
+    # to DELIVERY_MAX_CHARGED_KM, so one bad coordinate can never produce a
+    # absurd fee). PACKING_POINT_LATITUDE/LONGITUDE must be set for the
+    # per-km part to apply; without them (or without GPS on the address)
+    # only the base fee is charged. A customer with BAZAAR_PLUS_ORDERS_REQUIRED
+    # Bazaar orders (each with >= FREE_DELIVERY_MIN_ITEMS different products)
+    # in the current calendar month (BAZAAR_TIMEZONE) is eligible for
+    # Gawacha Bazaar+.
+    FREE_DELIVERY_MIN_ITEMS: int = 15
     DELIVERY_BASE_FEE: Decimal = Decimal("20")
     DELIVERY_PER_KM: Decimal = Decimal("10")
-    DELIVERY_ROUTING_BASE_URL: str = "https://router.project-osrm.org"
-    DELIVERY_ROUTING_TIMEOUT_SECONDS: float = 5.0
+    DELIVERY_MAX_CHARGED_KM: float = 30.0
+    # Fallback origin; the admin-chosen packing point (Settings page) wins.
+    PACKING_POINT_LATITUDE: float | None = None
+    PACKING_POINT_LONGITUDE: float | None = None
+    # Road-distance routing. GOOGLE_MAPS_API_KEY (Distance Matrix API) is used
+    # when set; otherwise OSRM_BASE_URL (the public demo server is fine for
+    # testing only - self-host or use a paid router in production). If routing
+    # fails, straight-line distance x DELIVERY_ROAD_FACTOR is charged instead.
+    GOOGLE_MAPS_API_KEY: str = ""
+    OSRM_BASE_URL: str = "https://router.project-osrm.org"
+    ROUTING_TIMEOUT_SECONDS: float = 3.0
+    DELIVERY_ROAD_FACTOR: float = 1.4
+    BAZAAR_PLUS_ORDERS_REQUIRED: int = 6
+    BAZAAR_TIMEZONE: str = "Asia/Kolkata"
 
     # Cloudinary (image uploads). Empty string means "not configured" -
     # ImageUploadService raises a clear, honest error rather than silently

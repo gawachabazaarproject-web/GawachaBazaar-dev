@@ -1,6 +1,6 @@
 "use client";
 
-import React, { use, useCallback, useEffect, useState } from "react";
+import React, { use, useCallback, useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { hasPermission } from "@/lib/permissions";
@@ -36,6 +36,8 @@ export default function InventoryLotDetailPage({ params }: { params: Promise<{ i
   const [lot, setLot] = useState<AdminInventoryLotDetail | null>(null);
   const [locations, setLocations] = useState<Location[]>([]);
   const [loading, setLoading] = useState(true);
+  // After the first load, refreshes are silent so the page does not blank out.
+  const loadedOnce = useRef(false);
   const [error, setError] = useState<string | null>(null);
   const [dialog, setDialog] = useState<ActiveDialog>(null);
 
@@ -46,7 +48,7 @@ export default function InventoryLotDetailPage({ params }: { params: Promise<{ i
   const load = useCallback(async () => {
     const token = getAccessToken();
     if (!token) return;
-    setLoading(true);
+    if (!loadedOnce.current) setLoading(true); // refreshes after an edit stay in place
     setError(null);
     try {
       setLot(await fetchLotDetail(token, lotId));
@@ -54,6 +56,7 @@ export default function InventoryLotDetailPage({ params }: { params: Promise<{ i
       setError(err instanceof InventoryApiError ? err.message : "Unable to load this inventory lot.");
     } finally {
       setLoading(false);
+      loadedOnce.current = true;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lotId]);

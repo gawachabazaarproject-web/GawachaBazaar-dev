@@ -583,6 +583,8 @@ class PaymentService:
         self, webhook_event: PaymentWebhookEvent, event: GatewayWebhookEvent
     ) -> None:
         transaction = self._resolve_transaction_for_event(event)
+        if transaction is None and self._complete_checkout_session_from_event(webhook_event, event):
+            return
         if transaction is None:
             webhook_event.status = "FAILED"
             webhook_event.processed_at = datetime.now(UTC)
@@ -651,6 +653,34 @@ class PaymentService:
             "PAYMENT_WEBHOOK_PROCESSED: gateway=%s event_id=%s payment_id=%s transaction_id=%s",
             self.gateway.gateway_name, event.event_id, payment.id, transaction.id,
         )
+
+    def _complete_checkout_session_from_event(
+        self, webhook_event: PaymentWebhookEvent, event: GatewayWebhookEvent
+    ) -> bool:
+        """Pay-first online checkout (see app/services/checkout_session.py):
+        a captured payment for a Razorpay order that has no Payment/Order
+        yet belongs to a CheckoutSession. Completing it here is what places
+        the order when the customer paid but the app never called back
+        (UPI app hand-off, app killed, network drop). True = handled."""
+        if event.status != TransactionStatus.SUCCESS or not event.gateway_order_id:
+            return False
+        # Imported here: checkout_session imports this module (circular).
+        from app.services.checkout_session import CheckoutSessionService
+
+        sessions = CheckoutSessionService(self.db, self.gateway)
+        session = sessions.find_session_for_gateway_order(event.gateway_order_id)
+        if session is None:
+            return False
+        webhook_event.status = "PROCESSED"
+        webhook_event.processed_at = datetime.now(UTC)
+        session_id = session.id
+        sessions.complete_from_webhook(session_id)  # commits (event row included)
+        self.db.commit()
+        logger.info(
+            "PAYMENT_WEBHOOK_CHECKOUT_SESSION: gateway=%s event_id=%s session_id=%s",
+            self.gateway.gateway_name, event.event_id, session_id,
+        )
+        return True
 
     def _resolve_transaction_for_event(
         self, event: GatewayWebhookEvent

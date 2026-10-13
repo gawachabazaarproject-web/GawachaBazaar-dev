@@ -1,10 +1,10 @@
 import { useEffect, useRef } from "react";
 import { PaymentSheetHandlers, usePaymentSheetStore } from "@/store/paymentSheetStore";
-import { PaymentCheckoutResponse, RazorpaySuccessPayload } from "@/types/api";
+import { RazorpayCheckoutParams, RazorpaySuccessPayload } from "@/types/api";
 
 interface Props {
   /** The sheet is open while this is set. */
-  checkout: PaymentCheckoutResponse | null;
+  checkout: RazorpayCheckoutParams | null;
   onSuccess: (result: RazorpaySuccessPayload) => void;
   onDismiss: () => void;
 }

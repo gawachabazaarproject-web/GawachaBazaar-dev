@@ -1,44 +1,104 @@
+"""Pure-logic tests for the delivery fee / Bazaar rule (no database)."""
+
 from decimal import Decimal
 
-import httpx
 import pytest
 
-from app.core.config import get_settings
-from app.exceptions.base import BusinessValidationError
+from app.core.config import settings
 from app.services import delivery
+from app.services.delivery import (
+    calculate_delivery_fee,
+    distinct_product_count,
+    haversine_km,
+)
 
 
 @pytest.fixture(autouse=True)
-def _warehouse(monkeypatch):
-    settings = get_settings()
-    monkeypatch.setattr(settings, "WAREHOUSE_LATITUDE", 21.1458)
-    monkeypatch.setattr(settings, "WAREHOUSE_LONGITUDE", 79.0882)
-    delivery._road_km.cache_clear()
+def _delivery_settings(monkeypatch):
+    monkeypatch.setattr(settings, "FREE_DELIVERY_MIN_ITEMS", 15)
+    monkeypatch.setattr(settings, "DELIVERY_BASE_FEE", Decimal("20"))
+    monkeypatch.setattr(settings, "DELIVERY_PER_KM", Decimal("10"))
+    monkeypatch.setattr(settings, "DELIVERY_MAX_CHARGED_KM", 30.0)
+    monkeypatch.setattr(settings, "PACKING_POINT_LATITUDE", 21.1458)
+    monkeypatch.setattr(settings, "PACKING_POINT_LONGITUDE", 79.0882)
+    monkeypatch.setattr(settings, "DELIVERY_ROAD_FACTOR", 1.4)
+    # Default: the router is "down", so tests never touch the network and
+    # distance is straight-line x road factor unless a test installs a router.
+    delivery._cached_road_km.cache_clear()
+
+    def _down(*_a, **_k):
+        raise RuntimeError("router down")
+
+    monkeypatch.setattr(delivery, "_osrm_road_km", _down)
 
 
-def test_fee_is_base_plus_per_km_on_road_distance(monkeypatch):
-    class Resp:
-        def raise_for_status(self): ...
-        def json(self):
-            return {"routes": [{"distance": 5240.0}]}
-
-    monkeypatch.setattr(delivery.httpx, "get", lambda *a, **k: Resp())
-    q = delivery.quote_delivery(Decimal("21.2"), Decimal("79.1"))
-    assert q.method == "road"
-    assert q.distance_km == Decimal("5.2")
-    assert q.fee == Decimal("72.00")  # 20 + 10 * 5.2
+def test_fifteen_items_ships_free():
+    quote = calculate_delivery_fee(15, 21.20, 79.10)
+    assert quote.free_delivery and quote.fee == 0 and quote.items_to_free_delivery == 0
 
 
-def test_falls_back_to_estimate_when_routing_is_down(monkeypatch):
-    def boom(*a, **k):
-        raise httpx.ConnectError("down")
-
-    monkeypatch.setattr(delivery.httpx, "get", boom)
-    q = delivery.quote_delivery(Decimal("21.2"), Decimal("79.1"))
-    assert q.method == "estimate"
-    assert q.fee > Decimal("20")
+def test_fourteen_items_pays_base_plus_per_km():
+    quote = calculate_delivery_fee(14, 21.2358, 79.0882)  # ~10 km north
+    assert not quote.free_delivery
+    assert quote.items_to_free_delivery == 1
+    assert 13.5 < quote.distance_km < 14.5  # ~10 km straight x 1.4 road factor
+    assert quote.fee in (Decimal("160"), Decimal("161"))  # 20 + 10/km, rounded up
 
 
-def test_missing_coordinates_is_rejected():
-    with pytest.raises(BusinessValidationError):
-        delivery.quote_delivery(None, None)
+def test_zero_distance_is_base_fee_only():
+    assert calculate_delivery_fee(3, 21.1458, 79.0882).fee == Decimal("20")
+
+
+def test_missing_gps_falls_back_to_base_fee():
+    quote = calculate_delivery_fee(3, None, None)
+    assert quote.fee == Decimal("20") and quote.distance_estimated
+
+
+def test_unconfigured_packing_point_falls_back_to_base_fee(monkeypatch):
+    monkeypatch.setattr(settings, "PACKING_POINT_LATITUDE", None)
+    quote = calculate_delivery_fee(3, 21.2, 79.1)
+    assert quote.fee == Decimal("20") and quote.distance_estimated
+
+
+def test_absurd_coordinate_is_capped():
+    quote = calculate_delivery_fee(3, 0.0, 0.0)
+    assert quote.fee == Decimal("20") + Decimal("10") * 30
+
+
+def test_same_product_in_several_sizes_counts_once():
+    # 15 cart lines but only 3 different products -> not a Bazaar.
+    assert distinct_product_count([1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3]) == 3
+    assert not calculate_delivery_fee(distinct_product_count([1] * 15), 21.2, 79.1).free_delivery
+
+
+def test_fifteen_different_products_is_a_bazaar():
+    assert calculate_delivery_fee(distinct_product_count(range(15)), 21.2, 79.1).free_delivery
+
+
+def test_month_start_is_first_of_month_in_ist():
+    from datetime import UTC, datetime
+
+    from app.services.bazaar import month_start
+
+    # 2026-10-31 20:00 UTC is already 2026-11-01 01:30 in IST.
+    start = month_start(datetime(2026, 10, 31, 20, 0, tzinfo=UTC))
+    assert (start.year, start.month, start.day, start.hour) == (2026, 11, 1, 0)
+
+
+def test_haversine_known_distance():
+    # Nagpur -> Wardha is roughly 70 km as the crow flies.
+    assert 60 < haversine_km(21.1458, 79.0882, 20.7453, 78.6022) < 80
+
+
+def test_road_distance_comes_from_the_router(monkeypatch):
+    monkeypatch.setattr(delivery, "_osrm_road_km", lambda *a: 12.3)
+    delivery._cached_road_km.cache_clear()
+    quote = calculate_delivery_fee(3, 21.2358, 79.0882)
+    assert quote.distance_km == 12.3
+    assert quote.fee == Decimal("20") + Decimal("10") * Decimal("12.3")
+
+
+def test_router_failure_falls_back_to_straight_line_times_road_factor():
+    quote = calculate_delivery_fee(3, 21.2358, 79.0882)  # ~10 km straight
+    assert 13.0 < quote.distance_km < 15.0
+    assert not quote.distance_estimated

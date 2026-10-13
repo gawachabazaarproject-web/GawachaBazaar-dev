@@ -9,7 +9,7 @@ import {
 } from "@/features/payment/razorpayOptions";
 import { usePaymentSheetStore } from "@/store/paymentSheetStore";
 import { colors } from "@/theme";
-import { PaymentCheckoutResponse } from "@/types/api";
+import { RazorpayCheckoutParams } from "@/types/api";
 
 /**
  * Renders once, at the root layout, over every screen: the Razorpay
@@ -76,7 +76,7 @@ export function RazorpaySheetHost() {
   );
 }
 
-function checkoutPage(checkout: PaymentCheckoutResponse): string {
+function checkoutPage(checkout: RazorpayCheckoutParams): string {
   const options = toInlineScriptJson({ ...buildCheckoutOptions(checkout), webview_intent: true });
   return `<!DOCTYPE html>
 <html><head><meta name="viewport" content="width=device-width, initial-scale=1"></head>

@@ -24,6 +24,8 @@ export interface QuantityStepperProps {
    * content - used for the compact 2-column product card footer, where
    * the control should span the card like the reference design. */
   fullWidth?: boolean;
+  /** Rounded-pill look used on product cards: dark "+" dot + ADD. */
+  pill?: boolean;
 }
 
 /**
@@ -41,6 +43,7 @@ export function QuantityStepper({
   disabled,
   compact = true,
   fullWidth = false,
+  pill = false,
 }: QuantityStepperProps) {
   const scale = useSharedValue(1);
   const bump = () => {
@@ -50,7 +53,7 @@ export function QuantityStepper({
   };
   const animatedStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
 
-  const height = compact ? 32 : 40;
+  const height = pill ? 30 : compact ? 32 : 40;
 
   if (quantity === null || quantity === undefined || quantity <= 0) {
     return (
@@ -70,13 +73,19 @@ export function QuantityStepper({
             styles.addButton,
             { height },
             fullWidth && styles.fullWidth,
+            pill && styles.addPill,
             disabled && styles.disabled,
           ]}
           accessibilityRole="button"
           accessibilityLabel="Add to cart"
         >
-          <Animated.View style={animatedStyle}>
-            <Text variant="button" color={colors.primary}>
+          <Animated.View style={[animatedStyle, pill && styles.pillContent]}>
+            {pill ? (
+              <View style={styles.plusDot}>
+                <Feather name="plus" size={12} color={colors.textInverse} />
+              </View>
+            ) : null}
+            <Text variant="button" color={colors.primary} style={pill ? styles.pillText : undefined}>
               ADD
             </Text>
           </Animated.View>
@@ -88,7 +97,7 @@ export function QuantityStepper({
   return (
     <Animated.View
       entering={FadeIn.duration(150)}
-      style={[styles.stepper, { height }, fullWidth && styles.fullWidth]}
+      style={[styles.stepper, { height }, fullWidth && styles.fullWidth, pill && styles.stepperPill]}
     >
       <Pressable
         onPress={() => {
@@ -103,7 +112,7 @@ export function QuantityStepper({
         <Feather name="minus" size={15} color={colors.textInverse} />
       </Pressable>
       <Animated.View style={[styles.quantityWrap, fullWidth && { flex: 1 }, animatedStyle]}>
-        <Text variant="bodyMedium" color={colors.textInverse}>
+        <Text variant="price" color={colors.textInverse}>
           {quantity}
         </Text>
       </Animated.View>
@@ -135,6 +144,18 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     backgroundColor: colors.surface,
   },
+  addPill: { borderRadius: 999, borderWidth: 1, paddingLeft: 3, paddingRight: 10 },
+  pillContent: { flexDirection: "row", alignItems: "center", gap: 5 },
+  plusDot: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: colors.primary,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  pillText: { fontSize: 12, lineHeight: 16 },
+  stepperPill: { borderRadius: 999, minWidth: 80 },
   disabled: { opacity: 0.4 },
   stepper: {
     flexDirection: "row",

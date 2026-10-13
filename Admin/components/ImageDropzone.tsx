@@ -20,12 +20,18 @@ export function ImageDropzone({
   onRemove,
   disabled,
   label = "Image",
+  validate,
+  hint,
 }: {
   currentUrl?: string | null;
   onUpload: (file: File) => Promise<void>;
   onRemove?: () => Promise<void>;
   disabled?: boolean;
   label?: string;
+  /** Return an error message to reject the file before it is uploaded. */
+  validate?: (file: File) => Promise<string | null>;
+  /** Replaces the default helper line. */
+  hint?: string;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragOver, setDragOver] = useState(false);
@@ -45,6 +51,11 @@ export function ImageDropzone({
       }
       setBusy(true);
       try {
+        const problem = validate ? await validate(file) : null;
+        if (problem) {
+          setError(problem);
+          return;
+        }
         await onUpload(file);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Upload failed.");
@@ -52,7 +63,7 @@ export function ImageDropzone({
         setBusy(false);
       }
     },
-    [onUpload],
+    [onUpload, validate],
   );
 
   const handleRemove = async () => {
@@ -101,7 +112,7 @@ export function ImageDropzone({
             <p className="text-sm text-neutral-600">
               {busy ? "Uploading..." : "Drag & drop an image, or click to browse"}
             </p>
-            <p className="text-xs text-neutral-400">JPEG, PNG, WEBP, or GIF · up to 8 MB</p>
+            <p className="text-xs text-neutral-400">{hint ?? "JPEG, PNG, WEBP, or GIF · up to 8 MB"}</p>
           </>
         )}
         <input

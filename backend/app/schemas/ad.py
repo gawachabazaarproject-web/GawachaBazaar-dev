@@ -17,6 +17,8 @@ class AdResponse(BaseSchema):
     brand_name: str
     image_url: str
     link_url: str | None
+    title: str | None = None
+    subtitle: str | None = None
 
 
 class AdminAdListItemResponse(BaseSchema):
@@ -24,6 +26,8 @@ class AdminAdListItemResponse(BaseSchema):
     brand_name: str
     image_url: str
     link_url: str | None
+    title: str | None = None
+    subtitle: str | None = None
     display_order: int
     status: str
     created_at: datetime
@@ -36,11 +40,15 @@ class AdminAdDetailResponse(AdminAdListItemResponse):
 class CreateAdRequest(BaseSchema):
     brand_name: str = Field(..., min_length=1, max_length=150)
     link_url: str | None = Field(default=None, max_length=2000)
+    title: str | None = Field(default=None, max_length=80)
+    subtitle: str | None = Field(default=None, max_length=140)
     display_order: int = Field(default=0)
 
 
 class UpdateAdRequest(BaseSchema):
     brand_name: str | None = Field(default=None, min_length=1, max_length=150)
     link_url: str | None = Field(default=None, max_length=2000)
+    title: str | None = Field(default=None, max_length=80)
+    subtitle: str | None = Field(default=None, max_length=140)
     display_order: int | None = Field(default=None)
     status: str | None = Field(default=None, description="ACTIVE or INACTIVE")

@@ -30,43 +30,18 @@ address from a customer's book cannot corrupt or orphan any past order.
 from sqlalchemy.orm import Session
 
 from app.exceptions.base import NotFoundError
-from app.core.config import get_settings
 from app.models.address import Address
 from app.schemas.address import (
     AddressListResponse,
     AddressResponse,
     CreateAddressRequest,
-    DeliveryQuoteResponse,
     UpdateAddressRequest,
 )
-from app.services.delivery import quote_delivery
 
 
 class AddressService:
     def __init__(self, db: Session) -> None:
         self.db = db
-
-    def delivery_quote(self, user_id: int, address_id: int) -> DeliveryQuoteResponse:
-        address = self.get_address(user_id, address_id)
-        settings = get_settings()
-        if address.latitude is None or address.longitude is None:
-            return DeliveryQuoteResponse(
-                needs_location=True,
-                distance_km=None,
-                fee=None,
-                base_fee=settings.DELIVERY_BASE_FEE,
-                per_km_fee=settings.DELIVERY_PER_KM,
-                method=None,
-            )
-        quote = quote_delivery(address.latitude, address.longitude)
-        return DeliveryQuoteResponse(
-            needs_location=False,
-            distance_km=quote.distance_km,
-            fee=quote.fee,
-            base_fee=quote.base_fee,
-            per_km_fee=quote.per_km_fee,
-            method=quote.method,
-        )
 
     def list_addresses(self, user_id: int) -> AddressListResponse:
         items = (

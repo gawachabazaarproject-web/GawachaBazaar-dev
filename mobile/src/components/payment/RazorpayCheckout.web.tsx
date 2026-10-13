@@ -1,9 +1,9 @@
 import { useEffect, useRef } from "react";
 import { buildCheckoutOptions, isRazorpaySuccess, RAZORPAY_CHECKOUT_SCRIPT } from "@/features/payment/razorpayOptions";
-import { PaymentCheckoutResponse, RazorpaySuccessPayload } from "@/types/api";
+import { RazorpayCheckoutParams, RazorpaySuccessPayload } from "@/types/api";
 
 interface Props {
-  checkout: PaymentCheckoutResponse | null;
+  checkout: RazorpayCheckoutParams | null;
   onSuccess: (result: RazorpaySuccessPayload) => void;
   onDismiss: () => void;
 }

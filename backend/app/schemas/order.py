@@ -41,6 +41,8 @@ class OrderItemResponse(BaseSchema):
     quantity: Decimal
     unit_price: Decimal
     total_price: Decimal
+    # The product's primary photo today (not stored on the order line).
+    image_url: str | None = None
 
 
 class OrderAddressResponse(BaseSchema):
@@ -60,7 +62,6 @@ class OrderResponse(BaseSchema):
     subtotal_amount: Decimal
     discount_amount: Decimal
     delivery_fee: Decimal
-    delivery_distance_km: Decimal | None
     total_amount: Decimal
     applied_promo_code: str | None
     currency: str

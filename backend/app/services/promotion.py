@@ -402,6 +402,8 @@ class PromotionService:
             customer_title=data.customer_title,
             customer_description=data.customer_description,
             code=data.code,
+            image_url=data.image_url,
+            show_in_carousel=data.show_in_carousel,
             discount_type=data.discount_type,
             discount_value=data.discount_value,
             max_discount_amount=data.max_discount_amount,
@@ -509,6 +511,8 @@ class PromotionService:
             customer_title=source.customer_title,
             customer_description=source.customer_description,
             code=None,  # never reuse the coupon code
+            image_url=source.image_url,
+            show_in_carousel=False,  # a copy is a draft; advertise it deliberately
             discount_type=source.discount_type,
             discount_value=source.discount_value,
             max_discount_amount=source.max_discount_amount,
@@ -639,6 +643,8 @@ class PromotionService:
             description=promotion.description,
             customer_title=promotion.customer_title,
             customer_description=promotion.customer_description,
+            image_url=promotion.image_url,
+            show_in_carousel=promotion.show_in_carousel,
             code=promotion.code,
             discount_type=promotion.discount_type,
             discount_value=promotion.discount_value,

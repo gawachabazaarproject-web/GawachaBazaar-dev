@@ -1,6 +1,8 @@
 import { apiClient } from "./client";
 import {
   CreatePaymentPayload,
+  OnlineCheckoutCompleteResponse,
+  OnlineCheckoutResponse,
   PaymentCheckoutResponse,
   PaymentInitiationResponse,
   PaymentResponse,
@@ -8,6 +10,20 @@ import {
 } from "@/types/api";
 
 export const paymentApi = {
+  /** Pay-first online checkout: prices the cart and returns the Razorpay
+   * order to open. Creates no order. */
+  startOnline: (addressId: number, promoCode?: string | null) =>
+    apiClient
+      .post<OnlineCheckoutResponse>("/payments/online/start", { address_id: addressId, promo_code: promoCode ?? null })
+      .then((r) => r.data),
+  /** After Razorpay reports success: the backend verifies, then places the order. */
+  confirmOnline: (sessionId: number, payload: RazorpaySuccessPayload) =>
+    apiClient
+      .post<OnlineCheckoutCompleteResponse>(`/payments/online/${sessionId}/confirm`, payload)
+      .then((r) => r.data),
+  /** Ask the backend to re-check a checkout with Razorpay (no client proof needed). */
+  verifyOnline: (sessionId: number) =>
+    apiClient.post<OnlineCheckoutCompleteResponse>(`/payments/online/${sessionId}/verify`).then((r) => r.data),
   create: (payload: CreatePaymentPayload) =>
     apiClient.post<PaymentInitiationResponse>("/payments", payload).then((r) => r.data),
 

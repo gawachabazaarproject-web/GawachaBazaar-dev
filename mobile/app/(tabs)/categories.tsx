@@ -40,7 +40,14 @@ export default function CategoriesScreen() {
         <Text variant="body" color={colors.textMuted} style={styles.searchPlaceholder} numberOfLines={1}>
           Search groceries, staples, dairy...
         </Text>
-        <Feather name="mic" size={15} color={colors.textMuted} />
+        <Pressable
+          onPress={() => router.push("/(tabs)/search")}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel="Search by voice"
+        >
+          <Feather name="mic" size={15} color={colors.textMuted} />
+        </Pressable>
       </Pressable>
 
       <View style={styles.heroText}>

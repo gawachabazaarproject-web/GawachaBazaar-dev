@@ -24,11 +24,12 @@ const TILE_WIDTH = 108;
 export function MiniProductTile({ product, onPress }: MiniProductTileProps) {
   const addableVariantId = product.defaultVariantId ?? null;
   const stepper = useVariantStepper(addableVariantId ?? -1);
-  const isAvailable = addableVariantId !== null;
+  const inStock = product.inStock !== false;
+  const isAvailable = addableVariantId !== null && inStock;
   const { marathiName } = getEmbellishment(product.slug);
 
   return (
-    <PressableScale style={styles.tile} onPress={onPress}>
+    <PressableScale style={[styles.tile, !inStock && styles.soldOut]} onPress={onPress}>
       <Image
         source={product.imageUrl ?? undefined}
         style={styles.image}
@@ -73,6 +74,8 @@ export function MiniProductTile({ product, onPress }: MiniProductTileProps) {
 
 const styles = StyleSheet.create({
   tile: { width: TILE_WIDTH },
+  // Sold out: fade the tile to grey; its add button is hidden.
+  soldOut: { opacity: 0.5 },
   image: { width: TILE_WIDTH, height: TILE_WIDTH, borderRadius: radius.card, backgroundColor: colors.background },
   name: { marginTop: spacing.sm },
   footer: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: spacing.xs },

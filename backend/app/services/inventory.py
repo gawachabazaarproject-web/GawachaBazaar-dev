@@ -124,6 +124,8 @@ class InventoryService:
             state=data.state,
             postal_code=data.postal_code,
             status=data.status,
+            latitude=data.latitude,
+            longitude=data.longitude,
         )
         self.db.add(location)
         try:
@@ -143,6 +145,11 @@ class InventoryService:
         update_data = data.model_dump(exclude_unset=True)
         for field, value in update_data.items():
             setattr(location, field, value)
+        # A deactivated or un-pinned location can no longer be the delivery origin.
+        if location.is_packing_point and (
+            location.status != "ACTIVE" or location.latitude is None or location.longitude is None
+        ):
+            location.is_packing_point = False
 
         try:
             self.db.commit()
@@ -151,6 +158,23 @@ class InventoryService:
             raise ConflictError(
                 "An inventory location with this code already exists."
             ) from exc
+        self.db.refresh(location)
+        return InventoryLocationResponse.model_validate(location)
+
+    def set_packing_point(self, location_id: int) -> InventoryLocationResponse:
+        """Make this the one location delivery distance is measured from."""
+        location = self.get_location_or_404(location_id)
+        if location.status != "ACTIVE":
+            raise BusinessValidationError("Only an active location can be the packing point.")
+        if location.latitude is None or location.longitude is None:
+            raise BusinessValidationError(
+                "Set this location's map coordinates before making it the packing point."
+            )
+        self.db.query(InventoryLocation).filter(
+            InventoryLocation.is_packing_point.is_(True), InventoryLocation.id != location.id
+        ).update({InventoryLocation.is_packing_point: False})
+        location.is_packing_point = True
+        self.db.commit()
         self.db.refresh(location)
         return InventoryLocationResponse.model_validate(location)
 

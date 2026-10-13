@@ -24,11 +24,12 @@ export interface HorizontalProductCardProps {
 export function HorizontalProductCard({ product, onPress }: HorizontalProductCardProps) {
   const addableVariantId = product.defaultVariantId ?? null;
   const stepper = useVariantStepper(addableVariantId ?? -1);
-  const isAvailable = addableVariantId !== null;
+  const inStock = product.inStock !== false;
+  const isAvailable = addableVariantId !== null && inStock;
   const { marathiName, origin } = getEmbellishment(product.slug);
 
   return (
-    <PressableScale style={styles.card} onPress={onPress}>
+    <PressableScale style={[styles.card, !inStock && styles.soldOut]} onPress={onPress}>
       <Image
         source={product.imageUrl ?? undefined}
         style={styles.image}
@@ -63,6 +64,10 @@ export function HorizontalProductCard({ product, onPress }: HorizontalProductCar
               onDecrement={stepper.decrement}
               disabled={stepper.isMutating}
             />
+          ) : !inStock ? (
+            <Text variant="captionMedium" color={colors.textMuted}>
+              Sold out
+            </Text>
           ) : null}
         </View>
       </View>
@@ -80,6 +85,8 @@ const styles = StyleSheet.create({
     marginHorizontal: spacing.base,
     gap: spacing.md,
   },
+  // Sold out: fade the whole row to grey; it cannot be added.
+  soldOut: { opacity: 0.5 },
   image: { width: 88, height: 88, borderRadius: radius.card, backgroundColor: colors.background },
   info: { flex: 1, justifyContent: "center", gap: 2 },
   footer: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: spacing.sm },

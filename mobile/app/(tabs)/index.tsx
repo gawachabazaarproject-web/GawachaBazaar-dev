@@ -1,5 +1,5 @@
-import React, { useMemo, useState } from "react";
-import { Pressable, RefreshControl, ScrollView, StyleSheet, View } from "react-native";
+import React, { useMemo, useRef, useState } from "react";
+import { Linking, Pressable, RefreshControl, ScrollView, StyleSheet, View } from "react-native";
 import { useRouter } from "expo-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { Feather } from "@expo/vector-icons";
@@ -8,16 +8,16 @@ import { Screen } from "@/components/Screen";
 import { Text } from "@/components/Text";
 import { ProductCardData, productSummaryToCardData } from "@/components/ProductCard";
 import { ProductCardSkeleton, Skeleton } from "@/components/Skeleton";
-import { CART_BAR_CLEARANCE } from "@/components/CartBar";
 import { ShopHeader } from "@/components/ShopHeader";
 import { HorizontalProductCard } from "@/components/HorizontalProductCard";
 import { PromoCarousel } from "@/components/home/PromoCarousel";
-import { BrandStatement } from "@/components/home/BrandStatement";
 import { CategoryPanel } from "@/components/home/CategoryPanel";
 import { SectionHeading } from "@/components/home/SectionHeading";
 import { ProductRail } from "@/components/home/ProductRail";
+import { BazaarSection } from "@/components/home/BazaarSection";
 import { VillageStory } from "@/components/home/VillageStory";
 import { ClosingCTA } from "@/components/home/ClosingCTA";
+import { HomeFooter } from "@/components/home/HomeFooter";
 import { WholesaleToggle } from "@/components/home/WholesaleToggle";
 import { BrandAdsCarousel } from "@/components/home/BrandAdsCarousel";
 import { WholesaleProductCard } from "@/components/home/WholesaleProductCard";
@@ -30,6 +30,7 @@ const HARVEST_SLUGS = ["ripe-tomatoes", "fresh-fenugreek", "green-peas", "chilli
 const SPECIALTY_SLUGS = ["fresh-oranges", "toned-milk", "toor-dal"];
 
 export default function HomeScreen() {
+  const scrollRef = useRef<ScrollView>(null);
   const router = useRouter();
   const queryClient = useQueryClient();
   const [refreshing, setRefreshing] = useState(false);
@@ -67,6 +68,7 @@ export default function HomeScreen() {
   return (
     <Screen edges={["top"]}>
       <ScrollView
+        ref={scrollRef}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.primary} />}
@@ -86,7 +88,13 @@ export default function HomeScreen() {
         </Pressable>
 
         <View style={styles.carouselWrap}>
-          <PromoCarousel onSlidePress={() => router.push("/(tabs)/categories")} />
+          <PromoCarousel
+            onSlidePress={(link) => {
+              if (link && /^https?:\/\//.test(link)) Linking.openURL(link).catch(() => undefined);
+              else if (link && link.startsWith("/")) router.push(link as never);
+              else router.push("/(tabs)/categories");
+            }}
+          />
         </View>
 
         <WholesaleToggle mode={mode} onChange={setMode} />
@@ -112,8 +120,6 @@ export default function HomeScreen() {
             </Pressable>
           </View>
         ) : null}
-
-        {mode === "regular" ? <BrandStatement /> : null}
 
         {/* Shop by category */}
         <SectionHeading index="01 / 05" eyebrow="EXPLORE" title="Shop by" scriptSuffix="category." onSeeAll={() => router.push("/(tabs)/categories")} />
@@ -168,8 +174,6 @@ export default function HomeScreen() {
           />
         )}
 
-        {mode === "regular" ? <VillageStory onPress={() => router.push("/(tabs)/categories")} /> : null}
-
         {/* Best sellers */}
         <ProductRail
           index="04 / 05"
@@ -187,6 +191,9 @@ export default function HomeScreen() {
               : undefined
           }
         />
+
+        {/* Bazaar offer: 15+ items = free delivery, 6 Bazaars/week = Bazaar+ */}
+        {mode === "regular" ? <BazaarSection onStartPress={() => router.push("/bazaar" as never)} /> : null}
 
         {/* Vidarbha Regional Specialties */}
         {specialtyProducts.length > 0 ? (
@@ -212,14 +219,18 @@ export default function HomeScreen() {
           </View>
         ) : null}
 
+        {mode === "regular" ? <VillageStory onPress={() => router.push("/(tabs)/categories")} /> : null}
+
         <ClosingCTA onPress={() => router.push("/(tabs)/categories")} />
+        <HomeFooter onBackToTop={() => scrollRef.current?.scrollTo({ y: 0, animated: true })} />
       </ScrollView>
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  scrollContent: { paddingBottom: spacing.xl + CART_BAR_CLEARANCE },
+  // No bottom padding: HomeFooter (dark panel) owns the bottom clearance.
+  scrollContent: { paddingBottom: 0 },
   searchBar: {
     flexDirection: "row",
     alignItems: "center",
@@ -232,7 +243,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     height: 48,
   },
-  carouselWrap: { marginTop: spacing.lg },
+  carouselWrap: { marginTop: spacing.lg, marginBottom: spacing.xl },
   categoryRow: { paddingHorizontal: spacing.base, gap: spacing.sm, flexDirection: "row" },
   skeletonRail: { flexDirection: "row", gap: spacing.md, paddingHorizontal: spacing.base, marginTop: spacing.xl },
   specialties: { marginTop: spacing.xl },
