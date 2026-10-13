@@ -63,7 +63,15 @@ export function FulfillmentActions({
       await action(token);
       onChanged();
     } catch (err) {
-      setError(err instanceof FulfillmentApiError ? err.message : "Unable to update this delivery.");
+      // A 409 ("Cannot ... from status X") means this page was out of date
+      // (another tab/admin already moved the delivery) - resync so the
+      // screen shows the real status instead of a stale one.
+      if (err instanceof FulfillmentApiError && err.message.includes("from status")) {
+        setError("This delivery was already updated by someone else - the page has been refreshed.");
+        onChanged();
+      } else {
+        setError(err instanceof FulfillmentApiError ? err.message : "Unable to update this delivery.");
+      }
     } finally {
       setBusy(false);
     }
