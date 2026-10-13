@@ -21,7 +21,7 @@ export function useOrder(id: number | null) {
     queryKey: ["order", id],
     queryFn: () => orderApi.get(id as number),
     enabled: id !== null,
-    refetchInterval: 30_000, // light polling so tracking feels "live" without pretending to have push/GPS
+    refetchInterval: 10_000, // fallback poll for when the realtime socket is down
   });
 }
 
@@ -30,7 +30,7 @@ export function useOrderFulfillment(id: number | null) {
     queryKey: ["order", id, "fulfillment"],
     queryFn: () => orderApi.getFulfillment(id as number),
     enabled: id !== null,
-    refetchInterval: 30_000,
+    refetchInterval: 10_000,
   });
 }
 

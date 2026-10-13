@@ -1,5 +1,5 @@
 import { apiClient } from "./client";
-import { AddressListResponse, AddressResponse, CreateAddressPayload, UpdateAddressPayload } from "@/types/api";
+import { AddressListResponse, DeliveryQuote, AddressResponse, CreateAddressPayload, UpdateAddressPayload } from "@/types/api";
 
 export const addressApi = {
   list: () => apiClient.get<AddressListResponse>("/addresses").then((r) => r.data.items),
@@ -11,6 +11,9 @@ export const addressApi = {
 
   update: (id: number, payload: UpdateAddressPayload) =>
     apiClient.patch<AddressResponse>(`/addresses/${id}`, payload).then((r) => r.data),
+
+  deliveryQuote: (id: number) =>
+    apiClient.get<DeliveryQuote>(`/addresses/${id}/delivery-quote`).then((r) => r.data),
 
   remove: (id: number) => apiClient.delete(`/addresses/${id}`).then(() => undefined),
 };

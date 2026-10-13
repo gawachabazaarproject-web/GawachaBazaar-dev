@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
+import { BusyLabel, Spinner } from "@/components/Spinner";
 import { useAuth } from "@/lib/auth-context";
 import { hasPermission } from "@/lib/permissions";
 import { FulfillmentInfo } from "@/lib/orders";
@@ -62,7 +63,15 @@ export function FulfillmentActions({
       await action(token);
       onChanged();
     } catch (err) {
-      setError(err instanceof FulfillmentApiError ? err.message : "Unable to update this delivery.");
+      // A 409 ("Cannot ... from status X") means this page was out of date
+      // (another tab/admin already moved the delivery) - resync so the
+      // screen shows the real status instead of a stale one.
+      if (err instanceof FulfillmentApiError && err.message.includes("from status")) {
+        setError("This delivery was already updated by someone else - the page has been refreshed.");
+        onChanged();
+      } else {
+        setError(err instanceof FulfillmentApiError ? err.message : "Unable to update this delivery.");
+      }
     } finally {
       setBusy(false);
     }
@@ -74,13 +83,13 @@ export function FulfillmentActions({
   if (next && canAssign) {
     content = (
       <button disabled={busy} onClick={() => run((t) => advanceFulfillment(t, fulfillment.id, next.status))} className={primary}>
-        {next.label}
+        {busy ? <BusyLabel>Updating...</BusyLabel> : next.label}
       </button>
     );
   } else if (needsPartners) {
     content =
       partners === null ? (
-        <p className="text-sm text-neutral-400">Loading delivery partners...</p>
+        <p className="inline-flex items-center gap-2 text-sm text-neutral-500"><Spinner />Loading delivery partners...</p>
       ) : partners.length === 0 ? (
         <p className="text-sm text-neutral-600">
           No active staff member has the Delivery Partner role. Add one under Staff (or give yourself that role), then come back here.
@@ -96,21 +105,21 @@ export function FulfillmentActions({
             onClick={() => run((t) => assignDeliveryPartner(t, fulfillment.id, Number(partnerId)))}
             className={primary}
           >
-            Assign
+            {busy ? <BusyLabel>Assigning...</BusyLabel> : "Assign"}
           </button>
         </div>
       );
   } else if (status === "ASSIGNED" && canFulfill) {
     content = (
       <button disabled={busy} onClick={() => run((t) => markOutForDelivery(t, fulfillment.id))} className={primary}>
-        Mark out for delivery
+        {busy ? <BusyLabel>Updating...</BusyLabel> : "Mark out for delivery"}
       </button>
     );
   } else if (status === "OUT_FOR_DELIVERY" && canFulfill) {
     content = (
       <div>
         <button disabled={busy} onClick={() => run((t) => confirmDelivery(t, fulfillment.id))} className={primary}>
-          {isCashOnDelivery ? "Confirm delivered - cash collected" : "Confirm delivered"}
+          {busy ? <BusyLabel>Confirming...</BusyLabel> : isCashOnDelivery ? "Confirm delivered - cash collected" : "Confirm delivered"}
         </button>
         <p className="mt-2 text-xs text-neutral-500">
           This can&apos;t be undone. It deducts the stock

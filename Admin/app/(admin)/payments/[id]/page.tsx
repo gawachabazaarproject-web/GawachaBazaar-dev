@@ -19,6 +19,7 @@ import { ErrorState } from "@/components/ErrorState";
 import { StatusBadge } from "@/components/StatusBadge";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { Icon } from "@/components/icons";
+import { BusyLabel, PageLoader } from "@/components/Spinner";
 
 export default function PaymentDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -127,7 +128,7 @@ export default function PaymentDetailPage({ params }: { params: Promise<{ id: st
   };
 
   if (loading) {
-    return <div className="animate-pulse text-sm text-neutral-400">Loading payment...</div>;
+    return <PageLoader label="Loading payment..." />;
   }
   if (error || !payment) {
     return <ErrorState message={error ?? "Payment not found."} onRetry={load} />;
@@ -219,7 +220,7 @@ export default function PaymentDetailPage({ params }: { params: Promise<{ id: st
                   onClick={handleApprove}
                   className="rounded border border-status-success/40 px-3 py-1.5 text-sm font-semibold text-status-success hover:bg-status-successLight disabled:opacity-50"
                 >
-                  {acting ? "Working..." : "Approve refund"}
+                  {acting ? <BusyLabel>Working...</BusyLabel> : "Approve refund"}
                 </button>
               )}
               {actions.reject && (
@@ -237,7 +238,7 @@ export default function PaymentDetailPage({ params }: { params: Promise<{ id: st
                   onClick={handleProcess}
                   className="rounded border border-primary-700/40 px-3 py-1.5 text-sm font-semibold text-primary-800 hover:bg-primary-50 disabled:opacity-50"
                 >
-                  {acting ? "Working..." : "Process refund"}
+                  {acting ? <BusyLabel>Working...</BusyLabel> : "Process refund"}
                 </button>
               )}
               {actions.sync && (
@@ -246,7 +247,7 @@ export default function PaymentDetailPage({ params }: { params: Promise<{ id: st
                   onClick={handleSync}
                   className="rounded border border-primary-700/40 px-3 py-1.5 text-sm font-semibold text-primary-800 hover:bg-primary-50 disabled:opacity-50"
                 >
-                  {acting ? "Checking..." : "Check status with Razorpay"}
+                  {acting ? <BusyLabel>Checking...</BusyLabel> : "Check status with Razorpay"}
                 </button>
               )}
             </div>

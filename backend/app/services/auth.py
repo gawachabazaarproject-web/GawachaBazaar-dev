@@ -321,7 +321,9 @@ class AuthService:
         # Keep copies in step with Firebase when the customer adds/changes
         # a verified email or phone there. Unique violations surface as
         # IntegrityError -> ConflictError in sync_user.
-        if verified_email and user.email != verified_email:
+        # Only fill a missing email: overwriting would silently undo an
+        # admin's direct contact edit on the customer's next sign-in.
+        if verified_email and not user.email:
             user.email = verified_email
         if phone and user.phone != phone:
             user.phone = phone

@@ -200,6 +200,7 @@ class FirebaseAdminGateway(FirebaseGateway):
             logger.error("FIREBASE_VERIFY_CREDENTIALS_FAILED: %s", type(exc).__name__)
             raise FirebaseUnavailableError("Firebase credentials are not configured.") from exc
 
+        self._assert_not_revoked(claims, app)
         firebase_claims = claims.get("firebase") or {}
         return FirebaseIdentity(
             uid=claims["uid"],
@@ -209,6 +210,43 @@ class FirebaseAdminGateway(FirebaseGateway):
             name=claims.get("name"),
             sign_in_provider=firebase_claims.get("sign_in_provider"),
         )
+
+    _REVOCATION_TTL_SECONDS = 60
+    _revocation_cache: dict[str, tuple[float, int, bool]] = {}
+
+    def _assert_not_revoked(self, claims: dict, app) -> None:
+        """Reject tokens issued before the user's refresh tokens were revoked
+        (password reset, admin sign-out) or for a disabled Firebase user.
+        verify_id_token alone only checks signature/expiry, so without this a
+        stolen token would live out its full hour. The lookup is cached per
+        uid for a minute so it costs one Firebase call per user per minute,
+        not one per request."""
+        import time
+
+        from firebase_admin import auth
+        from google.auth import exceptions as google_auth_exceptions
+
+        uid = claims["uid"]
+        now = time.monotonic()
+        cached = self._revocation_cache.get(uid)
+        if cached is None or now - cached[0] > self._REVOCATION_TTL_SECONDS:
+            try:
+                record = auth.get_user(uid, app=app)
+            except (auth.UserNotFoundError, ValueError) as exc:
+                raise FirebaseTokenError("invalid") from exc
+            except (google_auth_exceptions.GoogleAuthError, Exception) as exc:  # noqa: BLE001
+                # Don't lock everyone out if the lookup itself is down; the
+                # token signature was already verified.
+                logger.warning("FIREBASE_REVOCATION_CHECK_FAILED: %s", type(exc).__name__)
+                return
+            valid_after = int(getattr(record, "tokens_valid_after_timestamp", 0) or 0)
+            cached = (now, valid_after, bool(record.disabled))
+            if len(self._revocation_cache) > 5000:
+                self._revocation_cache.clear()
+            self._revocation_cache[uid] = cached
+        _, valid_after, disabled = cached
+        if disabled or int(claims.get("iat", 0)) < valid_after:
+            raise FirebaseTokenError("revoked")
 
     def create_user(
         self, *, email: str, password: str | None, display_name: str | None, email_verified: bool

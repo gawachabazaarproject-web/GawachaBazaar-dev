@@ -10,12 +10,15 @@ import {
   createProduct,
   createVariant,
   fetchCategories,
+  ratePerBaseUnit,
+  sizeLabel,
   updateProduct,
   uploadProductImage,
   VARIANT_UNITS,
 } from "@/lib/products";
 import { PageHeader } from "@/components/PageHeader";
 import { Icon } from "@/components/icons";
+import { BusyLabel } from "@/components/Spinner";
 
 function slugify(value: string): string {
   return value
@@ -26,14 +29,13 @@ function slugify(value: string): string {
 }
 
 interface VariantRow {
-  name: string;
   unit: string;
   quantity: string;
   price: string;
   sku: string;
 }
 
-const emptyVariant = (): VariantRow => ({ name: "", unit: "KG", quantity: "1", price: "", sku: "" });
+const emptyVariant = (): VariantRow => ({ unit: "KG", quantity: "", price: "", sku: "" });
 
 const inputCls =
   "w-full rounded border border-neutral-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500";
@@ -78,9 +80,9 @@ export default function NewProductPage() {
       setError("Choose a category.");
       return;
     }
-    const usable = variants.filter((v) => v.name.trim() || v.price.trim());
-    if (usable.length === 0 || usable.some((v) => !v.name.trim() || !v.price.trim())) {
-      setError("Give every size/pack a name and a price.");
+    const usable = variants.filter((v) => v.quantity.trim() || v.price.trim());
+    if (usable.length === 0 || usable.some((v) => !(Number(v.quantity) > 0) || !(Number(v.price) > 0))) {
+      setError("Give every size an amount and a price, both greater than 0.");
       return;
     }
 
@@ -106,13 +108,14 @@ export default function NewProductPage() {
 
       for (let i = 0; i < usable.length; i++) {
         const v = usable[i];
-        setProgress(`Adding ${v.name.trim()}...`);
-        const sku = (v.sku.trim() || `${effectiveSlug}-${slugify(v.name)}`).toUpperCase();
+        const label = sizeLabel(v.quantity, v.unit);
+        setProgress(`Adding ${label}...`);
+        const sku = (v.sku.trim() || `${effectiveSlug}-${slugify(label)}`).toUpperCase();
         const created = await createVariant(token, product.id, {
-          name: v.name.trim(),
+          name: label,
           sku,
           unit: v.unit,
-          quantity: v.quantity || "1",
+          quantity: v.quantity,
           status: "ACTIVE",
         });
         await createPrice(token, created.id, v.price.trim());
@@ -178,53 +181,59 @@ export default function NewProductPage() {
             Sizes &amp; prices <span className="text-status-danger">*</span>
           </label>
           <div className="space-y-2">
-            {variants.map((v, i) => (
-              <div key={i} className="grid grid-cols-12 items-center gap-2">
-                <input
-                  value={v.name}
-                  onChange={(e) => updateVariant(i, { name: e.target.value })}
-                  placeholder="Name (e.g. 1 kg)"
-                  className={`${inputCls} col-span-4`}
-                />
-                <input
-                  type="number"
-                  min="0"
-                  step="any"
-                  value={v.quantity}
-                  onChange={(e) => updateVariant(i, { quantity: e.target.value })}
-                  aria-label="Quantity"
-                  className={`${inputCls} col-span-2`}
-                />
-                <select
-                  value={v.unit}
-                  onChange={(e) => updateVariant(i, { unit: e.target.value })}
-                  aria-label="Unit"
-                  className={`${inputCls} col-span-2 bg-white`}
-                >
-                  {VARIANT_UNITS.map((u) => (
-                    <option key={u} value={u}>{u}</option>
-                  ))}
-                </select>
-                <input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={v.price}
-                  onChange={(e) => updateVariant(i, { price: e.target.value })}
-                  placeholder="₹ Price"
-                  className={`${inputCls} col-span-3`}
-                />
-                <button
-                  type="button"
-                  disabled={variants.length === 1}
-                  onClick={() => setVariants((rows) => rows.filter((_, idx) => idx !== i))}
-                  aria-label="Remove size"
-                  className="col-span-1 text-lg text-neutral-400 hover:text-status-danger disabled:opacity-30"
-                >
-                  ×
-                </button>
-              </div>
-            ))}
+            {variants.map((v, i) => {
+              const rate = ratePerBaseUnit(v.price, v.quantity, v.unit);
+              return (
+                <div key={i}>
+                  <div className="grid grid-cols-12 items-center gap-2">
+                    <input
+                      type="number"
+                      min="0"
+                      step="any"
+                      value={v.quantity}
+                      onChange={(e) => updateVariant(i, { quantity: e.target.value })}
+                      placeholder="Amount (e.g. 250)"
+                      aria-label="Amount"
+                      className={`${inputCls} col-span-4`}
+                    />
+                    <select
+                      value={v.unit}
+                      onChange={(e) => updateVariant(i, { unit: e.target.value })}
+                      aria-label="Unit"
+                      className={`${inputCls} col-span-3 bg-white`}
+                    >
+                      {VARIANT_UNITS.map((u) => (
+                        <option key={u} value={u}>{u}</option>
+                      ))}
+                    </select>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={v.price}
+                      onChange={(e) => updateVariant(i, { price: e.target.value })}
+                      placeholder="₹ Price"
+                      aria-label="Price"
+                      className={`${inputCls} col-span-4`}
+                    />
+                    <button
+                      type="button"
+                      disabled={variants.length === 1}
+                      onClick={() => setVariants((rows) => rows.filter((_, idx) => idx !== i))}
+                      aria-label="Remove size"
+                      className="col-span-1 text-lg text-neutral-400 hover:text-status-danger disabled:opacity-30"
+                    >
+                      ×
+                    </button>
+                  </div>
+                  {rate && Number(v.quantity) > 0 && (
+                    <p className="mt-0.5 text-xs text-neutral-500">
+                      {sizeLabel(v.quantity, v.unit)} for ₹{v.price} · {rate}
+                    </p>
+                  )}
+                </div>
+              );
+            })}
           </div>
           <button
             type="button"
@@ -233,7 +242,7 @@ export default function NewProductPage() {
           >
             + Add another size
           </button>
-          <p className="mt-1 text-xs text-neutral-400">SKUs are generated automatically. Add stock afterwards from Inventory.</p>
+          <p className="mt-1 text-xs text-neutral-400">Enter the amount and pick its unit (e.g. 250 + G). The size name is made for you. SKUs are generated automatically. Add stock afterwards from Inventory.</p>
         </div>
 
         <Field label="Description">
@@ -259,11 +268,11 @@ export default function NewProductPage() {
                 />
               </Field>
               {variants.map((v, i) => (
-                <Field key={i} label={`SKU - ${v.name || `size ${i + 1}`}`}>
+                <Field key={i} label={`SKU - ${v.quantity ? sizeLabel(v.quantity, v.unit) : `size ${i + 1}`}`}>
                   <input
                     value={v.sku}
                     onChange={(e) => updateVariant(i, { sku: e.target.value })}
-                    placeholder={`${effectiveSlug}-${slugify(v.name)}`.toUpperCase()}
+                    placeholder={`${effectiveSlug}-${slugify(v.quantity ? sizeLabel(v.quantity, v.unit) : "")}`.toUpperCase()}
                     className={`${inputCls} font-mono`}
                   />
                 </Field>
@@ -288,7 +297,7 @@ export default function NewProductPage() {
           disabled={saving}
           className="w-full rounded bg-primary-800 py-2.5 text-sm font-semibold text-white hover:bg-primary-700 disabled:opacity-60"
         >
-          {saving ? progress ?? "Saving..." : "Save product"}
+          {saving ? <BusyLabel>{progress ?? "Saving..."}</BusyLabel> : "Save product"}
         </button>
       </form>
     </div>

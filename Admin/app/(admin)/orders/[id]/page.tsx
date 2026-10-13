@@ -18,6 +18,7 @@ import { StatusBadge } from "@/components/StatusBadge";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { FulfillmentActions } from "@/components/FulfillmentActions";
 import { Icon } from "@/components/icons";
+import { PageLoader } from "@/components/Spinner";
 
 export default function OrderDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -83,7 +84,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
   };
 
   if (loading) {
-    return <div className="animate-pulse text-sm text-neutral-400">Loading order...</div>;
+    return <PageLoader label="Loading order..." />;
   }
   if (error || !order) {
     return <ErrorState message={error ?? "Order not found."} onRetry={load} />;

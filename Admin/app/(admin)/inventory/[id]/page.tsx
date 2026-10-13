@@ -12,6 +12,9 @@ import {
   fetchLotDetail,
   InventoryApiError,
   Location,
+  packCount,
+  packSize,
+  packTotal,
   reconcileStock,
   transferStock,
 } from "@/lib/inventory";
@@ -22,6 +25,7 @@ import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { RemoveStockDialog } from "@/components/RemoveStockDialog";
 import { ReserveLevelEditor } from "@/components/ReserveLevelEditor";
 import { Icon } from "@/components/icons";
+import { BusyLabel, PageLoader } from "@/components/Spinner";
 
 type ActiveDialog = "adjust" | "reconcile" | "transfer" | "remove" | null;
 
@@ -66,7 +70,7 @@ export default function InventoryLotDetailPage({ params }: { params: Promise<{ i
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [load]);
 
-  if (loading) return <div className="animate-pulse text-sm text-neutral-400">Loading inventory...</div>;
+  if (loading) return <PageLoader label="Loading inventory..." />;
   if (error || !lot) return <ErrorState message={error ?? "Inventory lot not found."} onRetry={load} />;
 
   return (
@@ -88,15 +92,15 @@ export default function InventoryLotDetailPage({ params }: { params: Promise<{ i
             <StatusBadge status={lot.operational_status} />
           </div>
           <p className="mt-1 text-sm text-neutral-500">
-            {lot.category_name} · {lot.sku} · {lot.variant_name} ({lot.unit})
+            {lot.category_name} · {lot.sku} · {lot.variant_name} (packs of {packSize(lot.variant_quantity, lot.unit)})
           </p>
         </div>
       </div>
 
       <div className="mb-4 grid grid-cols-3 gap-3">
-        <StockNumber label="On hand" value={lot.on_hand} />
-        <StockNumber label="Reserved" value={lot.reserved} />
-        <StockNumber label="Available" value={lot.available} emphasize />
+        <StockNumber label="On hand" value={packCount(lot.on_hand)} sub={packTotal(lot.on_hand, lot.variant_quantity, lot.unit)} />
+        <StockNumber label="Reserved" value={packCount(lot.reserved)} sub={packTotal(lot.reserved, lot.variant_quantity, lot.unit)} />
+        <StockNumber label="Available" value={packCount(lot.available)} sub={packTotal(lot.available, lot.variant_quantity, lot.unit)} emphasize />
       </div>
 
       <div className="mb-4 flex flex-wrap gap-2">
@@ -184,7 +188,7 @@ export default function InventoryLotDetailPage({ params }: { params: Promise<{ i
             {lot.related_orders.map((o) => (
               <div key={o.order_id} className="flex items-center justify-between py-2 text-sm">
                 <a href={`/orders/${o.order_id}`} className="font-medium text-primary-900 hover:underline">{o.order_number}</a>
-                <span className="text-neutral-600">{o.reserved_quantity} {lot.unit}</span>
+                <span className="text-neutral-600">{packCount(o.reserved_quantity)}</span>
                 <StatusBadge status={o.reservation_status} />
               </div>
             ))}
@@ -218,11 +222,12 @@ function Row({ label, value }: { label: string; value: string }) {
   );
 }
 
-function StockNumber({ label, value, emphasize }: { label: string; value: string; emphasize?: boolean }) {
+function StockNumber({ label, value, sub, emphasize }: { label: string; value: string; sub?: string | null; emphasize?: boolean }) {
   return (
     <div className="rounded border border-neutral-200 bg-white p-4 text-center">
       <p className="text-xs font-medium uppercase tracking-wide text-neutral-500">{label}</p>
       <p className={`mt-1 font-display text-2xl font-semibold ${emphasize ? "text-primary-900" : "text-neutral-600"}`}>{value}</p>
+      {sub && <p className="mt-0.5 text-xs text-neutral-400">= {sub}</p>}
     </div>
   );
 }
@@ -245,9 +250,11 @@ function AdjustDialog({ open, lot, onClose, onDone }: { open: boolean; lot: Admi
 
   if (!open) return null;
 
+  const exceedsStock = direction !== "ADJUSTMENT_IN" && Number(quantity) > Number(lot.on_hand);
+
   const handleConfirm = async () => {
     const token = getAccessToken();
-    if (!token || !quantity) return;
+    if (!token || !quantity || exceedsStock) return;
     setSaving(true);
     setError(null);
     try {
@@ -265,7 +272,7 @@ function AdjustDialog({ open, lot, onClose, onDone }: { open: boolean; lot: Admi
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
       <div className="w-full max-w-sm rounded bg-white p-6 shadow-xl">
         <h2 className="mb-1 font-display text-lg font-semibold text-primary-900">Adjust stock</h2>
-        <p className="mb-4 text-sm text-neutral-500">Current: {lot.on_hand} {lot.unit}</p>
+        <p className="mb-4 text-sm text-neutral-500">Current: {packCount(lot.on_hand)} of {packSize(lot.variant_quantity, lot.unit)}</p>
 
         <div className="mb-3 flex gap-2">
           {(["ADJUSTMENT_IN", "ADJUSTMENT_OUT", "DAMAGE", "WASTE"] as const).map((d) => (
@@ -279,7 +286,17 @@ function AdjustDialog({ open, lot, onClose, onDone }: { open: boolean; lot: Admi
           ))}
         </div>
 
-        <input type="number" value={quantity} onChange={(e) => setQuantity(e.target.value)} placeholder="Quantity" className="mb-3 w-full rounded border border-neutral-300 px-3 py-2 text-sm" />
+        <div className="relative mb-1">
+          <input type="number" value={quantity} onChange={(e) => setQuantity(e.target.value)} placeholder="Number of packs" className="w-full rounded border border-neutral-300 py-2 pl-3 pr-14 text-sm" />
+          <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-neutral-500">packs</span>
+        </div>
+        <p className={`mb-3 text-xs ${exceedsStock ? "text-status-danger" : "text-neutral-400"}`}>
+          {exceedsStock
+            ? `That is more than the ${packCount(lot.on_hand)} on hand.`
+            : `Enter the number of ${packSize(lot.variant_quantity, lot.unit)} packs${
+                Number(quantity) > 0 ? ` - ${packTotal(quantity, lot.variant_quantity, lot.unit)} in total` : ""
+              }.`}
+        </p>
 
         <select value={reason} onChange={(e) => setReason(e.target.value)} className="mb-3 w-full rounded border border-neutral-300 bg-white px-3 py-2 text-sm">
           {ADJUSTMENT_REASONS.map((r) => <option key={r} value={r}>{r}</option>)}
@@ -289,8 +306,8 @@ function AdjustDialog({ open, lot, onClose, onDone }: { open: boolean; lot: Admi
 
         <div className="flex justify-end gap-2">
           <button onClick={onClose} className="rounded border border-neutral-300 px-4 py-2 text-sm">Cancel</button>
-          <button onClick={handleConfirm} disabled={saving || !quantity} className="rounded bg-primary-800 px-4 py-2 text-sm font-semibold text-white disabled:opacity-40">
-            {saving ? "Applying..." : "Apply adjustment"}
+          <button onClick={handleConfirm} disabled={saving || !quantity || exceedsStock} className="rounded bg-primary-800 px-4 py-2 text-sm font-semibold text-white disabled:opacity-40">
+            {saving ? <BusyLabel>Applying...</BusyLabel> : "Apply adjustment"}
           </button>
         </div>
       </div>
@@ -312,7 +329,7 @@ function ReconcileDialog({ open, lot, onClose, onDone }: { open: boolean; lot: A
     <ConfirmDialog
       open={open}
       title="Reconcile physical count"
-      description={`System stock: ${lot.on_hand} ${lot.unit}. Difference: ${difference}. This creates the corresponding stock movement.`}
+      description={`System stock: ${packCount(lot.on_hand)}. Difference: ${difference}. This creates the corresponding stock movement.`}
       confirmLabel="Submit reconciliation"
       loading={saving}
       error={error}
@@ -385,7 +402,7 @@ function TransferDialog({
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
       <div className="w-full max-w-sm rounded bg-white p-6 shadow-xl">
         <h2 className="mb-1 font-display text-lg font-semibold text-primary-900">Transfer stock</h2>
-        <p className="mb-4 text-sm text-neutral-500">From {lot.location_name} · Available: {lot.available} {lot.unit}</p>
+        <p className="mb-4 text-sm text-neutral-500">From {lot.location_name} · Available: {packCount(lot.available)}</p>
 
         <select value={destinationId} onChange={(e) => setDestinationId(e.target.value)} className="mb-3 w-full rounded border border-neutral-300 bg-white px-3 py-2 text-sm">
           <option value="">Destination warehouse</option>
@@ -399,7 +416,7 @@ function TransferDialog({
         <div className="flex justify-end gap-2">
           <button onClick={onClose} className="rounded border border-neutral-300 px-4 py-2 text-sm">Cancel</button>
           <button onClick={handleConfirm} disabled={saving || !destinationId || !quantity} className="rounded bg-primary-800 px-4 py-2 text-sm font-semibold text-white disabled:opacity-40">
-            {saving ? "Transferring..." : "Transfer"}
+            {saving ? <BusyLabel>Transferring...</BusyLabel> : "Transfer"}
           </button>
         </div>
       </div>

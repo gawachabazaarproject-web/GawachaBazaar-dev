@@ -27,6 +27,7 @@ class CreateCategoryRequest(BaseSchema):
     description: str | None = Field(default=None)
     parent_id: int | None = Field(default=None)
     status: CategoryStatus = Field(default="ACTIVE")
+    image_url: str | None = Field(default=None, max_length=2048)
 
 
 class UpdateCategoryRequest(BaseSchema):
@@ -53,6 +54,11 @@ class CategoryResponse(BaseSchema):
     parent_id: int | None
     status: str
     created_at: datetime
+    # Active subcategories - filled in by the public list/detail reads;
+    # 0 wherever a category is merely embedded (e.g. on a product).
+    child_count: int = 0
+    # Active products in this category plus its active subcategories.
+    product_count: int = 0
 
 
 class CategoryDetailResponse(CategoryResponse):

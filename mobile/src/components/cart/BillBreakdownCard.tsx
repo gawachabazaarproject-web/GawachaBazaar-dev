@@ -10,6 +10,9 @@ export interface BillBreakdownCardProps {
   items: CartItemResponse[];
   totalAmount: string | null;
   currency: string | null;
+  /** Backend delivery quote for the selected address; null while loading. */
+  deliveryFee?: number | null;
+  grandTotal?: string | null;
 }
 
 /**
@@ -17,10 +20,10 @@ export interface BillBreakdownCardProps {
  * the illustrative per-product MRP layer (productEmbellishments.ts) -
  * items with no MRP entry simply contribute nothing to it, so the
  * number is never inflated beyond what's actually shown on-screen.
- * "Delivery Partner Fee: FREE" is honest, not illustrative - the backend
- * genuinely never charges one.
+ * The delivery fee is the backend quote (free for a 15+ product Bazaar,
+ * otherwise base + per-km) - the order is re-priced server-side at checkout.
  */
-export function BillBreakdownCard({ items, totalAmount, currency }: BillBreakdownCardProps) {
+export function BillBreakdownCard({ items, totalAmount, currency, deliveryFee = null, grandTotal }: BillBreakdownCardProps) {
   const { mrpTotal, savings } = useMemo(() => {
     let mrp = 0;
     for (const item of items) {
@@ -39,11 +42,15 @@ export function BillBreakdownCard({ items, totalAmount, currency }: BillBreakdow
       </Text>
       <Row label={`Item Total (${items.length} ${items.length === 1 ? "item" : "items"})`} value={formatMoney(mrpTotal > 0 ? mrpTotal : Number.parseFloat(totalAmount ?? "0"), currency ?? "INR")} />
       {savings > 0 ? <Row label="Farm Direct Savings" value={`-${formatMoney(savings, currency ?? "INR")}`} valueColor={colors.success} /> : null}
-      <Row label="Delivery Partner Fee" value="FREE" valueColor={colors.success} />
+      <Row
+        label="Delivery Partner Fee"
+        value={deliveryFee === null ? "-" : deliveryFee > 0 ? formatMoney(deliveryFee, currency ?? "INR") : "FREE"}
+        valueColor={deliveryFee === 0 ? colors.success : undefined}
+      />
       <View style={styles.divider} />
       <View style={styles.totalRow}>
         <Text variant="bodyMedium">Total Amount</Text>
-        <Text variant="price">{formatMoney(totalAmount ?? "0", currency ?? "INR")}</Text>
+        <Text variant="price">{formatMoney(grandTotal ?? totalAmount ?? "0", currency ?? "INR")}</Text>
       </View>
       {savings > 0 ? (
         <Text variant="caption" color={colors.success} style={styles.savedNote}>

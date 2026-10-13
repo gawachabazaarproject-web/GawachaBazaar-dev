@@ -1,5 +1,5 @@
 import "react-native-gesture-handler";
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -26,7 +26,7 @@ import {
 import { Lora_600SemiBold, Lora_700Bold } from "@expo-google-fonts/lora";
 import { Baloo2_500Medium, Baloo2_600SemiBold, Baloo2_700Bold } from "@expo-google-fonts/baloo-2";
 import { ReducedMotionConfig, ReduceMotion } from "react-native-reanimated";
-import { queryClient } from "@/api/queryClient";
+import { queryClient, restoreQueryCache } from "@/api/queryClient";
 import { warmBackend } from "@/api/client";
 import { useAuthStore } from "@/store/authStore";
 import { ToastHost } from "@/components/ToastHost";
@@ -34,6 +34,7 @@ import { CartBar } from "@/components/CartBar";
 import { BulkRequestBar } from "@/components/home/BulkRequestBar";
 import { RazorpaySheetHost } from "@/components/payment/RazorpaySheetHost";
 import { AppGate } from "@/navigation/AppGate";
+import { usePushNotifications } from "@/features/notifications/usePushNotifications";
 import { useRealtimeSync } from "@/features/orders/useRealtimeSync";
 
 SplashScreen.preventAutoHideAsync().catch(() => undefined);
@@ -44,6 +45,11 @@ SplashScreen.preventAutoHideAsync().catch(() => undefined);
  * textually nested under it in RootLayout's own return statement. */
 function RealtimeSync(): null {
   useRealtimeSync();
+  return null;
+}
+
+function PushNotifications(): null {
+  usePushNotifications();
   return null;
 }
 
@@ -69,15 +75,17 @@ export default function RootLayout() {
     Baloo2_600SemiBold,
     Baloo2_700Bold,
   });
+  const [cacheRestored, setCacheRestored] = useState(false);
   const restoreSession = useAuthStore((s) => s.restoreSession);
   const authStatus = useAuthStore((s) => s.status);
 
   useEffect(() => {
     warmBackend();
     restoreSession();
+    restoreQueryCache().finally(() => setCacheRestored(true));
   }, [restoreSession]);
 
-  const appReady = fontsLoaded && authStatus !== "restoring";
+  const appReady = fontsLoaded && cacheRestored && authStatus !== "restoring";
 
   useEffect(() => {
     if (appReady) {
@@ -94,6 +102,7 @@ export default function RootLayout() {
         <QueryClientProvider client={queryClient}>
           <StatusBar style="dark" />
           <RealtimeSync />
+          <PushNotifications />
           <AppGate>
             <Stack screenOptions={{ headerShown: false }}>
               <Stack.Screen name="(auth)" />

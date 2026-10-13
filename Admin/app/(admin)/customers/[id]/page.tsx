@@ -31,6 +31,7 @@ import { StatusBadge } from "@/components/StatusBadge";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { EmptyState } from "@/components/EmptyState";
 import { Icon } from "@/components/icons";
+import { BusyLabel, PageLoader } from "@/components/Spinner";
 
 export default function CustomerDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -133,7 +134,7 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
     }
   };
 
-  if (loading) return <div className="animate-pulse text-sm text-neutral-400">Loading customer...</div>;
+  if (loading) return <PageLoader label="Loading customer..." />;
   if (error || !customer) return <ErrorState message={error ?? "Customer not found."} onRetry={load} />;
 
   return (
@@ -354,7 +355,7 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
               disabled={!newNote.trim() || savingNote}
               className="self-start rounded bg-primary-800 px-4 py-2 text-sm font-semibold text-white disabled:opacity-40"
             >
-              {savingNote ? "Saving..." : "Add note"}
+              {savingNote ? <BusyLabel>Saving...</BusyLabel> : "Add note"}
             </button>
           </div>
           {!notes || notes.length === 0 ? (
@@ -532,7 +533,7 @@ function ContactEditField({
               disabled={!newValue.trim() || loading}
               className="rounded bg-primary-800 px-3 py-1.5 text-sm font-semibold text-white disabled:opacity-40"
             >
-              {loading ? "Saving..." : "Save"}
+              {loading ? <BusyLabel>Saving...</BusyLabel> : "Save"}
             </button>
             <button onClick={() => setEditing(false)} disabled={loading} className="text-sm text-neutral-500 hover:underline">
               Cancel
@@ -646,7 +647,7 @@ function PasswordResetField({ customerId }: { customerId: number }) {
               disabled={password.length < MIN_PASSWORD_LENGTH || loading}
               className="rounded bg-primary-800 px-3 py-1.5 text-sm font-semibold text-white disabled:opacity-40"
             >
-              {loading ? "Saving..." : "Set password"}
+              {loading ? <BusyLabel>Saving...</BusyLabel> : "Set password"}
             </button>
             <button onClick={() => setEditing(false)} disabled={loading} className="text-sm text-neutral-500 hover:underline">
               Cancel

@@ -3,10 +3,12 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { PageHeader } from "@/components/PageHeader";
 import { EmptyState } from "@/components/EmptyState";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { useAuth } from "@/lib/auth-context";
 import {
   fetchLocations,
   InventoryApiError,
+  deleteLocation,
   Location,
   setPackingPoint,
   updateLocationCoordinates,
@@ -94,6 +96,7 @@ function LocationRow({ loc, onChanged }: { loc: Location; onChanged: () => void 
   const [coords, setCoords] = useState(initial);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   useEffect(() => setCoords(initial), [initial]);
 
@@ -139,6 +142,14 @@ function LocationRow({ loc, onChanged }: { loc: Location; onChanged: () => void 
           </p>
           <p className="text-sm text-neutral-600">{[loc.address_line_1, loc.city].filter(Boolean).join(", ")}</p>
         </div>
+        <div className="flex items-center gap-2">
+        <button
+          disabled={busy}
+          onClick={() => setConfirmingDelete(true)}
+          className="rounded border border-status-danger/40 px-3 py-1.5 text-sm font-semibold text-status-danger hover:bg-status-dangerLight disabled:opacity-40"
+        >
+          Delete hub
+        </button>
         {!loc.is_packing_point && (
           <button
             disabled={busy || !hasSaved || dirty}
@@ -149,6 +160,7 @@ function LocationRow({ loc, onChanged }: { loc: Location; onChanged: () => void 
             Use as packing point
           </button>
         )}
+        </div>
       </div>
 
       <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -185,6 +197,24 @@ function LocationRow({ loc, onChanged }: { loc: Location; onChanged: () => void 
         </p>
       )}
       {msg && <p className="mt-2 text-sm text-status-danger">{msg}</p>}
+      <ConfirmDialog
+        open={confirmingDelete}
+        danger
+        title={`Delete ${loc.name}?`}
+        description={
+          loc.is_packing_point
+            ? "This is the current packing point - delivery fees will fall back to the base fee until you choose another. The hub can only be deleted once it holds no stock."
+            : "The hub disappears from Settings and the warehouse lists. It can only be deleted once it holds no stock."
+        }
+        confirmLabel="Delete hub"
+        loading={busy}
+        error={msg}
+        onCancel={() => setConfirmingDelete(false)}
+        onConfirm={async () => {
+          await run((t) => deleteLocation(t, loc.id));
+          setConfirmingDelete(false);
+        }}
+      />
     </div>
   );
 }

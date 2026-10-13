@@ -131,6 +131,7 @@ export interface CreateCategoryPayload {
   slug: string;
   description?: string | null;
   parent_id?: number | null;
+  image_url?: string | null;
   status: string;
 }
 
@@ -179,9 +180,8 @@ export async function deleteCategoryImage(accessToken: string, id: number): Prom
   return request<CategoryRef>(accessToken, `/catalog/categories/${id}/image`, { method: "DELETE" });
 }
 
-
-/** Permanently deletes an EMPTY category. Refused (409) while it still has
- * products or sub-categories - the message says which. */
+/** Only succeeds for a category with no products and no subcategories -
+ * the backend answers 409 with a plain-language reason otherwise. */
 export async function deleteCategory(accessToken: string, id: number): Promise<void> {
   const response = await fetch(`${API_BASE_URL}/catalog/categories/${id}`, {
     method: "DELETE",

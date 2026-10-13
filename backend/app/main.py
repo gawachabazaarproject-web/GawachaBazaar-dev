@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 
 from fastapi import Depends, FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
 from slowapi.errors import RateLimitExceeded
 from sqlalchemy import text
@@ -104,6 +105,10 @@ def create_application() -> FastAPI:
         openapi_url="/openapi.json" if not settings.is_production else None,
         lifespan=lifespan,
     )
+
+    # Compress JSON responses - catalog/home payloads are large and the
+    # mobile network is the slow part.
+    app.add_middleware(GZipMiddleware, minimum_size=1024)
 
     # Request correlation & structured execution timing (outer ASGI middleware)
     app.add_middleware(RequestIDMiddleware)

@@ -18,7 +18,7 @@ from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
 from sqlalchemy.orm import Session
 
 from app.core.realtime import manager
-from app.core.roles import STAFF_ROLES
+from app.core.roles import DELIVERY_PARTNER, STAFF_ROLES
 from app.dependencies.database import get_db
 from app.services.auth import AuthService
 
@@ -39,10 +39,19 @@ async def order_events(websocket: WebSocket, db: Session = Depends(get_db)) -> N
         await websocket.close(code=1008)
         return
 
-    roles = auth_service.get_role_names(user.id)
-    is_staff = not STAFF_ROLES.isdisjoint(roles)
+    user_id = user.id
+    roles = auth_service.get_role_names(user_id)
+    # Delivery partners are staff but must not see every customer's order
+    # events - they only ever act on their own assignments (which they poll).
+    is_staff = not (STAFF_ROLES - {DELIVERY_PARTNER}).isdisjoint(roles)
+    # Release the DB connection NOW. FastAPI keeps a yield-dependency's
+    # session open until the handler returns, i.e. for the whole life of
+    # the socket - every connected client would pin one pooled connection
+    # (pool is 5 + 10 overflow) and ~15 online users would starve every
+    # REST request.
+    db.close()
 
-    await manager.connect(websocket, user_id=user.id, is_staff=is_staff)
+    await manager.connect(websocket, user_id=user_id, is_staff=is_staff)
     try:
         # Server -> client only channel; this just blocks on the client's
         # side of the connection so we notice a disconnect. Any inbound
@@ -50,8 +59,12 @@ async def order_events(websocket: WebSocket, db: Session = Depends(get_db)) -> N
         # sending a stray ping/keepalive frame should never tear down the
         # connection.
         while True:
-            await websocket.receive_text()
+            text = await websocket.receive_text()
+            # Client heartbeat: answering lets the app detect a silently
+            # dead socket (idle proxy timeout, backgrounded phone).
+            if text == "ping":
+                await websocket.send_json({"type": "pong"})
     except WebSocketDisconnect:
         pass
     finally:
-        manager.disconnect(websocket, user_id=user.id, is_staff=is_staff)
+        manager.disconnect(websocket, user_id=user_id, is_staff=is_staff)

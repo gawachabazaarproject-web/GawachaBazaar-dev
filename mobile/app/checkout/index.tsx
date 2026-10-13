@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { BazaarLoader } from "@/components/BazaarLoader";
 import { Alert, Pressable, ScrollView, StyleSheet, TextInput, View } from "react-native";
 import { Stack, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -10,6 +11,7 @@ import { Button } from "@/components/Button";
 import { CheckoutSection } from "@/components/checkout/CheckoutSection";
 import { HarvestSlotSelector, slotSummary, Day, Slot } from "@/components/checkout/HarvestSlotSelector";
 import { CheckoutStepper } from "@/components/checkout/CheckoutStepper";
+import { PlacingOrderOverlay } from "@/components/checkout/PlacingOrderOverlay";
 import { BasketSummaryCard } from "@/components/checkout/BasketSummaryCard";
 import { ImpactCard } from "@/components/checkout/ImpactCard";
 import { useCart, useEvaluatePromo } from "@/features/cart/useCart";
@@ -451,9 +453,13 @@ export default function CheckoutScreen() {
                 onPress={handleApplyPromo}
                 disabled={!promoInput.trim() || evaluatePromo.isPending}
               >
-                <Text variant="bodyMedium" color={colors.textOnAccent}>
-                  {evaluatePromo.isPending ? "Checking..." : "Apply"}
-                </Text>
+                {evaluatePromo.isPending ? (
+                  <BazaarLoader size={6} palette={[colors.textOnAccent, colors.primary, colors.textOnAccent]} />
+                ) : (
+                  <Text variant="bodyMedium" color={colors.textOnAccent}>
+                    Apply
+                  </Text>
+                )}
               </Pressable>
             </View>
           )}
@@ -545,10 +551,15 @@ export default function CheckoutScreen() {
             <Text variant="bodyMedium" color={colors.textOnAccent}>
               {placeOrder.isPending || onlineCheckout.busy ? "Please wait..." : paymentMethod === "UPI" ? "Pay Now" : "Place Order"}
             </Text>
-            <Feather name="arrow-right" size={16} color={colors.textOnAccent} />
+            {placeOrder.isPending || onlineCheckout.busy ? (
+              <BazaarLoader size={6} palette={[colors.textOnAccent, colors.primary, colors.textOnAccent]} />
+            ) : (
+              <Feather name="arrow-right" size={16} color={colors.textOnAccent} />
+            )}
           </Pressable>
         </View>
       </View>
+      <PlacingOrderOverlay visible={placeOrder.isPending || onlineCheckout.busy} />
       <RazorpayCheckout checkout={onlineCheckout.checkout} onSuccess={handleOnlineCheckoutSuccess} onDismiss={handleOnlineCheckoutDismiss} />
     </Screen>
   );

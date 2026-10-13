@@ -12,10 +12,13 @@ import {
   createVariant,
   deleteImage,
   deleteProduct,
+  deleteVariant,
   fetchAdminProductDetail,
   fetchCategories,
   fetchProductActivity,
   PRODUCT_STATUSES,
+  ratePerBaseUnit,
+  sizeLabel,
   ProductActivityEntry,
   updateImage,
   updateProduct,
@@ -28,8 +31,10 @@ import { ErrorState } from "@/components/ErrorState";
 import { StatusBadge } from "@/components/StatusBadge";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { ImageDropzone } from "@/components/ImageDropzone";
+import { packCount } from "@/lib/inventory";
 import { ReserveLevelEditor } from "@/components/ReserveLevelEditor";
 import { Icon } from "@/components/icons";
+import { BusyLabel, PageLoader } from "@/components/Spinner";
 
 export default function ProductDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -147,9 +152,13 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
     }
   };
 
-  if (loading) return <div className="animate-pulse text-sm text-neutral-400">Loading product...</div>;
+  if (loading) return <PageLoader label="Loading product..." />;
   if (error || !product) return <ErrorState message={error ?? "Product not found."} onRetry={load} />;
 
+  const sizeOf = (variantId: number) => {
+    const v = product.variants.find((x) => x.id === variantId);
+    return v ? sizeLabel(v.quantity, v.unit) : "";
+  };
   const primaryImage = product.images.find((i) => i.is_primary) ?? product.images[0];
   const firstVariant = product.variants[0];
 
@@ -173,7 +182,6 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
           </div>
           <p className="mt-1 text-sm text-neutral-500">
             {product.category.name}
-            {firstVariant && ` · ${firstVariant.sku}`}
             {firstVariant?.current_price &&
               ` · ${formatMoney(firstVariant.current_price.price, firstVariant.current_price.currency)}`}
           </p>
@@ -256,7 +264,7 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
             disabled={!isDirty || savingGeneral}
             className="rounded bg-primary-800 px-4 py-2 text-sm font-semibold text-white disabled:opacity-40"
           >
-            {savingGeneral ? "Saving..." : "Save changes"}
+            {savingGeneral ? <BusyLabel>Saving...</BusyLabel> : "Save changes"}
           </button>
         )}
       </Section>
@@ -284,14 +292,13 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
         </p>
         <div className="divide-y divide-neutral-100">
           {product.variant_stock.map((vs) => {
-            const variant = product.variants.find((v) => v.id === vs.variant_id);
             return (
               <div key={vs.variant_id} className="py-3 text-sm">
                 <div className="flex items-center justify-between">
-                  <span className="text-neutral-700">{vs.variant_name} ({vs.sku})</span>
+                  <span className="text-neutral-700">{sizeOf(vs.variant_id)}</span>
                   <span className="flex items-center gap-2">
                     <span className={Number(vs.available_quantity) === 0 ? "font-semibold text-status-danger" : "text-neutral-800"}>
-                      {Number(vs.available_quantity)} {variant?.unit ?? "units"} available
+                      {packCount(vs.available_quantity)} available
                     </span>
                     {vs.stock_level !== "OK" && (
                       <span
@@ -314,7 +321,7 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
                     variantId={vs.variant_id}
                     reserveLevel={vs.reserve_level}
                     effectiveReserve={vs.effective_reserve}
-                    unit={variant?.unit ?? ""}
+                    unit="packs"
                     canEdit={!!canEdit}
                     onSaved={load}
                   />
@@ -463,12 +470,17 @@ function VariantsSection({
 }) {
   const { getAccessToken } = useAuth();
   const [showAddVariant, setShowAddVariant] = useState(false);
-  const [newVariant, setNewVariant] = useState({ name: "", sku: "", unit: "UNIT", quantity: "1" });
+  const [newVariant, setNewVariant] = useState({ unit: "KG", quantity: "", price: "" });
   const [addingVariant, setAddingVariant] = useState(false);
   const [priceDialogVariant, setPriceDialogVariant] = useState<number | null>(null);
   const [newPrice, setNewPrice] = useState("");
   const [savingPrice, setSavingPrice] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [editingVariant, setEditingVariant] = useState<number | null>(null);
+  const [editForm, setEditForm] = useState({ unit: "KG", quantity: "" });
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [deleteVariantId, setDeleteVariantId] = useState<number | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const handleAddVariant = async () => {
     const token = getAccessToken();
@@ -476,9 +488,18 @@ function VariantsSection({
     setAddingVariant(true);
     setError(null);
     try {
-      await createVariant(token, product.id, { ...newVariant, status: "ACTIVE" });
+      const label = sizeLabel(newVariant.quantity, newVariant.unit);
+      const sku = `${product.slug}-${label.replace(/[^a-z0-9]+/gi, "-")}`.toUpperCase();
+      const created = await createVariant(token, product.id, {
+        name: label,
+        sku,
+        unit: newVariant.unit,
+        quantity: newVariant.quantity,
+        status: "ACTIVE",
+      });
+      if (Number(newVariant.price) > 0) await createPrice(token, created.id, newVariant.price);
       setShowAddVariant(false);
-      setNewVariant({ name: "", sku: "", unit: "UNIT", quantity: "1" });
+      setNewVariant({ unit: "KG", quantity: "", price: "" });
       onChange();
     } catch (err) {
       setError(err instanceof CatalogApiError ? err.message : "Unable to add this variant.");
@@ -495,7 +516,51 @@ function VariantsSection({
     onChange();
   };
 
+  const startEdit = (v: AdminProductDetail["variants"][number]) => {
+    setEditingVariant(v.id);
+    setEditForm({ unit: v.unit, quantity: String(Number(v.quantity)) });
+    setError(null);
+  };
+
+  const handleSaveEdit = async () => {
+    const token = getAccessToken();
+    if (!token || editingVariant === null) return;
+    setSavingEdit(true);
+    setError(null);
+    try {
+      await updateVariant(token, editingVariant, {
+        name: sizeLabel(editForm.quantity, editForm.unit),
+        unit: editForm.unit,
+        quantity: editForm.quantity,
+      });
+      setEditingVariant(null);
+      onChange();
+    } catch (err) {
+      setError(err instanceof CatalogApiError ? err.message : "Unable to update this variant.");
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+
+  const handleConfirmDelete = async () => {
+    const token = getAccessToken();
+    if (!token || deleteVariantId === null) return;
+    setDeleting(true);
+    setError(null);
+    try {
+      await deleteVariant(token, deleteVariantId);
+      setDeleteVariantId(null);
+      onChange();
+    } catch (err) {
+      setDeleteVariantId(null);
+      setError(err instanceof CatalogApiError ? err.message : "Unable to delete this variant.");
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   const activeVariant = product.variants.find((v) => v.id === priceDialogVariant);
+  const variantToDelete = product.variants.find((v) => v.id === deleteVariantId);
 
   const handleConfirmPrice = async () => {
     const token = getAccessToken();
@@ -520,9 +585,12 @@ function VariantsSection({
         {product.variants.map((v) => (
           <div key={v.id} className="flex items-center justify-between py-2 text-sm">
             <div>
-              <p className="font-medium text-neutral-800">{v.name}</p>
+              <p className="font-medium text-neutral-800">{sizeLabel(v.quantity, v.unit)}</p>
               <p className="text-xs text-neutral-500">
-                {v.sku} · {v.quantity} {v.unit}
+                {product.name}
+                {v.current_price && ratePerBaseUnit(v.current_price.price, v.quantity, v.unit)
+                  ? ` · ${ratePerBaseUnit(v.current_price.price, v.quantity, v.unit)}`
+                  : ""}
               </p>
             </div>
             <div className="flex items-center gap-3">
@@ -546,6 +614,19 @@ function VariantsSection({
                   {v.status === "ACTIVE" ? "Deactivate" : "Activate"}
                 </button>
               )}
+              {canEdit && (
+                <button onClick={() => startEdit(v)} className="text-xs font-semibold text-primary-700 hover:underline">
+                  Edit
+                </button>
+              )}
+              {canEdit && (
+                <button
+                  onClick={() => setDeleteVariantId(v.id)}
+                  className="text-xs font-semibold text-status-danger hover:underline"
+                >
+                  Delete
+                </button>
+              )}
             </div>
           </div>
         ))}
@@ -560,17 +641,14 @@ function VariantsSection({
               + Add variant
             </button>
           ) : (
-            <div className="mt-2 grid grid-cols-4 gap-2 rounded border border-neutral-200 p-3">
+            <div className="mt-2 grid grid-cols-3 gap-2 rounded border border-neutral-200 p-3">
               <input
-                placeholder="Name (e.g. 1 kg)"
-                value={newVariant.name}
-                onChange={(e) => setNewVariant((v) => ({ ...v, name: e.target.value }))}
-                className="rounded border border-neutral-300 px-2 py-1.5 text-sm"
-              />
-              <input
-                placeholder="SKU"
-                value={newVariant.sku}
-                onChange={(e) => setNewVariant((v) => ({ ...v, sku: e.target.value }))}
+                type="number"
+                min="0"
+                step="any"
+                placeholder="Amount (e.g. 250)"
+                value={newVariant.quantity}
+                onChange={(e) => setNewVariant((v) => ({ ...v, quantity: e.target.value }))}
                 className="rounded border border-neutral-300 px-2 py-1.5 text-sm"
               />
               <select
@@ -584,18 +662,20 @@ function VariantsSection({
               </select>
               <input
                 type="number"
-                placeholder="Quantity"
-                value={newVariant.quantity}
-                onChange={(e) => setNewVariant((v) => ({ ...v, quantity: e.target.value }))}
+                min="0"
+                step="0.01"
+                placeholder="₹ Price"
+                value={newVariant.price}
+                onChange={(e) => setNewVariant((v) => ({ ...v, price: e.target.value }))}
                 className="rounded border border-neutral-300 px-2 py-1.5 text-sm"
               />
-              <div className="col-span-4 flex gap-2">
+              <div className="col-span-3 flex gap-2">
                 <button
                   onClick={handleAddVariant}
-                  disabled={addingVariant || !newVariant.name || !newVariant.sku}
+                  disabled={addingVariant || !(Number(newVariant.quantity) > 0)}
                   className="rounded bg-primary-800 px-3 py-1.5 text-sm font-semibold text-white disabled:opacity-40"
                 >
-                  {addingVariant ? "Adding..." : "Add"}
+                  {addingVariant ? <BusyLabel>Adding...</BusyLabel> : "Add"}
                 </button>
                 <button onClick={() => setShowAddVariant(false)} className="rounded border border-neutral-300 px-3 py-1.5 text-sm">
                   Cancel
@@ -605,6 +685,47 @@ function VariantsSection({
           )}
         </div>
       )}
+
+      <ConfirmDialog
+        open={editingVariant !== null}
+        title="Edit size"
+        description="Change the amount or unit of this size. Its price and stock stay as they are."
+        confirmLabel="Save"
+        loading={savingEdit}
+        onCancel={() => setEditingVariant(null)}
+        onConfirm={handleSaveEdit}
+      >
+        <div className="mt-2 flex gap-2">
+          <input
+            type="number"
+            min="0"
+            step="any"
+            value={editForm.quantity}
+            onChange={(e) => setEditForm((f) => ({ ...f, quantity: e.target.value }))}
+            placeholder="Amount (e.g. 250)"
+            className="w-full rounded border border-neutral-300 px-3 py-2 text-sm"
+          />
+          <select
+            value={editForm.unit}
+            onChange={(e) => setEditForm((f) => ({ ...f, unit: e.target.value }))}
+            className="rounded border border-neutral-300 bg-white px-3 py-2 text-sm"
+          >
+            {VARIANT_UNITS.map((u) => (
+              <option key={u} value={u}>{u}</option>
+            ))}
+          </select>
+        </div>
+      </ConfirmDialog>
+
+      <ConfirmDialog
+        open={deleteVariantId !== null}
+        title="Delete variant?"
+        description={`Permanently delete the ${variantToDelete ? sizeLabel(variantToDelete.quantity, variantToDelete.unit) : "selected"} size and its price. Variants with order, quote or stock history can't be deleted - deactivate those instead.`}
+        confirmLabel="Delete variant"
+        loading={deleting}
+        onCancel={() => setDeleteVariantId(null)}
+        onConfirm={handleConfirmDelete}
+      />
 
       <ConfirmDialog
         open={priceDialogVariant !== null}

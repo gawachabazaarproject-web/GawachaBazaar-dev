@@ -43,6 +43,12 @@
         }
       ],
       "expo-image",
+      [
+        "expo-notifications",
+        {
+          "color": "#000F08"
+        }
+      ],
       "expo-secure-store",
       "expo-font",
       [
@@ -65,19 +71,20 @@
     "experiments": {
       "typedRoutes": true
     },
-    "extra": {
-      "eas": {
-        "projectId": "a8785aaa-4389-4f27-9e5a-4df1ec26f31c"
-      }
-    },
     "runtimeVersion": {
       "policy": "appVersion"
     },
     "updates": {
-      "url": "https://u.expo.dev/a8785aaa-4389-4f27-9e5a-4df1ec26f31c",
       "enabled": true,
       "checkAutomatically": "ON_LOAD",
-      "fallbackToCacheTimeout": 3000
+      "fallbackToCacheTimeout": 3000,
+      "url": "https://u.expo.dev/a8785aaa-4389-4f27-9e5a-4df1ec26f31c"
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "a8785aaa-4389-4f27-9e5a-4df1ec26f31c"
+      }
     }
   }
 }

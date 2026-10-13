@@ -10,6 +10,7 @@ import { formatDateTime, formatMoney } from "@/lib/format";
 import { PageHeader } from "@/components/PageHeader";
 import { EmptyState } from "@/components/EmptyState";
 import { ErrorState } from "@/components/ErrorState";
+import { Spinner } from "@/components/Spinner";
 
 /**
  * "What is happening in Gawacha Bazaar right now?" Every number comes from
@@ -222,7 +223,7 @@ function Panel({
         {footer}
       </div>
       {loading ? (
-        <p className="py-6 text-center text-sm text-neutral-400">Loading…</p>
+        <div className="flex justify-center py-6 text-primary-700"><Spinner className="h-6 w-6" /></div>
       ) : items.length === 0 ? (
         <p className="py-6 text-center text-sm text-neutral-500">{empty}</p>
       ) : (

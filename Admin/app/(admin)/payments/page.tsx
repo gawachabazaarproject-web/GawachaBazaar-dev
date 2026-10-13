@@ -26,6 +26,7 @@ import { TableSkeleton } from "@/components/TableSkeleton";
 import { Pagination } from "@/components/Pagination";
 import { StatusBadge } from "@/components/StatusBadge";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { BusyLabel } from "@/components/Spinner";
 
 const PAYMENT_STATUSES = ["PENDING", "PROCESSING", "PAID", "FAILED", "CANCELLED", "EXPIRED"];
 const PAYMENT_METHODS = ["UPI", "COD"];
@@ -402,7 +403,7 @@ function RefundsTab({ canManage }: { canManage: boolean }) {
                                   onClick={() => handleApprove(refund)}
                                   className="rounded border border-status-success/40 px-2.5 py-1 text-xs font-semibold text-status-success hover:bg-status-successLight disabled:opacity-50"
                                 >
-                                  {busy ? "Working..." : "Approve"}
+                                  {busy ? <BusyLabel>Working...</BusyLabel> : "Approve"}
                                 </button>
                               )}
                               {actions.reject && (
@@ -420,7 +421,7 @@ function RefundsTab({ canManage }: { canManage: boolean }) {
                                   onClick={() => handleProcess(refund)}
                                   className="rounded border border-primary-700/40 px-2.5 py-1 text-xs font-semibold text-primary-800 hover:bg-primary-50 disabled:opacity-50"
                                 >
-                                  {busy ? "Working..." : "Process"}
+                                  {busy ? <BusyLabel>Working...</BusyLabel> : "Process"}
                                 </button>
                               )}
                               {actions.sync && (
@@ -429,7 +430,7 @@ function RefundsTab({ canManage }: { canManage: boolean }) {
                                   onClick={() => handleSync(refund)}
                                   className="rounded border border-primary-700/40 px-2.5 py-1 text-xs font-semibold text-primary-800 hover:bg-primary-50 disabled:opacity-50"
                                 >
-                                  {busy ? "Checking..." : "Check status"}
+                                  {busy ? <BusyLabel>Checking...</BusyLabel> : "Check status"}
                                 </button>
                               )}
                               {!actions.approve && !actions.reject && !actions.process && !actions.sync && (
