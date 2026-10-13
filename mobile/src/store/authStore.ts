@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { authApi, setAuthFailureHandler, toApiError, ApiError } from "@/api";
 import { queryClient } from "@/api/queryClient";
 import * as fb from "@/auth/firebase";
@@ -96,6 +97,30 @@ let syncInFlight: Promise<void> | null = null;
 let pendingProfile: { first_name?: string; last_name?: string } | null = null;
 const otpSends = new Map<string, number[]>();
 
+/** Last synced customer, so a returning customer is let in immediately
+ * while the (possibly cold-starting) backend confirms in the background. */
+const CACHED_USER_KEY = "gb.authUser.v1";
+async function readCachedUser(uid: string): Promise<AuthUserResponse | null> {
+  try {
+    const raw = await AsyncStorage.getItem(CACHED_USER_KEY);
+    if (!raw) return null;
+    const cached = JSON.parse(raw) as { uid: string; user: AuthUserResponse };
+    return cached.uid === uid ? cached.user : null;
+  } catch {
+    return null;
+  }
+}
+const writeCachedUser = (uid: string, user: AuthUserResponse) =>
+  void AsyncStorage.setItem(CACHED_USER_KEY, JSON.stringify({ uid, user })).catch(() => undefined);
+const clearCachedUser = () => void AsyncStorage.removeItem(CACHED_USER_KEY).catch(() => undefined);
+
+/** A free-tier host can take ~a minute to wake, so an unreachable backend
+ * is retried with backoff instead of bouncing the customer to the login
+ * screen with a misleading "offline" message. */
+const SYNC_RETRY_DELAYS_MS = [1500, 3000, 6000, 10000, 15000, 20000];
+const isTransient = (e: ApiError) => e.isNetworkError || e.status === 502 || e.status === 503 || e.status === 504;
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
 export const useAuthStore = create<AuthState>((set, get) => {
   /** Map the verified Firebase user to the backend customer. */
   const syncWithBackend = (fbUser: AuthUser): Promise<void> => {
@@ -103,9 +128,25 @@ export const useAuthStore = create<AuthState>((set, get) => {
     syncInFlight = (async () => {
       try {
         const profile = pendingProfile ?? {};
-        const user = await authApi.sync(profile);
+        let user: AuthUserResponse | null = null;
+        for (let attempt = 0; ; attempt++) {
+          try {
+            user = await authApi.sync(profile);
+            break;
+          } catch (err) {
+            const apiErr = toApiError(err);
+            // Signed out (or switched account) while waiting - give up quietly.
+            if (get().firebaseUser?.uid !== fbUser.uid) return;
+            if (!isTransient(apiErr) || attempt >= SYNC_RETRY_DELAYS_MS.length) throw err;
+            if (get().status !== "authenticated") {
+              set({ authError: "Connecting to the server - this can take a few seconds..." });
+            }
+            await sleep(SYNC_RETRY_DELAYS_MS[attempt]);
+          }
+        }
         pendingProfile = null;
         syncedUid = fbUser.uid;
+        writeCachedUser(fbUser.uid, user);
         set({
           ...derived(needsEmailVerification(user) ? "verifyingEmail" : "authenticated", user),
           authError: null,
@@ -113,13 +154,17 @@ export const useAuthStore = create<AuthState>((set, get) => {
       } catch (err) {
         const apiErr = toApiError(err);
         syncedUid = null;
-        if (apiErr.isNetworkError || apiErr.status === 503) {
-          // Keep the Firebase session; the next app start or login retries.
-          set({ ...derived("unauthenticated", null), authError: apiErr.message });
+        if (isTransient(apiErr)) {
+          // Still unreachable after the retries. Keep the Firebase session
+          // (and a cached profile, if we let the customer in already).
+          if (get().status !== "authenticated") {
+            set({ ...derived("unauthenticated", null), authError: apiErr.message });
+          }
           return;
         }
         // Backend refused this identity (disabled, or the email/phone
         // belongs to an account using another sign-in method).
+        clearCachedUser();
         await fb.signOut().catch(() => undefined);
         set({
           ...derived("unauthenticated", null),
@@ -136,6 +181,7 @@ export const useAuthStore = create<AuthState>((set, get) => {
   const handleFirebaseUser = async (fbUser: AuthUser | null) => {
     if (!fbUser) {
       syncedUid = null;
+      clearCachedUser();
       // Every cached query belonged to the session that just ended.
       queryClient.clear();
       set((s) => ({ ...derived("unauthenticated", null), firebaseUser: null, authError: s.authError }));
@@ -143,6 +189,16 @@ export const useAuthStore = create<AuthState>((set, get) => {
     }
     set({ firebaseUser: fbUser });
     if (syncedUid === fbUser.uid && get().user) return; // hourly token refresh only
+    // Returning customer: open the app straight away from the cached
+    // profile and confirm with the backend in the background.
+    if (get().status === "restoring") {
+      const cached = await readCachedUser(fbUser.uid);
+      if (cached && !needsEmailVerification(cached)) {
+        set({ ...derived("authenticated", cached), authError: null });
+        void syncWithBackend(fbUser);
+        return;
+      }
+    }
     await syncWithBackend(fbUser);
   };
 
