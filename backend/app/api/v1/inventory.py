@@ -106,6 +106,16 @@ def update_location(
     return InventoryService(db).update_location(location_id, payload)
 
 
+@router.delete(
+    "/locations/{location_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Admin: delete (archive) an inventory location - refused while it holds stock",
+    dependencies=[Depends(require_roles(ADMIN))],
+)
+def delete_location(location_id: int, db: Session = Depends(get_db)) -> None:
+    InventoryService(db).delete_location(location_id)
+
+
 @router.post(
     "/locations/{location_id}/packing-point",
     response_model=InventoryLocationResponse,

@@ -161,6 +161,25 @@ class InventoryService:
         self.db.refresh(location)
         return InventoryLocationResponse.model_validate(location)
 
+    def delete_location(self, location_id: int) -> None:
+        """Remove a hub/warehouse from use. Stock history (lots, movements,
+        reservations) points at it, so this archives it (status INACTIVE)
+        instead of erasing the row - and refuses while it still holds stock.
+        """
+        location = self.get_location_or_404(location_id)
+        holds_stock = (
+            self.db.query(InventoryLot.id)
+            .filter(InventoryLot.location_id == location.id, InventoryLot.quantity > 0)
+            .first()
+        )
+        if holds_stock:
+            raise ConflictError(
+                "This hub still holds stock. Transfer or adjust its stock to zero before deleting it."
+            )
+        location.status = "INACTIVE"
+        location.is_packing_point = False
+        self.db.commit()
+
     def set_packing_point(self, location_id: int) -> InventoryLocationResponse:
         """Make this the one location delivery distance is measured from."""
         location = self.get_location_or_404(location_id)

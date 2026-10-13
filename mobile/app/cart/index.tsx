@@ -23,6 +23,7 @@ import {
   useUpdateCartItemQuantity,
 } from "@/features/cart/useCart";
 import { useAddresses } from "@/features/address/useAddresses";
+import { useDeliveryQuote } from "@/features/bazaar/useBazaar";
 import { useProducts } from "@/features/catalog/useCatalog";
 import { productSummaryToCardData } from "@/components/ProductCard";
 import { colors, spacing } from "@/theme";
@@ -43,6 +44,9 @@ export default function CartScreen() {
   const items = cart?.items ?? [];
   const cartProducts = new Set(items.map((item) => item.product_id)).size;
   const defaultAddress = addresses?.find((a) => a.is_default) ?? addresses?.[0];
+  const { data: deliveryQuote } = useDeliveryQuote(defaultAddress?.id ?? null);
+  const deliveryFee = deliveryQuote ? Number.parseFloat(deliveryQuote.fee) : null;
+  const grandTotal = String(Number.parseFloat(cart?.total_amount ?? "0") + (deliveryFee ?? 0));
   const allProducts = allData?.pages.flatMap((p) => p.items) ?? [];
 
   const addonProducts = useMemo(() => {
@@ -161,7 +165,13 @@ export default function CartScreen() {
             ) : null}
 
             <DeliveryInstructionCard />
-            <BillBreakdownCard items={items} totalAmount={cart?.total_amount ?? null} currency={cart?.currency ?? null} />
+            <BillBreakdownCard
+              items={items}
+              totalAmount={cart?.total_amount ?? null}
+              currency={cart?.currency ?? null}
+              deliveryFee={deliveryFee}
+              grandTotal={grandTotal}
+            />
 
             <View style={styles.impactCard}>
               <MaterialCommunityIcons name="sprout-outline" size={22} color={colors.textPrimary} />
@@ -178,7 +188,7 @@ export default function CartScreen() {
           <View style={{ flexShrink: 1 }}>
             <View style={styles.stickyTotalRow}>
               <Text variant="priceLarge" color={colors.textInverse}>
-                {formatMoney(cart?.total_amount ?? "0", cart?.currency ?? "INR")}
+                {formatMoney(grandTotal, cart?.currency ?? "INR")}
               </Text>
               <View style={styles.stickyDivider} />
               <Text variant="bodySmall" color={colors.textInverse}>

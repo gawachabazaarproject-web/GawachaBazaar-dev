@@ -551,7 +551,7 @@ export default function CheckoutScreen() {
             <Text variant="bodyMedium" color={colors.textOnAccent}>
               {placeOrder.isPending || onlineCheckout.busy ? "Please wait..." : paymentMethod === "UPI" ? "Pay Now" : "Place Order"}
             </Text>
-            {placeOrder.isPending ? (
+            {placeOrder.isPending || onlineCheckout.busy ? (
               <BazaarLoader size={6} palette={[colors.textOnAccent, colors.primary, colors.textOnAccent]} />
             ) : (
               <Feather name="arrow-right" size={16} color={colors.textOnAccent} />

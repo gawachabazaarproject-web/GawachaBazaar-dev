@@ -169,6 +169,7 @@ async function request<T>(accessToken: string, path: string, init: RequestInit =
     const body = await response.json().catch(() => null);
     throw new InventoryApiError(response.status, body?.message ?? "Something went wrong.");
   }
+  if (response.status === 204) return undefined as T;
   return response.json();
 }
 
@@ -230,6 +231,10 @@ export async function updateLocationCoordinates(
     method: "PATCH",
     body: JSON.stringify({ latitude, longitude }),
   });
+}
+
+export async function deleteLocation(accessToken: string, id: number): Promise<void> {
+  await request(accessToken, `/inventory/locations/${id}`, { method: "DELETE" });
 }
 
 export async function setPackingPoint(accessToken: string, id: number): Promise<Location> {
