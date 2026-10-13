@@ -354,6 +354,8 @@ class FulfillmentService:
         )
         if target_user is None:
             raise NotFoundError("Delivery partner user not found.")
+        if target_user.status != "ACTIVE":
+            raise ConflictError("The delivery partner's account is not active.")
         if not self._has_any_role(target_user.id, DELIVERY_PARTNER):
             raise ConflictError(
                 "The target user does not hold the DELIVERY_PARTNER role."

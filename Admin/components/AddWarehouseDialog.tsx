@@ -3,6 +3,7 @@
 import React, { useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { createLocation, InventoryApiError } from "@/lib/inventory";
+import { BusyLabel } from "@/components/Spinner";
 
 const EMPTY = { name: "", code: "", address_line_1: "", address_line_2: "", city: "", state: "", postal_code: "" };
 
@@ -93,7 +94,7 @@ export function AddWarehouseDialog({ open, onClose, onCreated }: { open: boolean
             disabled={saving || !complete}
             className="rounded bg-primary-800 px-4 py-2 text-sm font-semibold text-white disabled:opacity-40"
           >
-            {saving ? "Adding..." : "Add warehouse"}
+            {saving ? <BusyLabel>Adding...</BusyLabel> : "Add warehouse"}
           </button>
         </div>
       </div>

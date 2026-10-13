@@ -9,7 +9,7 @@ import { QuantityStepper } from "./QuantityStepper";
 import { PressableScale } from "./PressableScale";
 import { WishlistButton } from "./WishlistButton";
 import { useVariantStepper } from "@/features/cart/useCart";
-import { formatVariantSize } from "@/utils/money";
+import { formatRatePerUnit, formatVariantSize } from "@/utils/money";
 import { getEmbellishment } from "@/utils/productEmbellishments";
 import { colors, fontFamily, shadows, spacing } from "@/theme";
 import { PriceResponse, ProductSummaryResponse, ProductVariantResponse } from "@/types/api";
@@ -68,6 +68,10 @@ export function ProductCard({ product, onPress, index = 0 }: ProductCardProps) {
   const price = product.variant?.current_price ?? product.startingPrice ?? null;
   const { origin, mrp, badge } = getEmbellishment(product.slug);
   const tag = badge ?? origin ?? "Farm Fresh";
+  const sizeQuantity = product.variant?.quantity ?? product.defaultVariantQuantity;
+  const sizeUnit = product.variant?.unit ?? product.defaultVariantUnit;
+  const ratePerUnit =
+    price && sizeQuantity && sizeUnit ? formatRatePerUnit(price.price, sizeQuantity, sizeUnit) : null;
   const sizeLabel = product.variant
     ? formatVariantSize(product.variant.quantity, product.variant.unit)
     : product.defaultVariantUnit && product.defaultVariantQuantity
@@ -131,6 +135,7 @@ export function ProductCard({ product, onPress, index = 0 }: ProductCardProps) {
                   {sizeLabel}
                 </Text>
               ) : null}
+              {ratePerUnit ? (<Text variant="caption" color={colors.textMuted}>{ratePerUnit}</Text>) : null}
               {price ? (
                 <PriceTag amount={price.price} currency={price.currency} mrp={mrp} />
               ) : (

@@ -20,7 +20,7 @@ import { colors, radius, spacing } from "@/theme";
 
 const SLIDE_HEIGHT = 480;
 const POSTER_RADIUS = 20;
-const AUTO_MS = 5500;
+const AUTO_MS = 3000;
 
 export interface PromoCarouselProps {
   /** `linkUrl` is the slide's admin-set link (in-app path or https URL), or null. */

@@ -114,6 +114,14 @@ def notify_status_event(
     scheduling error) must never surface as an error on the HTTP response
     for the business action that already genuinely succeeded.
     """
+    try:
+        from app.services.push import notify_user_status
+
+        notify_user_status(
+            resource=resource, order_id=order_id, user_id=user_id, new_status=new_status
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("PUSH_NOTIFY_FAILED: %s", exc)
     if _main_loop is None:
         return
     message = {

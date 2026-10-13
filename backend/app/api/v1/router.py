@@ -29,6 +29,7 @@ from app.api.v1.payments import admin_router as payments_admin_router
 from app.api.v1.payments import router as payments_router
 from app.api.v1.payments import webhook_router as payments_webhook_router
 from app.api.v1.promotions import router as promotions_router
+from app.api.v1.push import router as push_router
 from app.api.v1.realtime import router as realtime_router
 from app.api.v1.staff import router as staff_router
 from app.api.v1.suppliers import router as suppliers_router
@@ -133,6 +134,7 @@ api_router.include_router(staff_router, prefix="/staff", tags=["staff"])
 # Brand-advertising creatives (public read for the mobile ads carousel;
 # ADMIN-gated management for everything else - gated by ads.* permissions).
 api_router.include_router(ads_router, prefix="/ads", tags=["ads"])
+api_router.include_router(push_router, prefix="/push-tokens", tags=["push"])
 api_router.include_router(home_slides_router, prefix="/home-slides", tags=["home-slides"])
 api_router.include_router(bazaar_router, prefix="/bazaar", tags=["bazaar"])
 api_router.include_router(offers_router, prefix="/offers", tags=["offers"])

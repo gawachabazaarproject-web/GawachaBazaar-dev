@@ -18,6 +18,7 @@ import { EmptyState } from "@/components/EmptyState";
 import { ErrorState } from "@/components/ErrorState";
 import { TableSkeleton } from "@/components/TableSkeleton";
 import { StatusBadge } from "@/components/StatusBadge";
+import { BusyLabel } from "@/components/Spinner";
 
 const ROLE_LABELS: Record<string, string> = {
   ADMIN: "Admin",
@@ -320,7 +321,7 @@ function AddStaffDialog({ onClose, onCreated }: { onClose: () => void; onCreated
             disabled={saving || !name || !email || !phone || password.length < 8}
             className="rounded bg-primary-800 px-4 py-2 text-sm font-semibold text-white disabled:opacity-40"
           >
-            {saving ? "Creating..." : "Create account"}
+            {saving ? <BusyLabel>Creating...</BusyLabel> : "Create account"}
           </button>
         </div>
       </div>

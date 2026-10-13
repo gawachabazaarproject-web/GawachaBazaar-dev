@@ -1,25 +1,36 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import React, { Suspense, useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
-import { CATEGORY_STATUSES, CategoryApiError, CategoryRef, createCategory, fetchAdminCategories } from "@/lib/categories";
+import {
+  CATEGORY_STATUSES,
+  CategoryApiError,
+  CategoryRef,
+  createCategory,
+  fetchAdminCategories,
+  uploadCategoryImage,
+} from "@/lib/categories";
 import { PageHeader } from "@/components/PageHeader";
 import { Icon } from "@/components/icons";
+import { BusyLabel } from "@/components/Spinner";
 
 function slugify(value: string): string {
   return value.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
 }
 
-export default function NewCategoryPage() {
+function NewCategoryForm() {
   const { getAccessToken } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   const [categories, setCategories] = useState<CategoryRef[]>([]);
   const [name, setName] = useState("");
   const [slug, setSlug] = useState("");
   const [slugTouched, setSlugTouched] = useState(false);
-  const [parentId, setParentId] = useState("");
+  const [parentId, setParentId] = useState(searchParams.get("parent") ?? "");
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [preview, setPreview] = useState<string | null>(null);
   const [description, setDescription] = useState("");
   const [status, setStatus] = useState("ACTIVE");
   const [saving, setSaving] = useState(false);
@@ -29,7 +40,7 @@ export default function NewCategoryPage() {
     const token = getAccessToken();
     if (!token) return;
     fetchAdminCategories(token, { page: 1, page_size: 100 })
-      .then((r) => setCategories(r.items))
+      .then((r) => setCategories(r.items.filter((c) => c.parent_id === null)))
       .catch(() => undefined);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -37,6 +48,12 @@ export default function NewCategoryPage() {
   const handleNameChange = (value: string) => {
     setName(value);
     if (!slugTouched) setSlug(slugify(value));
+  };
+
+  const handleImage = (file: File | undefined) => {
+    if (preview) URL.revokeObjectURL(preview);
+    setImageFile(file ?? null);
+    setPreview(file ? URL.createObjectURL(file) : null);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -53,6 +70,12 @@ export default function NewCategoryPage() {
         parent_id: parentId ? Number(parentId) : null,
         status,
       });
+      if (imageFile) {
+        // The category exists at this point - if only the photo fails,
+        // land on its page (where the image can be retried) rather than
+        // leaving the form open, which would create a duplicate on retry.
+        await uploadCategoryImage(token, category.id, imageFile).catch(() => undefined);
+      }
       router.push(`/categories/${category.id}`);
     } catch (err) {
       setError(err instanceof CategoryApiError ? err.message : "Unable to create this category.");
@@ -67,7 +90,11 @@ export default function NewCategoryPage() {
         <Icon name="chevron-left" size={14} /> Back to categories
       </button>
 
-      <PageHeader eyebrow="Catalog" title="Create category" />
+      <PageHeader
+        eyebrow="Catalog"
+        title={parentId ? "Create subcategory" : "Create category"}
+        description={parentId ? "It appears inside its parent category on the app." : undefined}
+      />
 
       <form onSubmit={handleSubmit} className="rounded border border-neutral-200 bg-white p-6">
         <Field label="Name" required>
@@ -88,7 +115,7 @@ export default function NewCategoryPage() {
           />
         </Field>
 
-        <Field label="Parent category" hint="Leave empty for a top-level category.">
+        <Field label="Parent category" hint="Leave empty for a top-level category (a shelf on the app). Pick one to make this a subcategory.">
           <select
             value={parentId}
             onChange={(e) => setParentId(e.target.value)}
@@ -122,10 +149,24 @@ export default function NewCategoryPage() {
           </select>
         </Field>
 
-        <p className="mb-4 text-xs text-neutral-400">
-          Image, display order, and featured state aren&apos;t supported on categories yet - there&apos;s no
-          backend field for them.
-        </p>
+        <Field label="Image" hint="Shown on the app. JPEG, PNG or WEBP, up to 8 MB.">
+          <div className="flex items-center gap-3">
+            {preview ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={preview} alt="" className="h-20 w-20 rounded object-cover" />
+            ) : (
+              <span className="flex h-20 w-20 items-center justify-center rounded bg-neutral-100 text-xs text-neutral-400">
+                None
+              </span>
+            )}
+            <input
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              onChange={(e) => handleImage(e.target.files?.[0])}
+              className="text-sm"
+            />
+          </div>
+        </Field>
 
         {error && (
           <p className="mb-4 rounded border border-status-danger/30 bg-status-dangerLight px-3 py-2 text-sm text-status-danger">
@@ -138,10 +179,18 @@ export default function NewCategoryPage() {
           disabled={saving}
           className="w-full rounded bg-primary-800 py-2.5 text-sm font-semibold text-white hover:bg-primary-700 disabled:opacity-60"
         >
-          {saving ? "Creating..." : "Create category"}
+          {saving ? <BusyLabel>Creating...</BusyLabel> : "Create category"}
         </button>
       </form>
     </div>
+  );
+}
+
+export default function NewCategoryPage() {
+  return (
+    <Suspense fallback={null}>
+      <NewCategoryForm />
+    </Suspense>
   );
 }
 

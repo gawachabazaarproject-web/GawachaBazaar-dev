@@ -16,6 +16,16 @@ export function useAddress(id: number | null) {
   });
 }
 
+/** Delivery charge (base + per km by road) to one saved address. */
+export function useDeliveryQuote(addressId: number | null | undefined) {
+  return useQuery({
+    queryKey: ["delivery-quote", addressId],
+    queryFn: () => addressApi.deliveryQuote(addressId as number),
+    enabled: !!addressId,
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
 export function useCreateAddress() {
   const queryClient = useQueryClient();
   return useMutation({

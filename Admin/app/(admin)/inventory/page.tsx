@@ -14,6 +14,8 @@ import {
   InventoryDashboard,
   Location,
   OPERATIONAL_STATUSES,
+  packCount,
+  packTotal,
 } from "@/lib/inventory";
 import { Category, fetchCategories } from "@/lib/products";
 import { formatDateTime } from "@/lib/format";
@@ -258,7 +260,12 @@ function LotRow({ lot, onClick }: { lot: AdminInventoryLotListItem; onClick: () 
   return (
     <tr onClick={onClick} className="cursor-pointer hover:bg-neutral-50">
       <td className="px-4 py-3">
-        <p className="font-medium text-primary-900">{lot.product_name}</p>
+        <p className="font-medium text-primary-900">
+          {lot.product_name}
+          <span className="ml-2 rounded-full bg-neutral-100 px-2 py-0.5 text-xs font-semibold text-neutral-600">
+            {lot.variant_name}
+          </span>
+        </p>
         <p className="text-xs text-neutral-500">{lot.sku}</p>
       </td>
       <td className="px-4 py-3 text-neutral-600">{lot.category_name}</td>
@@ -267,9 +274,15 @@ function LotRow({ lot, onClick }: { lot: AdminInventoryLotListItem; onClick: () 
         <p className="text-neutral-700">{lot.batch_code}</p>
         {lot.batch_expiry_date && <p className="text-xs text-neutral-400">exp {lot.batch_expiry_date}</p>}
       </td>
-      <td className="px-4 py-3 text-right text-neutral-600">{lot.on_hand}</td>
-      <td className="px-4 py-3 text-right text-neutral-600">{lot.reserved}</td>
-      <td className="px-4 py-3 text-right font-semibold text-primary-900">{lot.available}</td>
+      <td className="px-4 py-3 text-right text-neutral-600">
+        {packCount(lot.on_hand)}
+        <p className="text-xs text-neutral-400">{packTotal(lot.on_hand, lot.variant_quantity, lot.variant_unit)}</p>
+      </td>
+      <td className="px-4 py-3 text-right text-neutral-600">{packCount(lot.reserved)}</td>
+      <td className="px-4 py-3 text-right font-semibold text-primary-900">
+        {packCount(lot.available)}
+        <p className="text-xs font-normal text-neutral-400">{packTotal(lot.available, lot.variant_quantity, lot.variant_unit)}</p>
+      </td>
       <td className="px-4 py-3"><StatusBadge status={lot.operational_status} /></td>
       <td className="px-4 py-3 text-neutral-500">{lot.last_movement_at ? formatDateTime(lot.last_movement_at) : "—"}</td>
     </tr>

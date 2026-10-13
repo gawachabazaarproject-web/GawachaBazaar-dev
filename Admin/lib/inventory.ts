@@ -11,6 +11,8 @@ export interface AdminInventoryLotListItem {
   product_name: string;
   variant_id: number;
   variant_name: string;
+  variant_unit: string;
+  variant_quantity: string;
   sku: string;
   category_id: number;
   category_name: string;
@@ -87,6 +89,7 @@ export interface AdminInventoryLotDetail {
   variant_name: string;
   sku: string;
   unit: string;
+  variant_quantity: string;
   location_id: number;
   location_name: string;
   location_code: string;
@@ -294,4 +297,38 @@ export async function transferStock(
   payload: { source_lot_id: number; destination_location_id: number; quantity: string; remarks?: string },
 ): Promise<{ source_lot: AdminInventoryLotListItem; destination_lot: AdminInventoryLotListItem }> {
   return request(accessToken, "/inventory/admin/transfer", { method: "POST", body: JSON.stringify(payload) });
+}
+
+const UNIT_BASE: Record<string, [number, string, number, string]> = {
+  // unit -> [base factor, base label, factor of the larger display unit, its label]
+  KG: [1000, "g", 1000, "kg"],
+  G: [1, "g", 1000, "kg"],
+  L: [1000, "ml", 1000, "L"],
+  ML: [1, "ml", 1000, "L"],
+};
+
+function trim(n: number): string {
+  return String(Number(n.toFixed(3)));
+}
+
+/** Stock is counted in packs of the variant ("100 packs"), not in the
+ * pack's own unit - this is the count label. */
+export function packCount(packs: string | number): string {
+  const n = Number(packs);
+  return `${trim(n)} ${n === 1 ? "pack" : "packs"}`;
+}
+
+/** What a number of packs adds up to in real units ("100 kg"), or null
+ * when the pack has no meaningful total (a pack counted as "1 pack"). */
+export function packTotal(packs: string | number, packQuantity: string | number, unit: string): string | null {
+  const total = Number(packs) * Number(packQuantity);
+  const conv = UNIT_BASE[unit];
+  if (!conv) return `${trim(total)} ${unit.toLowerCase()}`;
+  const base = total * conv[0];
+  return base >= conv[2] ? `${trim(base / conv[2])} ${conv[3]}` : `${trim(base)} ${conv[1]}`;
+}
+
+/** "1 kg" - the size of one pack. */
+export function packSize(packQuantity: string | number, unit: string): string {
+  return `${trim(Number(packQuantity))} ${unit.toLowerCase()}`;
 }

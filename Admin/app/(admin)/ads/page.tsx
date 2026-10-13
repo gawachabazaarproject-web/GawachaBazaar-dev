@@ -19,6 +19,7 @@ import { PageHeader } from "@/components/PageHeader";
 import { EmptyState } from "@/components/EmptyState";
 import { TableSkeleton } from "@/components/TableSkeleton";
 import { StatusBadge } from "@/components/StatusBadge";
+import { BusyLabel, Spinner } from "@/components/Spinner";
 
 export default function AdsPage() {
   const { getAccessToken } = useAuth();
@@ -159,7 +160,8 @@ export default function AdsPage() {
                     </td>
                     <td className="px-4 py-3 text-neutral-500">{formatDate(ad.created_at)}</td>
                     <td className="px-4 py-3">
-                      <div className="flex justify-end gap-3 text-xs font-semibold">
+                      <div className="flex items-center justify-end gap-3 text-xs font-semibold">
+                        {busy && <Spinner className="h-4 w-4 text-primary-700" />}
                         <button
                           disabled={busy}
                           onClick={() => setEditing(ad)}
@@ -323,7 +325,7 @@ function AddAdDialog({ onClose, onCreated }: { onClose: () => void; onCreated: (
             disabled={saving || !brandName || !file}
             className="rounded bg-primary-800 px-4 py-2 text-sm font-semibold text-white disabled:opacity-40"
           >
-            {saving ? "Creating..." : "Create ad"}
+            {saving ? <BusyLabel>Creating...</BusyLabel> : "Create ad"}
           </button>
         </div>
       </div>
@@ -425,7 +427,7 @@ function EditAdDialog({
             disabled={saving || !brandName}
             className="rounded bg-primary-800 px-4 py-2 text-sm font-semibold text-white disabled:opacity-40"
           >
-            {saving ? "Saving..." : "Save changes"}
+            {saving ? <BusyLabel>Saving...</BusyLabel> : "Save changes"}
           </button>
         </div>
       </div>

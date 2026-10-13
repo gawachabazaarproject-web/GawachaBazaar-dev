@@ -10,6 +10,7 @@ import {
   CategoryApiError,
   CATEGORY_STATUSES,
   CategoryRef,
+  deleteCategory,
   deleteCategoryImage,
   fetchAdminCategories,
   fetchAdminCategoryDetail,
@@ -25,6 +26,7 @@ import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { EmptyState } from "@/components/EmptyState";
 import { ImageDropzone } from "@/components/ImageDropzone";
 import { Icon } from "@/components/icons";
+import { BusyLabel, PageLoader } from "@/components/Spinner";
 
 export default function CategoryDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -47,8 +49,13 @@ export default function CategoryDetailPage({ params }: { params: Promise<{ id: s
   const [isDirty, setIsDirty] = useState(false);
   const [archiveOpen, setArchiveOpen] = useState(false);
   const [archiving, setArchiving] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const canEdit = user && hasPermission(user.roles, "categories.update");
+  const canCreate = user && hasPermission(user.roles, "categories.create");
+  const canDelete = user && hasPermission(user.roles, "categories.delete");
 
   const load = useCallback(async () => {
     const token = getAccessToken();
@@ -140,6 +147,20 @@ export default function CategoryDetailPage({ params }: { params: Promise<{ id: s
     }
   };
 
+  const handleDelete = async () => {
+    const token = getAccessToken();
+    if (!token) return;
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      await deleteCategory(token, categoryId);
+      router.push("/categories");
+    } catch (err) {
+      setDeleteError(err instanceof CategoryApiError ? err.message : "Unable to delete this category.");
+      setDeleting(false);
+    }
+  };
+
   const handleRestore = async () => {
     const token = getAccessToken();
     if (!token) return;
@@ -180,7 +201,7 @@ export default function CategoryDetailPage({ params }: { params: Promise<{ id: s
     await load();
   };
 
-  if (loading) return <div className="animate-pulse text-sm text-neutral-400">Loading category...</div>;
+  if (loading) return <PageLoader label="Loading category..." />;
   if (error || !category) return <ErrorState message={error ?? "Category not found."} onRetry={load} />;
 
   return (
@@ -201,7 +222,16 @@ export default function CategoryDetailPage({ params }: { params: Promise<{ id: s
           </p>
         </div>
         {canEdit && (
-          <div>
+          <div className="flex items-center gap-2">
+            {category.status !== "ARCHIVED" && (
+              <button
+                onClick={() => updateField("status", category.status === "ACTIVE" ? "INACTIVE" : "ACTIVE")}
+                className="rounded border border-neutral-300 px-3 py-1.5 text-sm font-semibold text-neutral-700 hover:bg-neutral-50"
+                title="Applied when you press Save changes"
+              >
+                {general.status === "ACTIVE" ? "Mark inactive" : "Mark active"}
+              </button>
+            )}
             {category.status === "ARCHIVED" ? (
               <button onClick={handleRestore} className="rounded border border-primary-700 px-3 py-1.5 text-sm font-semibold text-primary-800 hover:bg-primary-50">
                 Restore
@@ -212,6 +242,14 @@ export default function CategoryDetailPage({ params }: { params: Promise<{ id: s
                 className="rounded border border-status-danger/40 px-3 py-1.5 text-sm font-semibold text-status-danger hover:bg-status-dangerLight"
               >
                 Archive category
+              </button>
+            )}
+            {canDelete && (
+              <button
+                onClick={() => { setDeleteError(null); setDeleteOpen(true); }}
+                className="rounded bg-status-danger px-3 py-1.5 text-sm font-semibold text-white hover:bg-status-danger/90"
+              >
+                Delete
               </button>
             )}
           </div>
@@ -240,11 +278,11 @@ export default function CategoryDetailPage({ params }: { params: Promise<{ id: s
             <select
               value={general.parent_id}
               onChange={(e) => updateField("parent_id", e.target.value)}
-              disabled={!canEdit}
+              disabled={!canEdit || category.children.length > 0}
               className="w-full rounded border border-neutral-300 bg-white px-3 py-2 text-sm disabled:bg-neutral-50"
             >
               <option value="">No parent (top-level)</option>
-              {allCategories.filter((c) => c.id !== categoryId).map((c) => (
+              {allCategories.filter((c) => c.id !== categoryId && c.parent_id === null).map((c) => (
                 <option key={c.id} value={c.id}>{c.name}</option>
               ))}
             </select>
@@ -284,21 +322,45 @@ export default function CategoryDetailPage({ params }: { params: Promise<{ id: s
             disabled={!isDirty || savingGeneral}
             className="rounded bg-primary-800 px-4 py-2 text-sm font-semibold text-white disabled:opacity-40"
           >
-            {savingGeneral ? "Saving..." : "Save changes"}
+            {savingGeneral ? <BusyLabel>Saving...</BusyLabel> : "Save changes"}
           </button>
         )}
       </Section>
 
-      {category.children.length > 0 && (
+      {category.parent_id === null && (
         <Section title={`Subcategories (${category.children.length})`}>
-          <div className="divide-y divide-neutral-100">
-            {category.children.map((c) => (
-              <div key={c.id} onClick={() => router.push(`/categories/${c.id}`)} className="flex cursor-pointer items-center justify-between py-2 text-sm hover:bg-neutral-50">
-                <span className="text-neutral-800">{c.name}</span>
-                <StatusBadge status={c.status} />
-              </div>
-            ))}
-          </div>
+          {category.children.length === 0 ? (
+            <p className="mb-3 text-sm text-neutral-400">
+              No subcategories yet. Add some to split this category into sections on the app.
+            </p>
+          ) : (
+            <div className="mb-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+              {category.children.map((c) => (
+                <div
+                  key={c.id}
+                  onClick={() => router.push(`/categories/${c.id}`)}
+                  className="flex cursor-pointer items-center gap-3 rounded border border-neutral-200 p-2 text-sm hover:bg-neutral-50"
+                >
+                  {c.image_url ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={c.image_url} alt="" className="h-12 w-12 rounded object-cover" />
+                  ) : (
+                    <span className="h-12 w-12 rounded bg-neutral-100" />
+                  )}
+                  <span className="min-w-0 flex-1 truncate font-medium text-neutral-800">{c.name}</span>
+                  <StatusBadge status={c.status} />
+                </div>
+              ))}
+            </div>
+          )}
+          {canCreate && (
+            <button
+              onClick={() => router.push(`/categories/new?parent=${category.id}`)}
+              className="rounded border border-primary-700 px-3 py-1.5 text-sm font-semibold text-primary-800 hover:bg-primary-50"
+            >
+              + Add subcategory
+            </button>
+          )}
         </Section>
       )}
 
@@ -346,8 +408,7 @@ export default function CategoryDetailPage({ params }: { params: Promise<{ id: s
           <p className="text-sm text-neutral-400">No image set.</p>
         )}
         <p className="mt-3 text-xs text-neutral-400">
-          Display-order and featured-state still have no backing field in the backend - there is nothing real to
-          control for those here yet.
+          Shown on the app. Use a bright, well-lit photo - it is cropped to a square on category cards.
         </p>
       </Section>
 
@@ -384,6 +445,22 @@ export default function CategoryDetailPage({ params }: { params: Promise<{ id: s
         loading={archiving}
         onConfirm={handleArchive}
         onCancel={() => setArchiveOpen(false)}
+      />
+
+      <ConfirmDialog
+        open={deleteOpen}
+        title={`Delete "${category.name}"?`}
+        description={
+          category.product_count > 0 || category.children.length > 0
+            ? "This category still has products or subcategories, so it can't be deleted yet. Move them first, or set it to Inactive to hide it from customers."
+            : "This permanently removes the category. This can't be undone - set it to Inactive instead if you may want it back."
+        }
+        confirmLabel="Delete category"
+        danger
+        loading={deleting}
+        error={deleteError}
+        onConfirm={handleDelete}
+        onCancel={() => setDeleteOpen(false)}
       />
     </div>
   );

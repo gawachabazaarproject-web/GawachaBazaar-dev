@@ -46,6 +46,7 @@ from app.models.promotion import Promotion
 from app.models.promotion_eligible_customer import PromotionEligibleCustomer
 from app.models.promotion_redemption import PromotionRedemption
 from app.models.promotion_target import PromotionTarget
+from app.models.push_token import PushToken
 from app.models.quality_check import QualityCheck
 from app.models.quote import Quote
 from app.models.quote_item import QuoteItem
@@ -98,6 +99,7 @@ __all__ = [
     "PromotionEligibleCustomer",
     "PromotionRedemption",
     "PromotionTarget",
+    "PushToken",
     "QualityCheck",
     "Quote",
     "QuoteItem",

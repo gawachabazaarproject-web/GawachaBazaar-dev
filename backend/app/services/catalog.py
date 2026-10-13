@@ -14,12 +14,15 @@ from sqlalchemy.orm import Session, aliased, joinedload, selectinload
 
 from app.exceptions.base import BusinessValidationError, ConflictError, NotFoundError
 from app.models.admin_action_log import AdminActionLog
+from app.models.cart_item import CartItem
 from app.models.category import Category
 from app.models.inventory_lot import InventoryLot
+from app.models.order_item import OrderItem
 from app.models.price import Price
 from app.models.product import Product
 from app.models.product_image import ProductImage
 from app.models.product_variant import ProductVariant
+from app.models.quote_item import QuoteItem
 from app.models.user import User
 from app.schemas.admin_catalog import (
     AdminCategoryDetailResponse,
@@ -55,6 +58,7 @@ from app.schemas.catalog import (
 )
 from app.services.admin_audit import AdminAuditService
 from app.services.pricing import get_current_prices_for_variants
+from app.services.stock_pool import available_packs_by_variant, variant_size
 
 _ACTIVE = "ACTIVE"
 
@@ -74,7 +78,13 @@ class CatalogService:
     ) -> CategoryListResponse:
         query = self.db.query(Category).filter(Category.status == _ACTIVE)
         if parent_id is not None:
+            # Subcategories only show while their parent is itself active.
+            self._require_active_category(parent_id)
             query = query.filter(Category.parent_id == parent_id)
+        else:
+            # The storefront's shelf is the top level; subcategories are
+            # reached through their parent.
+            query = query.filter(Category.parent_id.is_(None))
 
         total = query.count()
         items = (
@@ -83,8 +93,32 @@ class CatalogService:
             .limit(page_size)
             .all()
         )
+        child_counts = dict(
+            self.db.query(Category.parent_id, func.count(Category.id))
+            .filter(
+                Category.parent_id.in_([c.id for c in items]),
+                Category.status == _ACTIVE,
+            )
+            .group_by(Category.parent_id)
+            .all()
+        )
+        # Product totals roll up: a shelf counts its subcategories' products.
+        shelf = func.coalesce(Category.parent_id, Category.id)
+        product_counts = dict(
+            self.db.query(shelf, func.count(Product.id))
+            .join(Product, Product.category_id == Category.id)
+            .filter(Product.status == _ACTIVE, Category.status == _ACTIVE, shelf.in_([c.id for c in items]))
+            .group_by(shelf)
+            .all()
+        )
+        responses = []
+        for c in items:
+            response = CategoryResponse.model_validate(c)
+            response.child_count = child_counts.get(c.id, 0)
+            response.product_count = product_counts.get(c.id, 0)
+            responses.append(response)
         return CategoryListResponse(
-            items=[CategoryResponse.model_validate(c) for c in items],
+            items=responses,
             page=page,
             page_size=page_size,
             total=total,
@@ -98,6 +132,8 @@ class CatalogService:
         )
         if not category:
             raise NotFoundError("Category not found.")
+        if category.parent_id is not None:
+            self._require_active_category(category.parent_id)
 
         children = (
             self.db.query(Category)
@@ -114,6 +150,7 @@ class CatalogService:
             parent_id=category.parent_id,
             status=category.status,
             created_at=category.created_at,
+            child_count=len(children),
             children=[CategoryResponse.model_validate(c) for c in children],
         )
 
@@ -174,13 +211,22 @@ class CatalogService:
     ) -> ProductListResponse:
         query = self.db.query(Product).filter(Product.status == _ACTIVE)
         if category_id is not None:
-            query = query.filter(Product.category_id == category_id)
+            # A parent category shows its own products plus those of its
+            # active subcategories.
+            ids = [category_id] + [
+                cid
+                for (cid,) in self.db.query(Category.id).filter(
+                    Category.parent_id == category_id, Category.status == _ACTIVE
+                )
+            ]
+            query = query.filter(Product.category_id.in_(ids))
         if q is not None:
             # Phase 20 addition: the smallest possible backend change to
             # support the mobile search screen - no full-text search
             # engine, just a case-insensitive name filter, consistent with
             # the "do not invent a complex search engine" instruction.
-            query = query.filter(Product.name.ilike(f"%{q}%"))
+            escaped = q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+            query = query.filter(Product.name.ilike(f"%{escaped}%", escape="\\"))
 
         total = query.count()
         products = (
@@ -224,14 +270,14 @@ class CatalogService:
     def create_category(
         self, data: CreateCategoryRequest, admin_user_id: int
     ) -> CategoryResponse:
-        if data.parent_id is not None:
-            self.get_category_or_404(data.parent_id)
+        self._validate_parent(data.parent_id)
 
         category = Category(
             parent_id=data.parent_id,
             name=data.name,
             slug=data.slug,
             description=data.description,
+            image_url=data.image_url,
             status=data.status,
         )
         self.db.add(category)
@@ -266,12 +312,8 @@ class CatalogService:
         update_data = data.model_dump(exclude_unset=True)
         previous_status = category.status
 
-        if "parent_id" in update_data and update_data["parent_id"] is not None:
-            if update_data["parent_id"] == category_id:
-                raise BusinessValidationError(
-                    "A category cannot be its own parent."
-                )
-            self.get_category_or_404(update_data["parent_id"])
+        if "parent_id" in update_data:
+            self._validate_parent(update_data["parent_id"], category_id)
 
         for field, value in update_data.items():
             setattr(category, field, value)
@@ -305,6 +347,65 @@ class CatalogService:
             ) from exc
         self.db.refresh(category)
         return CategoryResponse.model_validate(category)
+
+    def delete_category(self, category_id: int, admin_user_id: int) -> None:
+        category = self.get_category_or_404(category_id)
+
+        if self.db.query(Category.id).filter(Category.parent_id == category_id).first():
+            raise ConflictError(
+                "This category has subcategories. Delete or move them first, "
+                "or set it to Inactive instead."
+            )
+        if self.db.query(Product.id).filter(Product.category_id == category_id).first():
+            raise ConflictError(
+                "This category still has products. Move them to another "
+                "category first, or set it to Inactive instead."
+            )
+
+        AdminAuditService(self.db).record(
+            admin_user_id=admin_user_id,
+            action="category.delete",
+            resource_type="category",
+            resource_id=category.id,
+            previous_state=category.status,
+        )
+        self.db.delete(category)
+        try:
+            self.db.commit()
+        except IntegrityError as exc:
+            self.db.rollback()
+            raise ConflictError(
+                "This category is still in use and can't be deleted. "
+                "Set it to Inactive instead."
+            ) from exc
+
+    def _validate_parent(
+        self, parent_id: int | None, category_id: int | None = None
+    ) -> None:
+        """Categories nest exactly one level: Category -> Subcategory."""
+        if parent_id is None:
+            return
+        if parent_id == category_id:
+            raise BusinessValidationError("A category cannot be its own parent.")
+        parent = self.get_category_or_404(parent_id)
+        if parent.parent_id is not None:
+            raise BusinessValidationError(
+                "Subcategories can't have their own subcategories."
+            )
+        if category_id is not None and (
+            self.db.query(Category.id).filter(Category.parent_id == category_id).first()
+        ):
+            raise BusinessValidationError(
+                "A category with subcategories can't become a subcategory itself."
+            )
+
+    def _require_active_category(self, category_id: int) -> None:
+        if not (
+            self.db.query(Category.id)
+            .filter(Category.id == category_id, Category.status == _ACTIVE)
+            .first()
+        ):
+            raise NotFoundError("Category not found.")
 
     # ------------------------------------------------------------------
     # Admin: Category list/detail (Admin Panel Phase 9) - unscoped by
@@ -613,8 +714,14 @@ class CatalogService:
             )
             default_variant = active_variants[0] if active_variants else None
             price_row = current_prices.get(default_variant.id) if default_variant else None
+            # Sizes of one unit family share a pool, so count each family
+            # once (via its first size) instead of summing the same stock
+            # once per size.
+            first_per_family: dict[str, ProductVariant] = {}
+            for v in active_variants:
+                first_per_family.setdefault(variant_size(v)[0], v)
             total_stock = sum(
-                (stock_by_variant.get(v.id, Decimal("0")) for v in active_variants),
+                (stock_by_variant.get(v.id, Decimal("0")) for v in first_per_family.values()),
                 Decimal("0"),
             )
             items.append(
@@ -794,6 +901,47 @@ class CatalogService:
         self.db.refresh(variant)
         return self._to_variant_response(variant)
 
+    def delete_variant(self, variant_id: int, admin_user_id: int) -> None:
+        variant = self.get_variant_or_404(variant_id)
+
+        # Variants that were ever ordered, quoted or stocked are part of the
+        # business record - they can only be deactivated, never removed.
+        if (
+            self.db.query(OrderItem.id)
+            .filter(OrderItem.variant_id == variant_id)
+            .first()
+            or self.db.query(QuoteItem.id)
+            .filter(QuoteItem.variant_id == variant_id)
+            .first()
+            or self.db.query(InventoryLot.id)
+            .filter(InventoryLot.variant_id == variant_id)
+            .first()
+        ):
+            raise ConflictError(
+                "This variant has orders, quotes or stock history and can't be "
+                "deleted. Deactivate it instead."
+            )
+
+        AdminAuditService(self.db).record(
+            admin_user_id=admin_user_id,
+            action="product.variant.delete",
+            resource_type="product_variant",
+            resource_id=variant.id,
+            previous_state=variant.status,
+            reason=f"product_id={variant.product_id}",
+        )
+        self.db.query(CartItem).filter(CartItem.variant_id == variant_id).delete()
+        self.db.query(Price).filter(Price.variant_id == variant_id).delete()
+        self.db.delete(variant)
+        try:
+            self.db.commit()
+        except IntegrityError as exc:
+            self.db.rollback()
+            raise ConflictError(
+                "This variant is still in use and can't be deleted. "
+                "Deactivate it instead."
+            ) from exc
+
     # ------------------------------------------------------------------
     # Admin: Image management
     # ------------------------------------------------------------------
@@ -971,26 +1119,12 @@ class CatalogService:
     def _get_available_stock_for_variants(
         self, variant_ids: list[int]
     ) -> dict[int, Decimal]:
-        """Sums `quantity - reserved_quantity` across ACTIVE inventory lots
-        per variant - the exact same arithmetic InventoryLot's own docstring
-        defines as "available" (see app/models/inventory_lot.py). Read-only:
-        Products never mutates inventory, only displays it (see the
-        admin-panel Products spec's explicit "don't duplicate inventory
-        management inside Products" rule) - adjustments happen through the
-        Inventory module.
+        """Sellable packs per variant from the product's shared stock pool
+        (see app.services.stock_pool): stock entered against one size also
+        counts for its sibling sizes. Read-only - Products never mutates
+        inventory, adjustments happen through the Inventory module.
         """
-        if not variant_ids:
-            return {}
-        rows = (
-            self.db.query(
-                InventoryLot.variant_id,
-                func.sum(InventoryLot.quantity - InventoryLot.reserved_quantity),
-            )
-            .filter(InventoryLot.variant_id.in_(variant_ids), InventoryLot.status == "ACTIVE")
-            .group_by(InventoryLot.variant_id)
-            .all()
-        )
-        return {variant_id: (total or Decimal("0")) for variant_id, total in rows}
+        return available_packs_by_variant(self.db, variant_ids)
 
     def _get_current_prices_for_variants(
         self, variant_ids: list[int]
