@@ -3,6 +3,7 @@
 import React, { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
+import { PageLoader } from "@/components/Spinner";
 import { AdminShell } from "@/components/AdminShell";
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
@@ -15,9 +16,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   if (status !== "authenticated") {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-neutral-100">
-        <p className="eyebrow text-neutral-400">Loading Gawacha Bazaar Admin...</p>
-      </div>
+      <PageLoader fullScreen label={status === "unauthenticated" ? "Redirecting to sign in..." : "Signing you in..."} />
     );
   }
 

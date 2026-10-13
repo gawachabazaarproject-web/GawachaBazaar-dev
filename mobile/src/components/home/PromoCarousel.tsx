@@ -19,7 +19,7 @@ import { colors, radius, spacing } from "@/theme";
 
 const SLIDE_HEIGHT = 480;
 const POSTER_RADIUS = 20;
-const AUTO_MS = 5500;
+const AUTO_MS = 3000;
 
 export interface PromoCarouselProps {
   onSlidePress?: (slideId: string) => void;

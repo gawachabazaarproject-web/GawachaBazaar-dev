@@ -43,7 +43,8 @@ export function CartBar() {
   const hiddenOnScreen = rootSegment === "cart" || rootSegment === "checkout" || rootSegment === "product";
 
   const itemCount = cart?.items.reduce((sum, i) => sum + Math.round(Number.parseFloat(i.quantity)), 0) ?? 0;
-  if (!cart || itemCount === 0 || hiddenOnScreen || wholesaleMode === "wholesale") return null;
+  // The restored query cache can still hold a cart after sign-out / before sign-in.
+  if (authStatus !== "authenticated" || !cart || itemCount === 0 || hiddenOnScreen || wholesaleMode === "wholesale") return null;
 
   const bottomOffset = inTabs ? TAB_BAR_CONTENT_HEIGHT + insets.bottom : insets.bottom + spacing.base;
 

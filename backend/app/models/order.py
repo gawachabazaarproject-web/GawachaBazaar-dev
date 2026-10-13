@@ -108,6 +108,16 @@ class Order(Base):
         server_default="0",
         nullable=False,
     )
+    # Distance-based delivery charge, included in `total_amount`.
+    delivery_fee: Mapped[Decimal] = mapped_column(
+        Numeric(12, 2),
+        server_default="0",
+        nullable=False,
+    )
+    delivery_distance_km: Mapped[Decimal | None] = mapped_column(
+        Numeric(8, 1),
+        nullable=True,
+    )
     promotion_id: Mapped[int | None] = mapped_column(
         BigInteger,
         ForeignKey("promotions.id", ondelete="RESTRICT"),

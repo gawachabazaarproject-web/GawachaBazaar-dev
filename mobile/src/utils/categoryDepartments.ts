@@ -22,6 +22,8 @@ export const CATEGORY_MARATHI: Record<string, string> = {
   "staples-grains": "धान्य व पीठ",
   "snacks-beverages": "नाश्ता व पेये",
   "personal-care": "वैयक्तिक काळजी",
+  "ready-to-cook": "शिजवायला तयार",
+  juices: "ज्यूस",
 };
 
 export const CATEGORY_ICONS: Record<string, string> = {
@@ -30,6 +32,8 @@ export const CATEGORY_ICONS: Record<string, string> = {
   "staples-grains": "package",
   "snacks-beverages": "coffee",
   "personal-care": "heart",
+  "ready-to-cook": "clock",
+  juices: "coffee",
 };
 
 const DEPARTMENTS: Record<string, Department[]> = {
@@ -62,6 +66,8 @@ const CATEGORY_STORY: Record<string, string> = {
   "staples-grains": "Stone-ground atta & sun-dried dals, sourced directly from the Wardha Organic Cluster.",
   "snacks-beverages": "Everyday snacks & beverages, stocked fresh from trusted local suppliers.",
   "personal-care": "Everyday household essentials, at fair village prices.",
+  "ready-to-cook": "Marinated, chopped and pre-mixed - a fresh dinner on the table in minutes.",
+  juices: "Cold-pressed juices, smoothies and seasonal coolers, bottled fresh every morning.",
 };
 
 export function getDepartments(slug: string): Department[] {

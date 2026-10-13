@@ -8,7 +8,7 @@ import { PriceTag } from "./PriceTag";
 import { QuantityStepper } from "./QuantityStepper";
 import { PressableScale } from "./PressableScale";
 import { useVariantStepper } from "@/features/cart/useCart";
-import { formatVariantSize } from "@/utils/money";
+import { formatRatePerUnit, formatVariantSize } from "@/utils/money";
 import { getEmbellishment } from "@/utils/productEmbellishments";
 import { colors, radius, shadows, spacing } from "@/theme";
 import { PriceResponse, ProductSummaryResponse, ProductVariantResponse } from "@/types/api";
@@ -62,6 +62,10 @@ export function ProductCard({ product, onPress, index = 0 }: ProductCardProps) {
   const stepper = useVariantStepper(addableVariantId ?? -1);
   const isAvailable = addableVariantId !== null;
   const price = product.variant?.current_price ?? product.startingPrice ?? null;
+  const sizeQuantity = product.variant?.quantity ?? product.defaultVariantQuantity;
+  const sizeUnit = product.variant?.unit ?? product.defaultVariantUnit;
+  const ratePerUnit =
+    price && sizeQuantity && sizeUnit ? formatRatePerUnit(price.price, sizeQuantity, sizeUnit) : null;
   const { marathiName, origin, mrp, badge, eta } = getEmbellishment(product.slug);
 
   return (
@@ -127,6 +131,11 @@ export function ProductCard({ product, onPress, index = 0 }: ProductCardProps) {
             ) : product.defaultVariantUnit && product.defaultVariantQuantity ? (
               <Text variant="caption" color={colors.textSecondary}>
                 {formatVariantSize(product.defaultVariantQuantity, product.defaultVariantUnit)}
+              </Text>
+            ) : null}
+            {ratePerUnit ? (
+              <Text variant="caption" color={colors.textMuted}>
+                {ratePerUnit}
               </Text>
             ) : null}
           </View>

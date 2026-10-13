@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import { BusyLabel } from "@/components/Spinner";
 
 /**
  * Per the admin-panel destructive-action rule: a dangerous action is never
@@ -78,7 +79,7 @@ export function ConfirmDialog({
               danger ? "bg-status-danger hover:bg-status-danger/90" : "bg-primary-800 hover:bg-primary-700"
             }`}
           >
-            {loading ? "Working..." : confirmLabel}
+            {loading ? <BusyLabel>Working...</BusyLabel> : confirmLabel}
           </button>
         </div>
       </div>

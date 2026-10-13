@@ -45,7 +45,7 @@ expiry regardless of how many attempts fail in that window.
 """
 
 from datetime import UTC, datetime, timedelta
-from decimal import Decimal
+from decimal import ROUND_UP, Decimal
 
 from sqlalchemy.orm import Session
 
@@ -57,6 +57,7 @@ from app.models.inventory_reservation import InventoryReservation
 from app.models.inventory_reservation_item import InventoryReservationItem
 from app.models.order import Order
 from app.models.order_item import OrderItem
+from app.models.product_variant import ProductVariant
 from app.schemas.inventory_reservation import (
     InventoryReservationDetailResponse,
     InventoryReservationItemResponse,
@@ -68,6 +69,7 @@ from app.services.reservation_state import (
     ReservationStatus,
     transition_reservation_status,
 )
+from app.services.stock_pool import pool_siblings, to_packs, variant_size
 
 RESERVATION_WINDOW_MINUTES = 30
 
@@ -121,22 +123,44 @@ class InventoryReservationService:
                 needed_by_variant.get(item.variant_id, Decimal("0")) + item.quantity
             )
 
-        # Lock every candidate lot for every needed variant up front, in a
-        # fixed (variant_id, created_at, id) order, before allocating any
-        # of them - this is what makes concurrent checkouts for overlapping
-        # variants deadlock-free.
-        lots_by_variant: dict[int, list[InventoryLot]] = {}
+        # Sizes of one product share a stock pool (see app.services.stock_pool):
+        # an order for 250 g can draw on lots entered against the 1 kg size.
+        # Lock every candidate lot - the needed variants' own lots and their
+        # same-family siblings' - up front in a single id-ASC order, before
+        # allocating any of them; that is what keeps concurrent checkouts for
+        # overlapping products deadlock-free.
+        variants = {
+            v.id: v
+            for v in self.db.query(ProductVariant)
+            .filter(ProductVariant.id.in_(list(needed_by_variant)))
+            .all()
+        }
+        pool_variants: dict[int, ProductVariant] = {}
+        pool_for_variant: dict[int, list[int]] = {}
         for variant_id in sorted(needed_by_variant):
-            lots_by_variant[variant_id] = (
-                self.db.query(InventoryLot)
-                .filter(
-                    InventoryLot.variant_id == variant_id,
-                    InventoryLot.status == _LOT_ACTIVE,
-                )
-                .order_by(InventoryLot.created_at.asc(), InventoryLot.id.asc())
-                .with_for_update()
-                .all()
+            siblings = pool_siblings(self.db, variants[variant_id])
+            pool_for_variant[variant_id] = [v.id for v in siblings]
+            pool_variants.update({v.id: v for v in siblings})
+
+        locked_lots = (
+            self.db.query(InventoryLot)
+            .filter(
+                InventoryLot.variant_id.in_(list(pool_variants)),
+                InventoryLot.status == _LOT_ACTIVE,
             )
+            .order_by(InventoryLot.id.asc())
+            .with_for_update()
+            .all()
+        )
+
+        def candidates(variant_id: int) -> list[InventoryLot]:
+            ids = set(pool_for_variant[variant_id])
+            own = [l for l in locked_lots if l.variant_id == variant_id]
+            others = [
+                l for l in locked_lots if l.variant_id in ids and l.variant_id != variant_id
+            ]
+            key = lambda l: (l.created_at, l.id)  # noqa: E731 - FIFO
+            return sorted(own, key=key) + sorted(others, key=key)
 
         # Allocate (in memory only, against the now-locked, fresh
         # quantities) before writing anything - if any variant can't be
@@ -145,8 +169,9 @@ class InventoryReservationService:
         remaining_capacity: dict[int, Decimal] = {}
 
         for item in order_items:
-            need = item.quantity
-            for lot in lots_by_variant[item.variant_id]:
+            item_size = variant_size(variants[item.variant_id])[1]
+            need = item.quantity  # in packs of the ordered variant
+            for lot in candidates(item.variant_id):
                 if need <= 0:
                     break
                 capacity = remaining_capacity.get(
@@ -155,10 +180,24 @@ class InventoryReservationService:
                 if capacity <= 0:
                     remaining_capacity[lot.id] = capacity
                     continue
-                take = min(capacity, need)
+                if lot.variant_id == item.variant_id:
+                    take = min(capacity, need)
+                    need_taken = take
+                else:
+                    lot_size = variant_size(pool_variants[lot.variant_id])[1]
+                    capacity_packs = to_packs(capacity * lot_size, item_size)
+                    need_taken = min(capacity_packs, need)
+                    if need_taken <= 0:
+                        continue
+                    take = min(
+                        capacity,
+                        (need_taken * item_size / lot_size).quantize(
+                            Decimal("0.001"), rounding=ROUND_UP
+                        ),
+                    )
                 allocations.append((item, lot, take))
                 remaining_capacity[lot.id] = capacity - take
-                need -= take
+                need -= need_taken
             if need > 0:
                 logger.warning(
                     "INVENTORY_RESERVATION_INSUFFICIENT_STOCK: variant_id=%s "

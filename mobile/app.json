@@ -43,6 +43,12 @@
         }
       ],
       "expo-image",
+      [
+        "expo-notifications",
+        {
+          "color": "#000F08"
+        }
+      ],
       "expo-secure-store",
       "expo-font",
       [
@@ -58,10 +64,21 @@
     "experiments": {
       "typedRoutes": true
     },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "enabled": true,
+      "checkAutomatically": "ON_LOAD",
+      "fallbackToCacheTimeout": 3000,
+      "url": "https://u.expo.dev/a751e06b-d698-4081-b49d-52bdee248959"
+    },
     "extra": {
+      "router": {},
       "eas": {
-        "projectId": "a8785aaa-4389-4f27-9e5a-4df1ec26f31c"
+        "projectId": "a751e06b-d698-4081-b49d-52bdee248959"
       }
-    }
+    },
+    "owner": "yash145"
   }
 }

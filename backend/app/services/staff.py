@@ -19,7 +19,7 @@ from app.core.firebase import (
     FirebaseUnavailableError,
     get_firebase,
 )
-from app.core.roles import STAFF_ROLES
+from app.core.roles import ADMIN, STAFF_ROLES
 from app.exceptions.base import (
     AppException,
     BusinessValidationError,
@@ -163,6 +163,9 @@ class StaffService:
         if not user_role:
             raise NotFoundError("This user does not hold that role.")
 
+        if role_name == ADMIN and self._active_admin_count(excluding_user_id=user_id) == 0:
+            raise BusinessValidationError("Cannot remove the last active ADMIN.")
+
         remaining = (
             self.db.query(UserRole)
             .join(Role, Role.id == UserRole.role_id)
@@ -212,6 +215,12 @@ class StaffService:
                 "You can't deactivate or suspend your own account. Ask another admin to do it."
             )
         user = self._get_staff_or_404(user_id)
+        if (
+            new_status != "ACTIVE"
+            and self._has_admin_role(user_id)
+            and self._active_admin_count(excluding_user_id=user_id) == 0
+        ):
+            raise ConflictError("Cannot deactivate the last active ADMIN.")
         previous = user.status
         user.status = new_status
         AdminAuditService(self.db).record(
@@ -226,6 +235,25 @@ class StaffService:
         return self.admin_get_staff_detail(user_id)
 
     # ------------------------------------------------------------------
+    def _has_admin_role(self, user_id: int) -> bool:
+        return (
+            self.db.query(UserRole.id)
+            .join(Role, Role.id == UserRole.role_id)
+            .filter(UserRole.user_id == user_id, Role.name == ADMIN)
+            .first()
+            is not None
+        )
+
+    def _active_admin_count(self, *, excluding_user_id: int) -> int:
+        """ACTIVE admins other than `excluding_user_id`."""
+        return (
+            self.db.query(User.id)
+            .join(UserRole, UserRole.user_id == User.id)
+            .join(Role, Role.id == UserRole.role_id)
+            .filter(Role.name == ADMIN, User.status == "ACTIVE", User.id != excluding_user_id)
+            .count()
+        )
+
     def _require_staff_role(self, role_name: str) -> Role:
         if role_name not in STAFF_ROLES:
             raise BusinessValidationError(

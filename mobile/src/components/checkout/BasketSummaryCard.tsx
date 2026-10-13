@@ -4,17 +4,20 @@ import { Feather } from "@expo/vector-icons";
 import { Text } from "@/components/Text";
 import { formatMoney } from "@/utils/money";
 import { colors, spacing } from "@/theme";
-import { CartItemResponse } from "@/types/api";
+import { CartItemResponse, DeliveryQuote } from "@/types/api";
+import { distanceLabel } from "@/utils/delivery";
 
 export interface BasketSummaryCardProps {
   items: CartItemResponse[];
   totalAmount: string | null;
   currency: string | null;
+  delivery?: DeliveryQuote;
+  deliveryLoading?: boolean;
 }
 
 /** Collapsible order-items summary - real cart items/prices, expand
  * state only (no fabricated content). */
-export function BasketSummaryCard({ items, totalAmount, currency }: BasketSummaryCardProps) {
+export function BasketSummaryCard({ items, totalAmount, currency, delivery, deliveryLoading }: BasketSummaryCardProps) {
   const [expanded, setExpanded] = useState(true);
 
   return (
@@ -46,10 +49,10 @@ export function BasketSummaryCard({ items, totalAmount, currency }: BasketSummar
           </View>
           <View style={styles.row}>
             <Text variant="body" color={colors.textSecondary}>
-              Mandi Direct Delivery Fee
+              Delivery Fee{distanceLabel(delivery) ? ` (${distanceLabel(delivery)})` : ""}
             </Text>
-            <Text variant="bodyMedium" color={colors.success}>
-              FREE
+            <Text variant="bodyMedium">
+              {delivery?.fee ? formatMoney(delivery.fee, currency ?? "INR") : deliveryLoading ? "Calculating..." : "-"}
             </Text>
           </View>
         </>

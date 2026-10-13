@@ -246,6 +246,9 @@ class PromotionService:
             return has_prior_order
         return False
 
+    def usage_available(self, promotion: Promotion, user_id: int) -> bool:
+        return self._usage_available(promotion, user_id)
+
     def _usage_available(self, promotion: Promotion, user_id: int) -> bool:
         if promotion.usage_limit_total is not None and promotion.redemption_count >= promotion.usage_limit_total:
             return False

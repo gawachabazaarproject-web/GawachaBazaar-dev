@@ -7,8 +7,12 @@ import {
   AdminCategoryListItem,
   CategoryApiError,
   CATEGORY_STATUSES,
+  deleteCategory,
   fetchAdminCategories,
+  updateCategory,
 } from "@/lib/categories";
+import { hasPermission } from "@/lib/permissions";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { formatDate } from "@/lib/format";
 import { PageHeader } from "@/components/PageHeader";
 import { EmptyState } from "@/components/EmptyState";
@@ -54,7 +58,7 @@ function buildTree(items: AdminCategoryListItem[]): TreeRow[] {
 }
 
 export default function CategoriesPage() {
-  const { getAccessToken } = useAuth();
+  const { getAccessToken, user } = useAuth();
   const router = useRouter();
 
   const [items, setItems] = useState<AdminCategoryListItem[] | null>(null);
@@ -64,6 +68,13 @@ export default function CategoriesPage() {
   const [q, setQ] = useState("");
   const [status, setStatus] = useState("");
   const hasFilters = Boolean(q || status);
+
+  const canCreate = Boolean(user && hasPermission(user.roles, "categories.create"));
+  const canEdit = Boolean(user && hasPermission(user.roles, "categories.update"));
+  const canDelete = Boolean(user && hasPermission(user.roles, "categories.delete"));
+  const [toDelete, setToDelete] = useState<AdminCategoryListItem | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     const token = getAccessToken();
@@ -90,6 +101,34 @@ export default function CategoriesPage() {
     load();
   }, [load]);
 
+  const toggleActive = async (row: AdminCategoryListItem) => {
+    const token = getAccessToken();
+    if (!token) return;
+    setActionError(null);
+    try {
+      await updateCategory(token, row.id, { status: row.status === "ACTIVE" ? "INACTIVE" : "ACTIVE" });
+      await load();
+    } catch (err) {
+      setActionError(err instanceof CategoryApiError ? err.message : "Unable to update this category.");
+    }
+  };
+
+  const confirmDelete = async () => {
+    const token = getAccessToken();
+    if (!token || !toDelete) return;
+    setDeleting(true);
+    try {
+      await deleteCategory(token, toDelete.id);
+      setToDelete(null);
+      await load();
+    } catch (err) {
+      setActionError(err instanceof CategoryApiError ? err.message : "Unable to delete this category.");
+      setToDelete(null);
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   const rows = useMemo(() => (items ? buildTree(items) : []), [items]);
 
   const clearFilters = () => {
@@ -104,12 +143,14 @@ export default function CategoriesPage() {
         title="Categories"
         description="Organize and control how customers discover products across Gawacha Bazaar."
         actions={
-          <button
-            onClick={() => router.push("/categories/new")}
-            className="rounded bg-primary-800 px-4 py-2 text-sm font-semibold text-white hover:bg-primary-700"
-          >
-            Create category
-          </button>
+          canCreate && (
+            <button
+              onClick={() => router.push("/categories/new")}
+              className="rounded bg-primary-800 px-4 py-2 text-sm font-semibold text-white hover:bg-primary-700"
+            >
+              Create category
+            </button>
+          )
         }
       />
 
@@ -137,9 +178,15 @@ export default function CategoriesPage() {
         )}
       </div>
 
+      {actionError && (
+        <p className="mb-4 rounded border border-status-danger/30 bg-status-dangerLight px-3 py-2 text-sm text-status-danger">
+          {actionError}
+        </p>
+      )}
+
       <div className="overflow-hidden rounded border border-neutral-200 bg-white">
         {loading ? (
-          <TableSkeleton rows={6} columns={6} />
+          <TableSkeleton rows={6} columns={7} />
         ) : error ? (
           <ErrorState message={error} onRetry={load} />
         ) : rows.length === 0 ? (
@@ -169,6 +216,7 @@ export default function CategoriesPage() {
                   <th className="px-4 py-2 font-medium">Products</th>
                   <th className="px-4 py-2 font-medium">Status</th>
                   <th className="px-4 py-2 font-medium">Updated</th>
+                  <th className="px-4 py-2 text-right font-medium">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-neutral-100">
@@ -183,11 +231,16 @@ export default function CategoriesPage() {
                         {row.depth > 0 && <span className="text-neutral-300">└</span>}
                         {row.image_url ? (
                           // eslint-disable-next-line @next/next/no-img-element
-                          <img src={row.image_url} alt="" className="h-6 w-6 rounded object-cover" />
+                          <img src={row.image_url} alt="" className="h-10 w-10 rounded object-cover" />
                         ) : (
-                          <span className="h-6 w-6 rounded bg-neutral-100" />
+                          <span className="h-10 w-10 rounded bg-neutral-100" />
                         )}
                         <span className="font-medium text-primary-900">{row.name}</span>
+                        {row.depth === 0 && row.child_count > 0 && (
+                          <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-xs text-neutral-500">
+                            {row.child_count} sub
+                          </span>
+                        )}
                       </span>
                     </td>
                     <td className="px-4 py-3 font-mono text-xs text-neutral-500">{row.slug}</td>
@@ -196,6 +249,28 @@ export default function CategoriesPage() {
                       <StatusBadge status={row.status} />
                     </td>
                     <td className="px-4 py-3 text-neutral-500">{formatDate(row.updated_at)}</td>
+                    <td className="whitespace-nowrap px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>
+                      <div className="inline-flex items-center gap-3 text-xs font-semibold">
+                        {canCreate && row.parent_id === null && (
+                          <button
+                            onClick={() => router.push(`/categories/new?parent=${row.id}`)}
+                            className="text-primary-700 hover:underline"
+                          >
+                            + Subcategory
+                          </button>
+                        )}
+                        {canEdit && row.status !== "ARCHIVED" && (
+                          <button onClick={() => toggleActive(row)} className="text-neutral-600 hover:underline">
+                            {row.status === "ACTIVE" ? "Deactivate" : "Activate"}
+                          </button>
+                        )}
+                        {canDelete && (
+                          <button onClick={() => setToDelete(row)} className="text-status-danger hover:underline">
+                            Delete
+                          </button>
+                        )}
+                      </div>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -203,6 +278,21 @@ export default function CategoriesPage() {
           </div>
         )}
       </div>
+
+      <ConfirmDialog
+        open={toDelete !== null}
+        title={`Delete "${toDelete?.name ?? ""}"?`}
+        description={
+          toDelete && (toDelete.product_count > 0 || toDelete.child_count > 0)
+            ? "This category still has products or subcategories, so it can't be deleted. Move them first, or deactivate it to hide it from customers."
+            : "This permanently removes the category. This can't be undone - deactivate it instead if you may want it back."
+        }
+        confirmLabel="Delete category"
+        danger
+        loading={deleting}
+        onConfirm={confirmDelete}
+        onCancel={() => setToDelete(null)}
+      />
     </div>
   );
 }

@@ -26,9 +26,6 @@ export function DeliverySummaryCard({ addressLabel, addressLine, onChangePress }
         <Text variant="bodyMedium" numberOfLines={1}>
           {addressLine}
         </Text>
-        <Text variant="caption" color={colors.textSecondary}>
-          Estimated in 25 mins from Saoner Mandi Hub
-        </Text>
       </View>
       <Pressable onPress={onChangePress}>
         <Text variant="bodySmall" color={colors.primary}>

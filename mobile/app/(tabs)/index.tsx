@@ -50,9 +50,9 @@ export default function HomeScreen() {
   };
 
   const defaultAddress = addresses?.find((a) => a.is_default) ?? addresses?.[0];
-  const allProducts = productsPages?.pages.flatMap((p) => p.items) ?? [];
 
   const { harvestProducts, specialtyProducts, restProducts } = useMemo(() => {
+    const allProducts = productsPages?.pages.flatMap((p) => p.items) ?? [];
     const cards: ProductCardData[] = allProducts.map(productSummaryToCardData);
     const bySlug = new Map(cards.map((c) => [c.slug, c]));
     const harvest = HARVEST_SLUGS.map((s) => bySlug.get(s)).filter((c): c is ProductCardData => !!c);
@@ -60,7 +60,7 @@ export default function HomeScreen() {
     const featuredIds = new Set([...harvest, ...specialty].map((c) => c.id));
     const rest = cards.filter((c) => !featuredIds.has(c.id));
     return { harvestProducts: harvest, specialtyProducts: specialty, restProducts: rest };
-  }, [allProducts]);
+  }, [productsPages]);
 
   const goToProduct = (product: ProductCardData) => router.push(`/product/${product.id}`);
 

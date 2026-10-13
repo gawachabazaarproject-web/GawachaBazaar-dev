@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
+import { BusyLabel, PageLoader } from "@/components/Spinner";
 
 export default function LoginPage() {
   const { login, forgotPassword, status, error } = useAuth();
@@ -48,6 +49,10 @@ export default function LoginPage() {
     setSubmitting(false);
   };
 
+  if (status === "loading" || status === "authenticated") {
+    return <PageLoader fullScreen label={status === "authenticated" ? "Opening your dashboard..." : "Checking your session..."} />;
+  }
+
   return (
     <div className="flex min-h-screen items-center justify-center bg-primary-800 px-4">
       <div className="w-full max-w-sm rounded bg-white p-8 shadow-xl">
@@ -85,7 +90,7 @@ export default function LoginPage() {
               disabled={submitting || resetCooldown > 0}
               className="mt-2 rounded bg-primary-800 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-primary-700 disabled:opacity-60"
             >
-              {submitting ? "Sending..." : resetCooldown > 0 ? `Resend in ${resetCooldown}s` : "Send reset link"}
+              {submitting ? <BusyLabel>Sending...</BusyLabel> : resetCooldown > 0 ? `Resend in ${resetCooldown}s` : "Send reset link"}
             </button>
             <button
               type="button"
@@ -135,7 +140,7 @@ export default function LoginPage() {
             disabled={submitting}
             className="mt-2 rounded bg-primary-800 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-primary-700 disabled:opacity-60"
           >
-            {submitting ? "Signing in..." : "Sign in"}
+            {submitting ? <BusyLabel>Signing in...</BusyLabel> : "Sign in"}
           </button>
           <button
             type="button"

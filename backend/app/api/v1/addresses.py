@@ -15,6 +15,7 @@ from app.schemas.address import (
     AddressListResponse,
     AddressResponse,
     CreateAddressRequest,
+    DeliveryQuoteResponse,
     UpdateAddressRequest,
 )
 from app.services.address import AddressService
@@ -41,6 +42,19 @@ def create_address(
     db: Session = Depends(get_db),
 ) -> AddressResponse:
     return AddressService(db).create_address(current_user.id, payload)
+
+
+@router.get(
+    "/{address_id}/delivery-quote",
+    response_model=DeliveryQuoteResponse,
+    summary="Delivery charge (base + per km by road) to one of the current user's addresses",
+)
+def delivery_quote(
+    address_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> DeliveryQuoteResponse:
+    return AddressService(db).delivery_quote(current_user.id, address_id)
 
 
 @router.get(

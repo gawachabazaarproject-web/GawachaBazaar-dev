@@ -64,12 +64,6 @@ export function ShopHeader({
         </Pressable>
       </View>
       <View style={styles.subRow}>
-        <View style={styles.etaBadge}>
-          <Feather name="zap" size={11} color={colors.textOnAccent} />
-          <Text variant="label" color={colors.textOnAccent}>
-            25 MINS
-          </Text>
-        </View>
         <Text variant="caption" color={colors.textMuted} style={{ fontFamily: fontFamily.devanagari }}>
           गावचा बाजार
         </Text>
