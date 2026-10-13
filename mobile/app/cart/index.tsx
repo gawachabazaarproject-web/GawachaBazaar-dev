@@ -1,6 +1,7 @@
 import React, { useMemo } from "react";
 import { Image } from "expo-image";
 import { Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { BazaarLoader } from "@/components/BazaarLoader";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Stack, useRouter } from "expo-router";
 import { Feather } from "@expo/vector-icons";
@@ -13,8 +14,9 @@ import { ShopHeader } from "@/components/ShopHeader";
 import { RecommendationRail } from "@/components/RecommendationRail";
 import { MiniProductTile } from "@/components/MiniProductTile";
 import { DeliverySummaryCard } from "@/components/cart/DeliverySummaryCard";
-import { FreeDeliveryProgress } from "@/components/cart/FreeDeliveryProgress";
 import { DeliveryInstructionCard } from "@/components/cart/DeliveryInstructionCard";
+import { useDeliveryQuote } from "@/features/address/useAddresses";
+import { withDelivery } from "@/utils/delivery";
 import { BillBreakdownCard } from "@/components/cart/BillBreakdownCard";
 import { formatMoney } from "@/utils/money";
 import { getEmbellishment } from "@/utils/productEmbellishments";
@@ -44,6 +46,7 @@ export default function CartScreen() {
 
   const items = cart?.items ?? [];
   const defaultAddress = addresses?.find((a) => a.is_default) ?? addresses?.[0];
+  const { data: delivery, isLoading: deliveryLoading } = useDeliveryQuote(defaultAddress?.id);
   const allProducts = allData?.pages.flatMap((p) => p.items) ?? [];
 
   const addonProducts = useMemo(() => {
@@ -94,7 +97,6 @@ export default function CartScreen() {
               }
               onChangePress={() => router.push("/address")}
             />
-            <FreeDeliveryProgress cartTotal={Number.parseFloat(cart?.total_amount ?? "0")} currency={cart?.currency ?? "INR"} />
 
             <View style={styles.basketHeader}>
               <View>
@@ -109,9 +111,13 @@ export default function CartScreen() {
                 </Text>
               </View>
               <Pressable onPress={() => clearCart.mutate()} disabled={clearCart.isPending}>
-                <Text variant="bodySmall" color={colors.error}>
-                  EMPTY CART
-                </Text>
+                {clearCart.isPending ? (
+                  <BazaarLoader size={6} palette={[colors.error, colors.accent, colors.error]} />
+                ) : (
+                  <Text variant="bodySmall" color={colors.error}>
+                    EMPTY CART
+                  </Text>
+                )}
               </Pressable>
             </View>
 
@@ -141,7 +147,14 @@ export default function CartScreen() {
             ) : null}
 
             <DeliveryInstructionCard />
-            <BillBreakdownCard items={items} totalAmount={cart?.total_amount ?? null} currency={cart?.currency ?? null} />
+            <BillBreakdownCard
+              items={items}
+              totalAmount={cart?.total_amount ?? null}
+              currency={cart?.currency ?? null}
+              delivery={delivery}
+              deliveryLoading={deliveryLoading}
+              onPinLocation={() => defaultAddress && router.push(`/address/edit/${defaultAddress.id}`)}
+            />
 
             <Text variant="caption" color={colors.textSecondary} style={styles.impactNote}>
               Wholesale mandi rates: directly helping {items.length + 10} Vidarbha farmer families.
@@ -155,7 +168,7 @@ export default function CartScreen() {
           <View>
             <View style={styles.stickyTotalRow}>
               <Text variant="price" color={colors.textInverse}>
-                {formatMoney(cart?.total_amount ?? "0", cart?.currency ?? "INR")}
+                {formatMoney(withDelivery(cart?.total_amount ?? "0", delivery), cart?.currency ?? "INR")}
               </Text>
               <View style={styles.itemCountBadge}>
                 <Text variant="label" color={colors.textInverse}>
@@ -163,9 +176,6 @@ export default function CartScreen() {
                 </Text>
               </View>
             </View>
-            <Text variant="caption" color={colors.primaryLight}>
-              Delivery in 25 mins
-            </Text>
           </View>
           <Pressable style={styles.checkoutButton} onPress={() => router.push("/checkout")}>
             <Text variant="button" color={colors.textOnAccent}>

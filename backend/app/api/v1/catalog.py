@@ -252,6 +252,19 @@ def update_category(
     return CatalogService(db).update_category(category_id, payload, current_user.id)
 
 
+@router.delete(
+    "/categories/{category_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Delete a category that has no products or subcategories",
+)
+def delete_category(
+    category_id: int,
+    current_user: User = Depends(require_permission("categories.delete")),
+    db: Session = Depends(get_db),
+) -> None:
+    CatalogService(db).delete_category(category_id, current_user.id)
+
+
 @router.post(
     "/categories/{category_id}/image",
     response_model=CategoryResponse,
@@ -341,6 +354,19 @@ def update_variant(
     db: Session = Depends(get_db),
 ) -> ProductVariantResponse:
     return CatalogService(db).update_variant(variant_id, payload, current_user.id)
+
+
+@router.delete(
+    "/variants/{variant_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Delete a product variant that has no order, quote or stock history",
+)
+def delete_variant(
+    variant_id: int,
+    current_user: User = Depends(require_permission("products.update")),
+    db: Session = Depends(get_db),
+) -> None:
+    CatalogService(db).delete_variant(variant_id, current_user.id)
 
 
 @router.post(

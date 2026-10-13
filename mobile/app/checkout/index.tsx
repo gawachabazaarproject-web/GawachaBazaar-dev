@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { BazaarLoader } from "@/components/BazaarLoader";
 import { Alert, Pressable, ScrollView, StyleSheet, TextInput, View } from "react-native";
 import { Stack, useRouter } from "expo-router";
 import { Feather } from "@expo/vector-icons";
@@ -9,8 +10,11 @@ import { Text } from "@/components/Text";
 import { Button } from "@/components/Button";
 import { CheckoutSection } from "@/components/checkout/CheckoutSection";
 import { HarvestSlotSelector } from "@/components/checkout/HarvestSlotSelector";
+import { useDeliveryQuote } from "@/features/address/useAddresses";
+import { distanceLabel, withDelivery } from "@/utils/delivery";
 import { BasketSummaryCard } from "@/components/checkout/BasketSummaryCard";
 import { ImpactCard } from "@/components/checkout/ImpactCard";
+import { PlacingOrderOverlay } from "@/components/checkout/PlacingOrderOverlay";
 import { useCart, useEvaluatePromo } from "@/features/cart/useCart";
 import { useAddresses } from "@/features/address/useAddresses";
 import { usePlaceOrder, PlaceOrderResult } from "@/features/checkout/useCheckout";
@@ -30,6 +34,7 @@ export default function CheckoutScreen() {
   const online = useOnlinePayment();
 
   const [selectedAddressId, setSelectedAddressId] = useState<number | null>(null);
+  const { data: delivery, isLoading: deliveryLoading } = useDeliveryQuote(selectedAddressId);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("COD");
   const [result, setResult] = useState<PlaceOrderResult | null>(null);
 
@@ -230,7 +235,9 @@ export default function CheckoutScreen() {
   // checkout will actually charge - cart.total_amount never includes a
   // discount, since discounting only ever happens as part of order
   // creation on the backend (see PromotionService.evaluate_for_cart).
-  const total = promoEvaluation?.eligible ? promoEvaluation.final_total : cart.total_amount ?? "0";
+  const itemsTotal = promoEvaluation?.eligible ? promoEvaluation.final_total : cart.total_amount ?? "0";
+  const total = withDelivery(itemsTotal, delivery);
+  const feeUnavailable = !delivery || delivery.needs_location || !delivery.fee;
 
   return (
     <Screen edges={["top", "bottom"]}>
@@ -357,9 +364,13 @@ export default function CheckoutScreen() {
                 onPress={handleApplyPromo}
                 disabled={!promoInput.trim() || evaluatePromo.isPending}
               >
-                <Text variant="bodyMedium" color={colors.textOnAccent}>
-                  {evaluatePromo.isPending ? "Checking..." : "Apply"}
-                </Text>
+                {evaluatePromo.isPending ? (
+                  <BazaarLoader size={6} palette={[colors.textOnAccent, colors.primary, colors.textOnAccent]} />
+                ) : (
+                  <Text variant="bodyMedium" color={colors.textOnAccent}>
+                    Apply
+                  </Text>
+                )}
               </Pressable>
             </View>
           )}
@@ -372,7 +383,13 @@ export default function CheckoutScreen() {
 
         {/* 5. Order summary - real cart data */}
         <CheckoutSection number={5} label="Order Summary" title="Review your order">
-          <BasketSummaryCard items={cart.items} totalAmount={cart.total_amount} currency={cart.currency} />
+          <BasketSummaryCard
+            items={cart.items}
+            totalAmount={cart.total_amount}
+            currency={cart.currency}
+            delivery={delivery}
+            deliveryLoading={deliveryLoading}
+          />
           {promoEvaluation?.eligible ? (
             <View style={styles.discountSummaryRow}>
               <Text variant="bodyMedium" color={colors.textSecondary}>Discount ({promoEvaluation.applied_code})</Text>
@@ -407,21 +424,30 @@ export default function CheckoutScreen() {
               {formatMoney(total, cart.currency ?? "INR")}
             </Text>
             <Text variant="caption" color={colors.primaryLight}>
-              Free delivery
+              {delivery?.needs_location
+                ? "Pin your location for delivery charge"
+                : distanceLabel(delivery)
+                  ? `incl. delivery (${distanceLabel(delivery)})`
+                  : "Calculating delivery..."}
             </Text>
           </View>
           <Pressable
-            style={[styles.placeOrderButton, (!selectedAddressId || placeOrder.isPending) && styles.placeOrderButtonDisabled]}
+            style={[styles.placeOrderButton, (!selectedAddressId || feeUnavailable || placeOrder.isPending) && styles.placeOrderButtonDisabled]}
             onPress={handlePlaceOrder}
-            disabled={!selectedAddressId || placeOrder.isPending}
+            disabled={!selectedAddressId || feeUnavailable || placeOrder.isPending}
           >
             <Text variant="button" color={colors.textOnAccent}>
-              {placeOrder.isPending ? "Placing order..." : "Place Order"}
+              {placeOrder.isPending ? "Placing order" : "Place Order"}
             </Text>
-            <Feather name="arrow-right" size={16} color={colors.textOnAccent} />
+            {placeOrder.isPending ? (
+              <BazaarLoader size={6} palette={[colors.textOnAccent, colors.primary, colors.textOnAccent]} />
+            ) : (
+              <Feather name="arrow-right" size={16} color={colors.textOnAccent} />
+            )}
           </Pressable>
         </View>
       </View>
+      <PlacingOrderOverlay visible={placeOrder.isPending} />
     </Screen>
   );
 }

@@ -1,15 +1,20 @@
 import React, { useMemo } from "react";
-import { StyleSheet, View } from "react-native";
+import { Pressable, StyleSheet, View } from "react-native";
 import { Text } from "@/components/Text";
 import { formatMoney } from "@/utils/money";
 import { getEmbellishment } from "@/utils/productEmbellishments";
 import { colors, spacing } from "@/theme";
-import { CartItemResponse } from "@/types/api";
+import { CartItemResponse, DeliveryQuote } from "@/types/api";
+import { distanceLabel, withDelivery } from "@/utils/delivery";
 
 export interface BillBreakdownCardProps {
   items: CartItemResponse[];
   totalAmount: string | null;
   currency: string | null;
+  /** Delivery quote for the selected address; undefined while loading. */
+  delivery?: DeliveryQuote;
+  deliveryLoading?: boolean;
+  onPinLocation?: () => void;
 }
 
 /**
@@ -17,10 +22,12 @@ export interface BillBreakdownCardProps {
  * the illustrative per-product MRP layer (productEmbellishments.ts) -
  * items with no MRP entry simply contribute nothing to it, so the
  * number is never inflated beyond what's actually shown on-screen.
- * "Delivery Partner Fee: FREE" is honest, not illustrative - the backend
- * genuinely never charges one.
+ * The delivery fee is the backend's own quote (base + per km by road to the
+ * selected address) - the same number checkout will charge.
  */
-export function BillBreakdownCard({ items, totalAmount, currency }: BillBreakdownCardProps) {
+export function BillBreakdownCard({ items, totalAmount, currency, delivery, deliveryLoading, onPinLocation }: BillBreakdownCardProps) {
+  const grandTotal = withDelivery(totalAmount, delivery);
+  const km = distanceLabel(delivery);
   const { mrpTotal, savings } = useMemo(() => {
     let mrp = 0;
     for (const item of items) {
@@ -39,11 +46,18 @@ export function BillBreakdownCard({ items, totalAmount, currency }: BillBreakdow
       </Text>
       <Row label={`Item Total${mrpTotal > 0 ? ` (MRP ${formatMoney(mrpTotal, currency ?? "INR")})` : ""}`} value={formatMoney(totalAmount ?? "0", currency ?? "INR")} />
       {savings > 0 ? <Row label="Farm Direct Savings" value={`-${formatMoney(savings, currency ?? "INR")}`} valueColor={colors.success} /> : null}
-      <Row label="Delivery Partner Fee" value="FREE" valueColor={colors.success} />
+      {delivery?.needs_location ? (
+        <Row label="Delivery charge" value="Pin location" valueColor={colors.error} onPress={onPinLocation} />
+      ) : (
+        <Row
+          label={`Delivery Partner Fee${km ? ` (${km})` : ""}`}
+          value={delivery?.fee ? formatMoney(delivery.fee, currency ?? "INR") : deliveryLoading ? "Calculating..." : "-"}
+        />
+      )}
       <View style={styles.divider} />
       <View style={styles.totalRow}>
         <Text variant="bodyMedium">Total Bill Amount</Text>
-        <Text variant="h3">{formatMoney(totalAmount ?? "0", currency ?? "INR")}</Text>
+        <Text variant="h3">{formatMoney(grandTotal, currency ?? "INR")}</Text>
       </View>
       {savings > 0 ? (
         <Text variant="caption" color={colors.success} style={styles.savedNote}>
@@ -54,16 +68,16 @@ export function BillBreakdownCard({ items, totalAmount, currency }: BillBreakdow
   );
 }
 
-function Row({ label, value, valueColor }: { label: string; value: string; valueColor?: string }) {
+function Row({ label, value, valueColor, onPress }: { label: string; value: string; valueColor?: string; onPress?: () => void }) {
   return (
-    <View style={styles.row}>
+    <Pressable style={styles.row} onPress={onPress} disabled={!onPress}>
       <Text variant="body" color={colors.textSecondary}>
         {label}
       </Text>
       <Text variant="bodyMedium" color={valueColor ?? colors.textPrimary}>
         {value}
       </Text>
-    </View>
+    </Pressable>
   );
 }
 

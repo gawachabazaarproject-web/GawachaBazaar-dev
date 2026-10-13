@@ -2,8 +2,9 @@
 
 import React, { useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
-import { fetchLocations, InventoryApiError, Location, receiveStock } from "@/lib/inventory";
+import { fetchLocations, InventoryApiError, Location, packCount, packSize, packTotal, receiveStock } from "@/lib/inventory";
 import { fetchAdminProducts, fetchAdminProductDetail, AdminProductListItem, ProductVariant } from "@/lib/products";
+import { BusyLabel } from "@/components/Spinner";
 
 export function ReceiveStockDialog({ open, onClose, onReceived }: { open: boolean; onClose: () => void; onReceived: () => void }) {
   const { getAccessToken } = useAuth();
@@ -38,6 +39,8 @@ export function ReceiveStockDialog({ open, onClose, onReceived }: { open: boolea
     fetchAdminProductDetail(token, Number(productId)).then((p) => setVariants(p.variants)).catch(() => undefined);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [productId]);
+
+  const variant = variants.find((v) => String(v.id) === variantId);
 
   if (!open) return null;
 
@@ -104,8 +107,14 @@ export function ReceiveStockDialog({ open, onClose, onReceived }: { open: boolea
           </select>
         </Field>
 
-        <Field label="Quantity">
-          <input type="number" value={quantity} onChange={(e) => setQuantity(e.target.value)} className="w-full rounded border border-neutral-300 px-3 py-2 text-sm" />
+        <Field label={variant ? `Number of packs (each ${packSize(variant.quantity, variant.unit)})` : "Number of packs"}>
+          <input type="number" min="0" value={quantity} onChange={(e) => setQuantity(e.target.value)} className="w-full rounded border border-neutral-300 px-3 py-2 text-sm" />
+          {variant && Number(quantity) > 0 && (
+            <p className="mt-1 text-xs text-neutral-500">
+              {packCount(quantity)} of {packSize(variant.quantity, variant.unit)} = {packTotal(quantity, variant.quantity, variant.unit)} in total.
+              Sibling sizes of this product share the same stock.
+            </p>
+          )}
         </Field>
 
         <Field label="Notes">
@@ -121,7 +130,7 @@ export function ReceiveStockDialog({ open, onClose, onReceived }: { open: boolea
             disabled={saving || !productId || !variantId || !locationId || !quantity}
             className="rounded bg-primary-800 px-4 py-2 text-sm font-semibold text-white disabled:opacity-40"
           >
-            {saving ? "Receiving..." : "Receive stock"}
+            {saving ? <BusyLabel>Receiving...</BusyLabel> : "Receive stock"}
           </button>
         </div>
       </div>

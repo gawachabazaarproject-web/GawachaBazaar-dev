@@ -144,11 +144,21 @@ async function request<T>(accessToken: string, path: string, init: RequestInit =
   return response.json();
 }
 
+/** Every assignable category: the public endpoint lists top-level ones, so
+ * each one's subcategories are fetched too and flattened right after their
+ * parent as "Parent › Child" - products can sit in either. */
 export async function fetchCategories(): Promise<Category[]> {
-  const response = await fetch(`${API_BASE_URL}/catalog/categories?page=1&page_size=100`);
-  if (!response.ok) throw new CatalogApiError(response.status, "Unable to load categories.");
-  const data = await response.json();
-  return data.items;
+  const load = async (query: string): Promise<Category[]> => {
+    const response = await fetch(`${API_BASE_URL}/catalog/categories?page=1&page_size=100${query}`);
+    if (!response.ok) throw new CatalogApiError(response.status, "Unable to load categories.");
+    return (await response.json()).items;
+  };
+  const top = await load("");
+  const children = await Promise.all(top.map((c) => load(`&parent_id=${c.id}`).catch(() => [])));
+  return top.flatMap((c, i) => [
+    c,
+    ...children[i].map((child) => ({ ...child, name: `${c.name} › ${child.name}` })),
+  ]);
 }
 
 export async function fetchAdminProducts(
@@ -230,6 +240,10 @@ export async function updateVariant(
   });
 }
 
+export async function deleteVariant(accessToken: string, variantId: number) {
+  return request<void>(accessToken, `/catalog/variants/${variantId}`, { method: "DELETE" });
+}
+
 export async function createPrice(
   accessToken: string,
   variantId: number,
@@ -292,4 +306,34 @@ export async function uploadProductImage(
     throw new CatalogApiError(response.status, body?.message ?? "Upload failed.");
   }
   return response.json();
+}
+
+const UNIT_LABELS: Record<string, string> = {
+  KG: "kg", G: "g", L: "L", ML: "ml", UNIT: "pc", DOZEN: "dozen", BOX: "box", PACK: "pack",
+};
+
+function trimNumber(n: number): string {
+  return String(Number(n.toFixed(3)));
+}
+
+/** "250 g", "1 kg" - the size name generated from amount + unit, so the
+ * admin never types the unit twice. */
+export function sizeLabel(quantity: string | number, unit: string): string {
+  return `${trimNumber(Number(quantity))} ${UNIT_LABELS[unit] ?? unit.toLowerCase()}`;
+}
+
+/** Price per kg / per L / per piece for comparing sizes ("₹120 per kg").
+ * Returns null when no per-base-unit rate makes sense (box, pack, bad input). */
+export function ratePerBaseUnit(price: string | number, quantity: string | number, unit: string): string | null {
+  const p = Number(price);
+  const q = Number(quantity);
+  if (!(p > 0) || !(q > 0)) return null;
+  const perBase: Record<string, [number, string]> = {
+    KG: [1, "kg"], G: [1000, "kg"], L: [1, "L"], ML: [1000, "L"], UNIT: [1, "pc"], DOZEN: [1 / 12, "pc"],
+  };
+  const entry = perBase[unit];
+  if (!entry) return null;
+  const [factor, label] = entry;
+  const rate = (p / q) * factor;
+  return `₹${Number(rate.toFixed(2))} per ${label}`;
 }

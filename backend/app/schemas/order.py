@@ -59,6 +59,8 @@ class OrderResponse(BaseSchema):
     status: str
     subtotal_amount: Decimal
     discount_amount: Decimal
+    delivery_fee: Decimal
+    delivery_distance_km: Decimal | None
     total_amount: Decimal
     applied_promo_code: str | None
     currency: str

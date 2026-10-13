@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { authApi, setAuthFailureHandler, toApiError, ApiError } from "@/api";
 import { queryClient } from "@/api/queryClient";
 import * as fb from "@/auth/firebase";
+import { unregisterPushToken } from "@/features/notifications/usePushNotifications";
 import { authErrorCode, authErrorMessage, isNotInFirebase } from "@/auth/errors";
 import { AccountExistsError, AuthUser, GoogleSignInResult, PhoneVerification } from "@/auth/types";
 import { AuthUserResponse } from "@/types/api";
@@ -262,6 +263,7 @@ export const useAuthStore = create<AuthState>((set, get) => {
     logout: async () => {
       pendingProfile = null;
       set({ phoneVerification: null, authError: null, linkEmail: null });
+      await unregisterPushToken();
       await fb.signOut();
       // handleFirebaseUser(null) resets the rest.
     },

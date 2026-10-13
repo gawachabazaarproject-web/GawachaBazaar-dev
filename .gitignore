@@ -75,3 +75,31 @@ backups/
 service-account*.json
 mobile/google-services.json
 mobile/GoogleService-Info.plist
+
+# .NET / Build artifacts
+bin/
+obj/
+publish/
+**/bin/
+**/obj/
+**/publish/
+
+# Application uploads
+ChatUploads/
+uploads/
+**/ChatUploads/
+**/uploads/
+
+# Temporary files
+temp/
+tmp/
+*.tmp
+*.bak
+
+# Local Docker backups
+docker-compose.yml.backup
+
+# Local Karpenter / AWS generated files
+karpenter-cloudformation.yaml
+karpenter-nodeclass.yaml
+karpenter-nodepool.yaml

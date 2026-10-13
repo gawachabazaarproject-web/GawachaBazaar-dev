@@ -32,6 +32,10 @@ class AdminInventoryLotListItemResponse(BaseSchema):
     product_name: str
     variant_id: int
     variant_name: str
+    # One pack of this variant is `variant_quantity` x `variant_unit`;
+    # on_hand/reserved/available count packs, not that unit.
+    variant_unit: str
+    variant_quantity: Decimal
     sku: str
     category_id: int
     category_name: str
@@ -78,6 +82,7 @@ class AdminInventoryLotDetailResponse(BaseSchema):
     variant_name: str
     sku: str
     unit: str
+    variant_quantity: Decimal
     location_id: int
     location_name: str
     location_code: str

@@ -13,7 +13,7 @@ import { CART_BAR_CLEARANCE } from "@/components/CartBar";
 import { useAllProducts, useCategories } from "@/features/catalog/useCatalog";
 import { useAddresses } from "@/features/address/useAddresses";
 import { getCategoryPhoto } from "@/utils/categoryVisuals";
-import { CATEGORY_MARATHI, getDepartments } from "@/utils/categoryDepartments";
+import { CATEGORY_MARATHI } from "@/utils/categoryDepartments";
 import { colors, radius, spacing } from "@/theme";
 import { CategoryResponse } from "@/types/api";
 
@@ -61,8 +61,8 @@ export default function CategoriesScreen() {
       ) : (
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.list}>
           {(categories ?? []).map((category, index) => {
-            const count = allProducts.filter((p) => p.category_id === category.id).length;
-            const departmentCount = getDepartments(category.slug).length;
+            const count = category.product_count ?? allProducts.filter((p) => p.category_id === category.id).length;
+            const departmentCount = category.child_count ?? 0;
             return (
               <CategoryRow
                 key={category.id}

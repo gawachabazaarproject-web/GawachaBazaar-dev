@@ -50,6 +50,7 @@ from app.models.order_item import OrderItem
 from app.models.payment import Payment
 from app.models.product import Product
 from app.models.product_variant import ProductVariant
+from app.models.promotion import Promotion
 from app.models.refund import Refund
 from app.models.user import User
 from app.schemas.admin_order import (
@@ -67,6 +68,7 @@ from app.schemas.order import (
     OrderResponse,
 )
 from app.schemas.payment import PaymentResponse
+from app.services.delivery import quote_delivery
 from app.schemas.refund import AdminRefundResponse
 from app.services.admin_audit import AdminAuditService
 from app.services.inventory_reservation import InventoryReservationService
@@ -541,10 +543,24 @@ class OrderService:
         evaluation = promotion_service.evaluate_for_cart(
             user_id=user_id, cart_items=promo_lines, promo_code=data.promo_code, now=now
         )
+        if evaluation.promotion is not None:
+            # Re-check the usage limit under a row lock (held to commit, so
+            # record_redemption later in this transaction cannot race). If
+            # the last use was taken meanwhile, re-evaluate: an automatic
+            # promo simply drops out instead of failing a (possibly already
+            # paid) order; an explicit code is reported as used up.
+            self.db.query(Promotion).filter(
+                Promotion.id == evaluation.promotion.id
+            ).with_for_update().populate_existing().first()
+            if not promotion_service.usage_available(evaluation.promotion, user_id):
+                evaluation = promotion_service.evaluate_for_cart(
+                    user_id=user_id, cart_items=promo_lines, promo_code=data.promo_code, now=now
+                )
         if data.promo_code and evaluation.code_was_invalid:
             raise BusinessValidationError(evaluation.message)
 
-        total_amount = evaluation.final_total
+        delivery = quote_delivery(address.latitude, address.longitude)
+        total_amount = evaluation.final_total + delivery.fee
 
         order = Order(
             user_id=user_id,
@@ -553,6 +569,8 @@ class OrderService:
             status="PENDING",
             subtotal_amount=subtotal_amount,
             discount_amount=evaluation.discount_amount,
+            delivery_fee=delivery.fee,
+            delivery_distance_km=delivery.distance_km,
             total_amount=total_amount,
             currency=currency,
             promotion_id=evaluation.promotion.id if evaluation.promotion else None,

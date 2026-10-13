@@ -56,3 +56,19 @@ class AddressResponse(BaseSchema):
 
 class AddressListResponse(BaseSchema):
     items: list[AddressResponse]
+
+
+class DeliveryQuoteResponse(BaseSchema):
+    """Delivery charge to one saved address: base + per-km x driving km.
+
+    `needs_location` is true when the address has no pinned coordinates, in
+    which case the numeric fields are null and the customer must pin it.
+    `method` is "road" for a routed distance, "estimate" for the fallback.
+    """
+
+    needs_location: bool
+    distance_km: Decimal | None
+    fee: Decimal | None
+    base_fee: Decimal
+    per_km_fee: Decimal
+    method: str | None

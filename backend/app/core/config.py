@@ -1,4 +1,5 @@
 import json
+from decimal import Decimal
 from functools import lru_cache
 from typing import Literal
 
@@ -47,6 +48,18 @@ class Settings(BaseSettings):
     RAZORPAY_WEBHOOK_SECRET: str = ""
     RAZORPAY_BASE_URL: str = "https://api.razorpay.com/v1"
     RAZORPAY_TIMEOUT_SECONDS: float = 10.0
+
+    # Delivery fee = DELIVERY_BASE_FEE + DELIVERY_PER_KM * driving km from the
+    # warehouse (see app/services/delivery.py). Without warehouse coordinates
+    # checkout refuses rather than guessing a fee. The default routing host is
+    # the free OSRM demo server - point DELIVERY_ROUTING_BASE_URL at your own
+    # OSRM/compatible instance for production traffic.
+    WAREHOUSE_LATITUDE: float | None = None
+    WAREHOUSE_LONGITUDE: float | None = None
+    DELIVERY_BASE_FEE: Decimal = Decimal("20")
+    DELIVERY_PER_KM: Decimal = Decimal("10")
+    DELIVERY_ROUTING_BASE_URL: str = "https://router.project-osrm.org"
+    DELIVERY_ROUTING_TIMEOUT_SECONDS: float = 5.0
 
     # Cloudinary (image uploads). Empty string means "not configured" -
     # ImageUploadService raises a clear, honest error rather than silently

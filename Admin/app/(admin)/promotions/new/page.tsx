@@ -14,6 +14,7 @@ import {
 import { AdminProductListItem, Category, fetchAdminProducts, fetchCategories } from "@/lib/products";
 import { PageHeader } from "@/components/PageHeader";
 import { Icon } from "@/components/icons";
+import { BusyLabel } from "@/components/Spinner";
 
 function toLocalInputValue(date: Date): string {
   const pad = (n: number) => String(n).padStart(2, "0");
@@ -292,7 +293,7 @@ export default function NewPromotionPage() {
           disabled={saving}
           className="w-full rounded bg-primary-800 py-2.5 text-sm font-semibold text-white hover:bg-primary-700 disabled:opacity-60"
         >
-          {saving ? "Creating..." : "Create promotion"}
+          {saving ? <BusyLabel>Creating...</BusyLabel> : "Create promotion"}
         </button>
       </form>
     </div>

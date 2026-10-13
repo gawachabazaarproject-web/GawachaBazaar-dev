@@ -90,6 +90,10 @@ export interface CategoryResponse {
   parent_id: number | null;
   status: string;
   created_at: string;
+  /** Active subcategories (public list/detail reads only). */
+  child_count?: number;
+  /** Active products in this category and its subcategories. */
+  product_count?: number;
 }
 
 export interface CategoryDetailResponse extends CategoryResponse {
@@ -215,12 +219,23 @@ export interface OrderAddressResponse {
   longitude: string | null;
 }
 
+export interface DeliveryQuote {
+  needs_location: boolean;
+  distance_km: string | null;
+  fee: string | null;
+  base_fee: string;
+  per_km_fee: string;
+  method: "road" | "estimate" | null;
+}
+
 export interface OrderResponse {
   id: number;
   order_number: string;
   status: OrderStatus;
   subtotal_amount: string;
   discount_amount: string;
+  delivery_fee: string;
+  delivery_distance_km: string | null;
   total_amount: string;
   applied_promo_code: string | null;
   currency: string;

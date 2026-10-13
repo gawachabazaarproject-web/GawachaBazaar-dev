@@ -27,6 +27,7 @@ import { StatusBadge } from "@/components/StatusBadge";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { Pagination } from "@/components/Pagination";
 import { Icon } from "@/components/icons";
+import { BusyLabel, PageLoader } from "@/components/Spinner";
 
 const inputClass = "w-full rounded border border-neutral-300 px-3 py-2 text-sm disabled:bg-neutral-50";
 
@@ -218,7 +219,7 @@ export default function PromotionDetailPage({ params }: { params: Promise<{ id: 
     }
   };
 
-  if (loading) return <div className="animate-pulse text-sm text-neutral-400">Loading promotion...</div>;
+  if (loading) return <PageLoader label="Loading promotion..." />;
   if (error || !promotion) return <ErrorState message={error ?? "Promotion not found."} onRetry={load} />;
 
   return (
@@ -395,7 +396,7 @@ export default function PromotionDetailPage({ params }: { params: Promise<{ id: 
             disabled={!isDirty || saving}
             className="mt-3 rounded bg-primary-800 px-4 py-2 text-sm font-semibold text-white disabled:opacity-40"
           >
-            {saving ? "Saving..." : "Save changes"}
+            {saving ? <BusyLabel>Saving...</BusyLabel> : "Save changes"}
           </button>
         )}
       </Section>

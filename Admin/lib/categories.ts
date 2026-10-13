@@ -131,6 +131,7 @@ export interface CreateCategoryPayload {
   slug: string;
   description?: string | null;
   parent_id?: number | null;
+  image_url?: string | null;
   status: string;
 }
 
@@ -177,4 +178,17 @@ export async function uploadCategoryImage(accessToken: string, id: number, file:
 
 export async function deleteCategoryImage(accessToken: string, id: number): Promise<CategoryRef> {
   return request<CategoryRef>(accessToken, `/catalog/categories/${id}/image`, { method: "DELETE" });
+}
+
+/** Only succeeds for a category with no products and no subcategories -
+ * the backend answers 409 with a plain-language reason otherwise. */
+export async function deleteCategory(accessToken: string, id: number): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/catalog/categories/${id}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!response.ok) {
+    const body = await response.json().catch(() => null);
+    throw new CategoryApiError(response.status, body?.message ?? "Unable to delete this category.");
+  }
 }
