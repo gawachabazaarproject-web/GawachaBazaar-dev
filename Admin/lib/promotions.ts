@@ -58,6 +58,8 @@ export interface PromotionDetail {
   customer_title: string | null;
   customer_description: string | null;
   code: string | null;
+  image_url: string | null;
+  show_in_carousel: boolean;
   discount_type: string;
   discount_value: string;
   max_discount_amount: string | null;
@@ -128,14 +130,20 @@ async function request<T>(accessToken: string, path: string, init: RequestInit =
   const response = await fetch(`${API_BASE_URL}${path}`, {
     ...init,
     headers: {
-      ...(init.body ? { "Content-Type": "application/json" } : {}),
+      ...(init.body && !(init.body instanceof FormData) ? { "Content-Type": "application/json" } : {}),
       Authorization: `Bearer ${accessToken}`,
       ...init.headers,
     },
   });
   if (!response.ok) {
     const body = await response.json().catch(() => null);
-    throw new PromotionApiError(response.status, body?.message ?? "Something went wrong.");
+    throw new PromotionApiError(
+      response.status,
+      body?.message ??
+        (response.status === 404 || response.status === 405
+          ? "The server does not support this yet - the backend needs to be updated and redeployed."
+          : "Something went wrong."),
+    );
   }
   if (response.status === 204) return undefined as T;
   return response.json();
@@ -188,6 +196,8 @@ export interface CreatePromotionPayload {
   customer_title?: string | null;
   customer_description?: string | null;
   code?: string | null;
+  image_url?: string | null;
+  show_in_carousel?: boolean;
   discount_type: string;
   discount_value: number;
   max_discount_amount?: number | null;
@@ -216,6 +226,13 @@ export async function updatePromotion(
   payload: UpdatePromotionPayload,
 ): Promise<PromotionDetail> {
   return request(accessToken, `/promotions/${id}`, { method: "PATCH", body: JSON.stringify(payload) });
+}
+
+/** Uploads the banner photo for this promotion's card in the app's offers carousel. */
+export async function uploadPromotionImage(accessToken: string, id: number, file: File): Promise<PromotionDetail> {
+  const form = new FormData();
+  form.append("file", file);
+  return request(accessToken, `/promotions/${id}/image`, { method: "POST", body: form });
 }
 
 export async function duplicatePromotion(accessToken: string, id: number): Promise<PromotionDetail> {

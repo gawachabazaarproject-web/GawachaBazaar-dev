@@ -47,6 +47,11 @@ from app.schemas.admin_payment import (
     AdminPaymentDetailResponse,
     AdminPaymentListResponse,
 )
+from app.schemas.online_checkout import (
+    OnlineCheckoutCompleteResponse,
+    OnlineCheckoutResponse,
+    StartOnlineCheckoutRequest,
+)
 from app.schemas.payment import (
     ConfirmCheckoutRequest,
     CreatePaymentRequest,
@@ -61,6 +66,7 @@ from app.schemas.refund import (
     AdminRefundResponse,
     RejectRefundRequest,
 )
+from app.services.checkout_session import CheckoutSessionService
 from app.services.payment import PaymentService
 from app.services.payment_gateway import PaymentGateway
 from app.services.refund import RefundService
@@ -139,6 +145,49 @@ def get_checkout(
     gateway: PaymentGateway = Depends(get_payment_gateway),
 ) -> PaymentCheckoutResponse:
     return PaymentService(db, gateway).get_checkout(current_user.id, payment_id)
+
+
+@router.post(
+    "/online/start",
+    response_model=OnlineCheckoutResponse,
+    summary="Pay-first online checkout: price the cart and get the Razorpay order to open (no order is created yet)",
+)
+def start_online_checkout(
+    payload: StartOnlineCheckoutRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    gateway: PaymentGateway = Depends(get_payment_gateway),
+) -> OnlineCheckoutResponse:
+    return CheckoutSessionService(db, gateway).start(current_user.id, payload)
+
+
+@router.post(
+    "/online/{session_id}/confirm",
+    response_model=OnlineCheckoutCompleteResponse,
+    summary="After Razorpay reports success: verify, then place the order from the cart",
+)
+def complete_online_checkout(
+    session_id: int,
+    payload: ConfirmCheckoutRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    gateway: PaymentGateway = Depends(get_payment_gateway),
+) -> OnlineCheckoutCompleteResponse:
+    return CheckoutSessionService(db, gateway).complete(current_user.id, session_id, payload)
+
+
+@router.post(
+    "/online/{session_id}/verify",
+    response_model=OnlineCheckoutCompleteResponse,
+    summary="Re-check an online checkout with Razorpay and place the order if it was paid",
+)
+def verify_online_checkout(
+    session_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    gateway: PaymentGateway = Depends(get_payment_gateway),
+) -> OnlineCheckoutCompleteResponse:
+    return CheckoutSessionService(db, gateway).verify(current_user.id, session_id)
 
 
 @router.post(

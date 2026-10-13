@@ -1,11 +1,19 @@
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
-import { adsApi, catalogApi, ListProductsParams } from "@/api";
+import { adsApi, catalogApi, homeSlidesApi, ListProductsParams } from "@/api";
 
 export function useAds() {
   return useQuery({
     queryKey: ["ads"],
     queryFn: () => adsApi.listActive(),
     staleTime: 5 * 60_000,
+  });
+}
+
+export function useHomeSlides() {
+  return useQuery({
+    queryKey: ["home-slides"],
+    queryFn: () => homeSlidesApi.listActive(),
+    staleTime: 60_000,
   });
 }
 

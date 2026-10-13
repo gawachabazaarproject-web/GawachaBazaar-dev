@@ -52,6 +52,7 @@ class Order(Base):
         # `alembic revision --autogenerate` doesn't propose dropping them.
         CheckConstraint("subtotal_amount >= 0", name="ck_orders_subtotal_amount"),
         CheckConstraint("discount_amount >= 0", name="ck_orders_discount_amount"),
+        CheckConstraint("delivery_fee >= 0", name="ck_orders_delivery_fee"),
         CheckConstraint(
             "discount_amount <= subtotal_amount",
             name="ck_orders_discount_not_exceeding_subtotal",
@@ -108,15 +109,13 @@ class Order(Base):
         server_default="0",
         nullable=False,
     )
-    # Distance-based delivery charge, included in `total_amount`.
+    # Delivery charge included in `total_amount` (0 for a Bazaar of 15+
+    # items and for every order placed before delivery fees existed). See
+    # app/services/delivery.py.
     delivery_fee: Mapped[Decimal] = mapped_column(
         Numeric(12, 2),
         server_default="0",
         nullable=False,
-    )
-    delivery_distance_km: Mapped[Decimal | None] = mapped_column(
-        Numeric(8, 1),
-        nullable=True,
     )
     promotion_id: Mapped[int | None] = mapped_column(
         BigInteger,

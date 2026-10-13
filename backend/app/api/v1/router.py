@@ -10,6 +10,7 @@ from fastapi import APIRouter
 from app.api.v1.addresses import router as addresses_router
 from app.api.v1.ads import router as ads_router
 from app.api.v1.auth import router as auth_router
+from app.api.v1.bazaar import router as bazaar_router
 from app.api.v1.bulk_orders import admin_router as bulk_orders_admin_router
 from app.api.v1.bulk_orders import customer_router as bulk_orders_customer_router
 from app.api.v1.cart import router as cart_router
@@ -17,7 +18,9 @@ from app.api.v1.catalog import router as catalog_router
 from app.api.v1.customers import router as customers_router
 from app.api.v1.dashboard import router as dashboard_router
 from app.api.v1.fulfillments import router as fulfillments_router
+from app.api.v1.home_slides import router as home_slides_router
 from app.api.v1.inventory import router as inventory_router
+from app.api.v1.offers import router as offers_router
 from app.api.v1.orders import admin_router as orders_admin_router
 from app.api.v1.orders import router as orders_router
 from app.api.v1.orders import staff_router as orders_staff_router
@@ -30,6 +33,7 @@ from app.api.v1.push import router as push_router
 from app.api.v1.realtime import router as realtime_router
 from app.api.v1.staff import router as staff_router
 from app.api.v1.suppliers import router as suppliers_router
+from app.api.v1.wishlist import router as wishlist_router
 from app.schemas.base import PingResponse
 
 api_router = APIRouter()
@@ -39,6 +43,9 @@ api_router.include_router(auth_router, prefix="/auth", tags=["auth"])
 
 # Address domain routes (CUSTOMER-only, user-scoped address book)
 api_router.include_router(addresses_router, prefix="/addresses", tags=["addresses"])
+
+# Wishlist domain routes (CUSTOMER-only)
+api_router.include_router(wishlist_router, prefix="/wishlist", tags=["wishlist"])
 
 # Catalog domain routes (public browsing + ADMIN-only management)
 api_router.include_router(catalog_router, prefix="/catalog", tags=["catalog"])
@@ -128,6 +135,9 @@ api_router.include_router(staff_router, prefix="/staff", tags=["staff"])
 # ADMIN-gated management for everything else - gated by ads.* permissions).
 api_router.include_router(ads_router, prefix="/ads", tags=["ads"])
 api_router.include_router(push_router, prefix="/push-tokens", tags=["push"])
+api_router.include_router(home_slides_router, prefix="/home-slides", tags=["home-slides"])
+api_router.include_router(bazaar_router, prefix="/bazaar", tags=["bazaar"])
+api_router.include_router(offers_router, prefix="/offers", tags=["offers"])
 
 # Live order/fulfillment/payment/refund status events (WebSocket). See
 # app/core/realtime.py for the in-process connection registry and message

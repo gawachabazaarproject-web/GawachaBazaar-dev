@@ -23,6 +23,12 @@ export const colors = {
   surface: "#FFFFFF",
   surfaceElevated: "#FFFFFF",
   overlay: "rgba(11, 45, 32, 0.4)",
+  // Pale sage wash used behind status/total panels (order details)
+  surfaceTint: "#EFF4E6",
+  // Vivid forest green for success check marks / tracker
+  brandGreen: "#0C5832",
+  // Soft warm pink behind destructive rows (log out)
+  dangerTint: "#FDF0EA",
 
   // Text
   textPrimary: "#143326",

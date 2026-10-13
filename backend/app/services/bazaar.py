@@ -3,8 +3,8 @@
 A "Bazaar" is a basket/order with FREE_DELIVERY_MIN_ITEMS or more DIFFERENT
 PRODUCTS (the same product in two sizes counts once). A customer with
 BAZAAR_PLUS_ORDERS_REQUIRED Bazaar orders in the current calendar month
-(BAZAAR_TIMEZONE, default IST) is eligible for Gawacha Bazaar+. Only CONFIRMED and COMPLETED
-orders count (not unpaid PENDING, cancelled or expired ones).
+(BAZAAR_TIMEZONE, default IST) is eligible for Gawacha Bazaar+. Cancelled
+and expired orders do not count.
 """
 
 from datetime import datetime
@@ -27,7 +27,7 @@ from app.services.delivery import (
     get_packing_point,
 )
 
-_COUNTED = ("CONFIRMED", "COMPLETED")
+_NOT_COUNTED = ("CANCELLED", "EXPIRED")
 
 
 def month_start(now: datetime | None = None) -> datetime:
@@ -91,7 +91,7 @@ class BazaarService:
             .filter(
                 Order.user_id == user_id,
                 Order.placed_at >= month_start(),
-                Order.status.in_(_COUNTED),
+                Order.status.notin_(_NOT_COUNTED),
             )
             .group_by(Order.id)
             .subquery()

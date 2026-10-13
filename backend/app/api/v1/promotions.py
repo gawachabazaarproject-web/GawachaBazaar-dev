@@ -5,7 +5,7 @@ POST /cart/evaluate-promo) since it operates on the caller's own cart,
 not this router.
 """
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, File, Query, UploadFile, status
 from sqlalchemy.orm import Session
 
 from app.dependencies.auth import require_permission
@@ -21,6 +21,7 @@ from app.schemas.promotion import (
     UpdatePromotionRequest,
 )
 from app.services.admin_audit import AdminAuditService
+from app.services.image_upload import upload_image
 from app.services.promotion import PromotionService
 
 router = APIRouter()
@@ -96,6 +97,30 @@ def update_promotion(
     db: Session = Depends(get_db),
 ) -> PromotionDetailResponse:
     return PromotionService(db).update_promotion(promotion_id, payload, current_user.id)
+
+
+@router.post(
+    "/{promotion_id}/image",
+    response_model=PromotionDetailResponse,
+    summary="Upload the banner photo shown on this promotion's card in the app's offers carousel",
+)
+def upload_promotion_image(
+    promotion_id: int,
+    file: UploadFile = File(...),
+    current_user: User = Depends(require_permission("promotions.update")),
+    db: Session = Depends(get_db),
+) -> PromotionDetailResponse:
+    service = PromotionService(db)
+    promotion = service.get_promotion_or_404(promotion_id)
+    promotion.image_url = upload_image(file, folder="gawachabazaar/offers")["secure_url"]
+    AdminAuditService(db).record(
+        admin_user_id=current_user.id,
+        action="promotion.image",
+        resource_type="promotion",
+        resource_id=promotion.id,
+    )
+    db.commit()
+    return service.admin_get_promotion_detail(promotion_id)
 
 
 @router.post(

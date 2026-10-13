@@ -22,6 +22,8 @@ export interface CampaignSlide {
   body: string;
   image: string;
   ctaLabel: string;
+  /** In-app path ("/...") or https URL; null = categories. */
+  linkUrl?: string | null;
 }
 
 export const CAMPAIGN_SLIDES: CampaignSlide[] = [

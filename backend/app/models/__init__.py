@@ -20,9 +20,11 @@ from app.models.bulk_order_request_item import BulkOrderRequestItem
 from app.models.cart import Cart
 from app.models.cart_item import CartItem
 from app.models.category import Category
+from app.models.checkout_session import CheckoutSession
 from app.models.customer_note import CustomerNote
 from app.models.farm import Farm
 from app.models.fulfillment import Fulfillment
+from app.models.home_slide import HomeSlide
 from app.models.inventory_location import InventoryLocation
 from app.models.inventory_lot import InventoryLot
 from app.models.inventory_reservation import InventoryReservation
@@ -57,9 +59,12 @@ from app.models.supplier_evaluation import SupplierEvaluation
 from app.models.supplier_product import SupplierProduct
 from app.models.user import User
 from app.models.user_role import UserRole
+from app.models.wishlist_item import WishlistItem
 
 __all__ = [
+    "WishlistItem",
     "Ad",
+    "HomeSlide",
     "Address",
     "AdminActionLog",
     "Batch",
@@ -68,6 +73,7 @@ __all__ = [
     "BulkOrderRequestItem",
     "Cart",
     "CartItem",
+    "CheckoutSession",
     "Category",
     "CustomerNote",
     "Farm",
