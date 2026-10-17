@@ -3,6 +3,7 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
+import { readInitialQuery, useDebounced, useUrlQuerySync } from "@/lib/use-list-query";
 import { hasPermission } from "@/lib/permissions";
 import {
   AdminPaymentListItem,
@@ -82,7 +83,9 @@ function PaymentsTab() {
   const [error, setError] = useState<string | null>(null);
 
   const [page, setPage] = useState(1);
-  const [q, setQ] = useState("");
+  const [q, setQ] = useState(readInitialQuery);
+  const dq = useDebounced(q);
+  useUrlQuerySync((v) => { setPage(1); setQ(v); });
   const [status, setStatus] = useState("");
   const [method, setMethod] = useState("");
   const [dateFrom, setDateFrom] = useState("");
@@ -99,7 +102,7 @@ function PaymentsTab() {
       const result = await fetchAdminPayments(token, {
         page,
         page_size: PAGE_SIZE,
-        q: q || undefined,
+        q: dq || undefined,
         status: status || undefined,
         payment_method: method || undefined,
         date_from: dateFrom ? new Date(dateFrom).toISOString() : undefined,
@@ -112,7 +115,7 @@ function PaymentsTab() {
       setLoading(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, q, status, method, dateFrom, dateTo]);
+  }, [page, dq, status, method, dateFrom, dateTo]);
 
   useEffect(() => {
     load();

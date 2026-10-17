@@ -154,6 +154,9 @@ export async function signInWithGoogle(): Promise<GoogleSignInResult> {
         throw Object.assign(new Error("Play services missing"), { code: "auth/operation-not-allowed" });
       }
     }
+    // The native code is what tells a missing/wrong SHA-1 (DEVELOPER_ERROR, 10)
+    // apart from a missing Web client id or no network - never swallow it.
+    console.warn("GOOGLE_SIGNIN_FAILED", (err as { code?: unknown })?.code, (err as Error)?.message);
     throw Object.assign(new Error("Google sign-in failed"), { code: "auth/internal-error" });
   }
   if (!idToken) throw Object.assign(new Error("No Google id token"), { code: "auth/internal-error" });

@@ -12,6 +12,7 @@ import { isActiveOrder, presentOrderStatus } from "@/utils/statusPresentation";
 import { formatMoney } from "@/utils/money";
 import { CART_BAR_CLEARANCE } from "@/components/CartBar";
 import { colors, radius, spacing } from "@/theme";
+import { scaled, smallScreenScale } from "@/utils/responsive";
 import { OrderResponse } from "@/types/api";
 
 type Filter = "ALL" | "ACTIVE" | "DELIVERED" | "CANCELLED";
@@ -46,6 +47,7 @@ export default function OrdersScreen() {
   const filterBtnRef = useRef<View>(null);
   const [menuAnchor, setMenuAnchor] = useState<{ top: number; right: number } | null>(null);
   const { width: windowWidth } = useWindowDimensions();
+  const heroScale = smallScreenScale(windowWidth);
 
   const toggleMenu = () => {
     if (menuOpen) {
@@ -78,7 +80,7 @@ export default function OrdersScreen() {
       <View style={styles.hero}>
         <Image
           source={require("../../assets/orders-hero-bag.png")}
-          style={styles.heroArt}
+          style={[styles.heroArt, heroScale < 1 && { width: scaled(170, heroScale), height: scaled(131, heroScale) }]}
           contentFit="contain"
           contentPosition="top right"
         />
@@ -125,7 +127,7 @@ export default function OrdersScreen() {
 
       <View style={styles.search}>
         <Feather name="search" size={16} color={colors.textSecondary} />
-        <TextInput
+        <TextInput maxFontSizeMultiplier={1.15}
           value={query}
           onChangeText={setQuery}
           placeholder="Search by order ID..."

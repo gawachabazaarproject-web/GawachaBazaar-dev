@@ -1,11 +1,27 @@
 import React from "react";
-import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from "react-native";
+import { ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from "react-native";
+import { useAuthStore } from "@/store/authStore";
 import { Ionicons } from "@expo/vector-icons";
 import { Screen } from "@/components/Screen";
 import { Text } from "@/components/Text";
 import { Button } from "@/components/Button";
 import { Wordmark } from "@/components/Wordmark";
 import { colors, radius, spacing } from "@/theme";
+
+/** Full-screen "Signing you in..." cover while a fresh sign-in is being
+ * confirmed with the backend (which can be waking from sleep). */
+export function SyncOverlay() {
+  const syncing = useAuthStore((s) => s.syncing);
+  if (!syncing) return null;
+  return (
+    <View style={styles.syncOverlay} accessibilityLiveRegion="polite">
+      <ActivityIndicator size="large" color={colors.primary} />
+      <Text variant="bodyMedium" color={colors.textSecondary} style={styles.syncText}>
+        Signing you in...
+      </Text>
+    </View>
+  );
+}
 
 /** Shared shell for every auth screen: keyboard-safe, scrollable, centered. */
 export function AuthScreen({
@@ -21,6 +37,7 @@ export function AuthScreen({
 }) {
   return (
     <Screen>
+      <SyncOverlay />
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.select({ ios: "padding", android: undefined })}>
         <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
           <View style={styles.inner}>
@@ -121,6 +138,14 @@ export const authStyles = StyleSheet.create({
 });
 
 const styles = StyleSheet.create({
+  syncOverlay: {
+    ...StyleSheet.absoluteFill,
+    zIndex: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(247, 244, 235, 0.92)",
+  },
+  syncText: { marginTop: spacing.md },
   content: { flexGrow: 1, padding: spacing.xl, justifyContent: "center" },
   inner: { width: "100%", maxWidth: 440, alignSelf: "center" },
   header: { marginBottom: spacing["2xl"], alignItems: "center" },

@@ -1,5 +1,5 @@
 import React from "react";
-import { Alert, Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { Alert, Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from "react-native";
 import { Image } from "expo-image";
 import { useRouter } from "expo-router";
 import { Feather } from "@expo/vector-icons";
@@ -12,6 +12,7 @@ import Constants from "expo-constants";
 import { useAuthStore } from "@/store/authStore";
 import { useWishlist } from "@/features/wishlist/useWishlist";
 import { colors, fontFamily, spacing } from "@/theme";
+import { scaled, smallScreenScale } from "@/utils/responsive";
 
 interface MenuItem {
   icon: keyof typeof Feather.glyphMap;
@@ -22,6 +23,7 @@ interface MenuItem {
 }
 
 export default function AccountScreen() {
+  const heroScale = smallScreenScale(useWindowDimensions().width);
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
@@ -67,7 +69,7 @@ export default function AccountScreen() {
         <View style={styles.header}>
           <Image
             source={require("../../assets/account-hero-art.png")}
-            style={styles.headerArt}
+            style={[styles.headerArt, heroScale < 1 && { width: scaled(159, heroScale), height: scaled(124, heroScale) }]}
             contentFit="contain"
           />
           <Text variant="eyebrow" color={colors.accentDark}>

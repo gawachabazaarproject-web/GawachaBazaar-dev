@@ -6,6 +6,8 @@ import { useAuth } from "@/lib/auth-context";
 import { hasPermission } from "@/lib/permissions";
 import {
   ADJUSTMENT_REASONS,
+  amountToPacks,
+  amountUnits,
   AdminInventoryLotDetail,
   adjustStock,
   fetchLocations,
@@ -244,13 +246,19 @@ function AdjustDialog({ open, lot, onClose, onDone }: { open: boolean; lot: Admi
   const { getAccessToken } = useAuth();
   const [direction, setDirection] = useState<"ADJUSTMENT_IN" | "ADJUSTMENT_OUT" | "DAMAGE" | "WASTE">("ADJUSTMENT_IN");
   const [quantity, setQuantity] = useState("");
+  const units = amountUnits(lot.unit);
+  // Stock is entered by weight/volume (kg) when the pack has one; the server
+  // converts it into packs of this variant.
+  const [entryUnit, setEntryUnit] = useState(units[0]?.value ?? "PACKS");
   const [reason, setReason] = useState<string>(ADJUSTMENT_REASONS[0]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   if (!open) return null;
 
-  const exceedsStock = direction !== "ADJUSTMENT_IN" && Number(quantity) > Number(lot.on_hand);
+  const byAmount = entryUnit !== "PACKS";
+  const packsEntered = byAmount ? amountToPacks(quantity || 0, entryUnit, lot.variant_quantity, lot.unit) : Number(quantity);
+  const exceedsStock = direction !== "ADJUSTMENT_IN" && packsEntered > Number(lot.on_hand);
 
   const handleConfirm = async () => {
     const token = getAccessToken();
@@ -258,7 +266,11 @@ function AdjustDialog({ open, lot, onClose, onDone }: { open: boolean; lot: Admi
     setSaving(true);
     setError(null);
     try {
-      await adjustStock(token, lot.id, { movement_type: direction, quantity, remarks: reason });
+      await adjustStock(token, lot.id, {
+        movement_type: direction,
+        ...(byAmount ? { amount: quantity, amount_unit: entryUnit } : { quantity }),
+        remarks: reason,
+      });
       onClose();
       onDone();
     } catch (err) {
@@ -287,15 +299,26 @@ function AdjustDialog({ open, lot, onClose, onDone }: { open: boolean; lot: Admi
         </div>
 
         <div className="relative mb-1">
-          <input type="number" value={quantity} onChange={(e) => setQuantity(e.target.value)} placeholder="Number of packs" className="w-full rounded border border-neutral-300 py-2 pl-3 pr-14 text-sm" />
-          <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-neutral-500">packs</span>
+          <input type="number" value={quantity} onChange={(e) => setQuantity(e.target.value)} placeholder={byAmount ? "Quantity" : "Number of packs"} className="w-full rounded border border-neutral-300 py-2 pl-3 pr-20 text-sm" />
+          <select
+            value={entryUnit}
+            onChange={(e) => setEntryUnit(e.target.value)}
+            className="absolute right-1 top-1/2 -translate-y-1/2 rounded bg-transparent py-1 text-xs font-semibold text-neutral-600"
+          >
+            {units.map((u) => <option key={u.value} value={u.value}>{u.label}</option>)}
+            <option value="PACKS">packs</option>
+          </select>
         </div>
         <p className={`mb-3 text-xs ${exceedsStock ? "text-status-danger" : "text-neutral-400"}`}>
           {exceedsStock
             ? `That is more than the ${packCount(lot.on_hand)} on hand.`
-            : `Enter the number of ${packSize(lot.variant_quantity, lot.unit)} packs${
-                Number(quantity) > 0 ? ` - ${packTotal(quantity, lot.variant_quantity, lot.unit)} in total` : ""
-              }.`}
+            : byAmount
+              ? `Enter the quantity in ${units.find((u) => u.value === entryUnit)?.label}${
+                  packsEntered > 0 ? ` - that is ${packCount(packsEntered)} of ${packSize(lot.variant_quantity, lot.unit)}` : ""
+                }.`
+              : `Enter the number of ${packSize(lot.variant_quantity, lot.unit)} packs${
+                  Number(quantity) > 0 ? ` - ${packTotal(quantity, lot.variant_quantity, lot.unit)} in total` : ""
+                }.`}
         </p>
 
         <select value={reason} onChange={(e) => setReason(e.target.value)} className="mb-3 w-full rounded border border-neutral-300 bg-white px-3 py-2 text-sm">

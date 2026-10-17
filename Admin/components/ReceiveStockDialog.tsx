@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
-import { fetchLocations, InventoryApiError, Location, packCount, packSize, packTotal, receiveStock } from "@/lib/inventory";
+import { amountToPacks, amountUnits, fetchLocations, InventoryApiError, Location, packCount, packSize, packTotal, receiveStock } from "@/lib/inventory";
 import { fetchAdminProducts, fetchAdminProductDetail, AdminProductListItem, ProductVariant } from "@/lib/products";
 import { BusyLabel } from "@/components/Spinner";
 
@@ -16,6 +16,7 @@ export function ReceiveStockDialog({ open, onClose, onReceived }: { open: boolea
   const [locations, setLocations] = useState<Location[]>([]);
   const [locationId, setLocationId] = useState("");
   const [quantity, setQuantity] = useState("");
+  const [chosenUnit, setChosenUnit] = useState("");
   const [remarks, setRemarks] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -41,6 +42,11 @@ export function ReceiveStockDialog({ open, onClose, onReceived }: { open: boolea
   }, [productId]);
 
   const variant = variants.find((v) => String(v.id) === variantId);
+  // Stock arrives by weight/volume (e.g. 1 kg); the server splits it into packs of the variant.
+  const units = variant ? amountUnits(variant.unit) : [];
+  const entryUnit = chosenUnit && (chosenUnit === "PACKS" || units.some((u) => u.value === chosenUnit)) ? chosenUnit : units[0]?.value ?? "PACKS";
+  const byAmount = entryUnit !== "PACKS";
+  const packsEntered = variant && byAmount ? amountToPacks(quantity || 0, entryUnit, variant.quantity, variant.unit) : Number(quantity);
 
   if (!open) return null;
 
@@ -49,6 +55,7 @@ export function ReceiveStockDialog({ open, onClose, onReceived }: { open: boolea
     setVariantId("");
     setLocationId("");
     setQuantity("");
+    setChosenUnit("");
     setRemarks("");
     setError(null);
   };
@@ -67,7 +74,7 @@ export function ReceiveStockDialog({ open, onClose, onReceived }: { open: boolea
       await receiveStock(token, {
         variant_id: Number(variantId),
         location_id: Number(locationId),
-        quantity,
+        ...(byAmount ? { amount: quantity, amount_unit: entryUnit } : { quantity }),
         remarks: remarks || undefined,
       });
       handleClose();
@@ -107,11 +114,21 @@ export function ReceiveStockDialog({ open, onClose, onReceived }: { open: boolea
           </select>
         </Field>
 
-        <Field label={variant ? `Number of packs (each ${packSize(variant.quantity, variant.unit)})` : "Number of packs"}>
-          <input type="number" min="0" value={quantity} onChange={(e) => setQuantity(e.target.value)} className="w-full rounded border border-neutral-300 px-3 py-2 text-sm" />
-          {variant && Number(quantity) > 0 && (
+        <Field label={variant ? (byAmount ? "Quantity received" : `Number of packs (each ${packSize(variant.quantity, variant.unit)})`) : "Quantity received"}>
+          <div className="flex gap-2">
+            <input type="number" min="0" value={quantity} onChange={(e) => setQuantity(e.target.value)} className="w-full rounded border border-neutral-300 px-3 py-2 text-sm" />
+            {variant && (
+              <select value={entryUnit} onChange={(e) => setChosenUnit(e.target.value)} className="rounded border border-neutral-300 bg-white px-2 py-2 text-sm">
+                {units.map((u) => <option key={u.value} value={u.value}>{u.label}</option>)}
+                <option value="PACKS">packs</option>
+              </select>
+            )}
+          </div>
+          {variant && packsEntered > 0 && (
             <p className="mt-1 text-xs text-neutral-500">
-              {packCount(quantity)} of {packSize(variant.quantity, variant.unit)} = {packTotal(quantity, variant.quantity, variant.unit)} in total.
+              {byAmount
+                ? `${quantity} ${units.find((u) => u.value === entryUnit)?.label} = ${packCount(packsEntered)} of ${packSize(variant.quantity, variant.unit)}. `
+                : `${packCount(quantity)} of ${packSize(variant.quantity, variant.unit)} = ${packTotal(quantity, variant.quantity, variant.unit)} in total. `}
               Sibling sizes of this product share the same stock.
             </p>
           )}

@@ -12,7 +12,7 @@ export function PageHeader({
   actions?: React.ReactNode;
 }) {
   return (
-    <div className="mb-6 flex items-start justify-between gap-4">
+    <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
       <div>
         <p className="eyebrow text-secondary-600">{eyebrow}</p>
         <h1 className="mt-1 font-display text-2xl font-semibold text-primary-900">{title}</h1>

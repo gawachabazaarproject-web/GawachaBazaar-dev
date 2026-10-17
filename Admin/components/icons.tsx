@@ -19,7 +19,9 @@ export type IconName =
   | "chevron-left"
   | "log-out"
   | "user"
-  | "upload";
+  | "upload"
+  | "menu"
+  | "x";
 
 const PATHS: Record<IconName, React.ReactNode> = {
   grid: (
@@ -121,6 +123,8 @@ const PATHS: Record<IconName, React.ReactNode> = {
       <path d="M4 21a8 8 0 0 1 16 0" />
     </>
   ),
+  menu: <path d="M4 6h16M4 12h16M4 18h16" />,
+  x: <path d="M6 6l12 12M18 6L6 18" />,
   upload: (
     <>
       <path d="M12 16V4" />

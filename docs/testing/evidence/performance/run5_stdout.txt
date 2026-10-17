@@ -1,0 +1,6 @@
+D:\Gawacha_Bazaar\GawachaBazaar-dev\backend\tests\test_phase_13_cart_orders.py:14: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+  from starlette.testclient import TestClient
+[100 VU] rps=15.0 p50=30896ms p95=31253ms p99=31319ms err=100.0% cpu=0.03 rss=141.8MB dbconn=15 integrity=True
+STOP RULE HIT: stop rule hit at 100 VUs
+RECOVERY: {'recovered': True, 'seconds_after_load_stopped': 362.1, 'attempts': 54}
+{"baseline": {"n": 40, "p50_ms": 31, "p95_ms": 53, "non200": 0}, "recovery": {"recovered": true, "seconds_after_load_stopped": 362.1, "attempts": 54}}

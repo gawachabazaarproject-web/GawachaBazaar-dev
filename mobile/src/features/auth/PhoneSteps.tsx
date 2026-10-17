@@ -53,7 +53,7 @@ export function PhoneEntryStep({ mode, onSent }: { mode: PhoneMode; onSent: () =
         <Text variant="bodyLarge" style={styles.prefix}>
           +91
         </Text>
-        <TextInput
+        <TextInput maxFontSizeMultiplier={1.15}
           value={formatLocalDigits(digits)}
           onChangeText={(v) => {
             setDigits(v.replace(/\D/g, "").slice(0, 10));
@@ -166,7 +166,7 @@ export function OtpStep({ onVerified, onChangeNumber }: { onVerified?: () => voi
         })}
       </Pressable>
       {/* One real input behind the boxes: keeps paste + SMS autofill working. */}
-      <TextInput
+      <TextInput maxFontSizeMultiplier={1.15}
         ref={inputRef}
         value={code}
         onChangeText={(v) => {

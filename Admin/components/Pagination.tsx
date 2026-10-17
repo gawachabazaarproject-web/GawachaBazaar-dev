@@ -16,7 +16,7 @@ export function Pagination({
   const end = Math.min(page * pageSize, total);
 
   return (
-    <div className="flex items-center justify-between border-t border-neutral-200 px-4 py-3 text-sm text-neutral-600">
+    <div className="flex flex-wrap items-center justify-between gap-2 border-t border-neutral-200 px-4 py-3 text-sm text-neutral-600">
       <p>
         {total === 0 ? "0 results" : `${start}–${end} of ${total}`}
       </p>

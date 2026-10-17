@@ -1,0 +1,82 @@
+# AI Status
+
+> **Last verified:** 2026-10-14 (≈ 12:00–13:10 IST), branch `docs-and-primary-testing`, `HEAD` `8d6229e` ("chore(mobile): link EAS project under yash145"), **dirty working tree** (see §5).
+> **Purpose:** the "where are we right now" page for agents and developers: what works (and how that was checked), what is broken or unverified, what changed recently *according to the repository*, and what to do next. **Update this file whenever active development status, blockers or priorities change** ([AGENTS.md](../../AGENTS.md)). It is a snapshot; where it conflicts with the code or a fresh test run, trust those.
+
+## 1. Verified status (what was actually run on 2026-10-14)
+
+| Check | Command / method | Result |
+|---|---|---|
+| Backend test suite | `pytest -p no:cacheprovider` against the disposable PostgreSQL 16 container (loopback `15432`, tmpfs), 06:32 UTC start | **899 collected: 891 passed, 7 failed, 1 xfailed** in 10 min 18 s |
+| Cause of the 7 failures | re-ran only those 7 with `DELIVERY_BASE_FEE=20` | 7 passed; with the new default (40) all 7 fail by exactly Rs 20 → the **base delivery fee was changed 20 → 40 on the same day** and these tests hard-code 20 |
+| Strict xfail | `test_money_integrity.py::…refunded_not_attached` | still xfail ⇒ defect **PAY-001 still open** |
+| Lint | `python -m ruff check .` | 7 findings (3 `E741` in `inventory_reservation.py`, 4 in test files) |
+| Model/migration drift | `alembic check` on a DB migrated to head | "No new upgrade operations detected." Alembic: 38 files, single head `f1a2b3c4d5e6` |
+| Fresh migration + boot | throw-away DB in the disposable container: `alembic upgrade head`, then `uvicorn` | head reached in ≈ 4 s, 51 tables, 7 roles, 4 home slides, 0 users, 0 promotions; `/health`, `/health/db`, `/api/v1/ping`, public catalogue, home slides, offers → 200; `/api/v1/cart` → 401; `/docs` → 200 |
+| Route inventory vs OpenAPI | AST of `api/v1/*.py` vs `app.openapi()` | 193 routes + `/health`, `/health/db`, `/ping` = **196 operations** (12 public) + 1 WebSocket; sets equal |
+| Auth column vs golden matrix | derived roles/permissions vs `authz_golden.json` | 180/180 gated operations match |
+| Type checks | `npx tsc --noEmit` in `Admin/` and `mobile/`, re-run at ≈ 12:56 IST **after** the other session's mobile edits (§5) | exit code 0, no diagnostics in both |
+| Live probes (read-only GET) | Render backend | `/health` → 200 `environment: production`; sign-in verification returns 401 for a garbage token (503 during the earlier incident) |
+
+**Not run:** any frontend test (none exist), `multiproc` harness, live Razorpay/Firebase/Expo/Cloudinary calls, `npm install`/`expo`/EAS builds, docker compose stacks, VPS/EKS/Render deployments, backup/restore, `next lint`.
+
+## 2. Component status
+
+| Area | Status | Notes |
+|---|---|---|
+| Backend API (catalogue, cart, orders, payments, refunds, fulfilment, inventory, promotions, bulk, staff, customers, content, push, realtime) | **Implemented and verified** against fakes; red suite due to the fee change | [API_REFERENCE](../03-api/API_REFERENCE.md), domain docs |
+| Online payments (Razorpay) | Implemented; verified with a fake gateway only; PAY-001 open | [PAYMENTS](../05-domains/PAYMENTS.md) |
+| Authentication | Implemented (Firebase); working again after the 2026-10-14 config fix; Google needs the registered SHA-1 | [AUTHENTICATION](../05-domains/AUTHENTICATION.md) |
+| Customer app | Implemented; no automated tests; unreleased UI changes in the working tree | §5 |
+| Admin panel | Implemented except placeholders (Reports, Reviews, Audit Log); usability pass 2026-10-17 (grouped/sticky/mobile nav, working search, Delivery queue page, error/404 pages, Docker Firebase build args) — `tsc` and `next build` pass, **not exercised signed-in**; no automated tests; hosting unclear | [ADMIN_OPERATIONS](../05-domains/ADMIN_OPERATIONS.md) |
+| Promo website | Static marketing pages, no API | – |
+| Deployment | **Unresolved** (VPS vs EKS vs Render vs Vercel) | [DEPLOYMENT](../09-deployment-operations/DEPLOYMENT.md) |
+| Observability, backups, incident process | Largely absent | [PRODUCTION_READINESS](../10-project-management/PRODUCTION_READINESS.md) |
+| Bazaar+ benefits, reviews, reports, audit viewer, farm traceability | Planned / placeholder | [ROADMAP](../10-project-management/ROADMAP.md) |
+
+## 3. Known bugs and blockers (top items; full list: [KNOWN_ISSUES](../10-project-management/KNOWN_ISSUES.md))
+
+1. **FEE-1:** 7 failing tests after the base-fee change (mechanical fix; not done).
+2. **SECR-1:** a live-looking API key is committed in `.mcp.json` (rotate).
+3. **PAY-001:** online payment can attach to an unrelated existing order.
+4. **CI-001:** pushes to `main` deploy to EKS with no checks.
+5. **DEP-1/ADM-1:** unclear production target; Docker/CI Admin image has no Firebase config.
+6. **BAK-1, OBS-1:** untested on-host backups only; no alerts.
+7. **UI-3:** support contact details in the app are placeholders.
+
+## 4. Documentation status
+
+This documentation set (the numbered folders under `docs/`) was created on 2026-10-14. Each document names its evidence and its own verification status. Corrections made to existing documents (verified against code):
+
+| File | Correction |
+|---|---|
+| [`docs/FEATURES.md`](../FEATURES.md) | Push notifications **are** implemented; Audit log page is a placeholder; checkout slot picker is illustrative; ad ratio check is UI-only; added Bazaar+/WHOLESALER notes; fee text updated to Rs 40 |
+| [`docs/ARCHITECTURE.md`](../ARCHITECTURE.md) | Added pay-first online checkout (the old text described only reserve-then-pay); `WHOLESALER` caveat; audit-log wording; deployment ambiguity pointer; fee text updated to Rs 40 |
+| Backend/other READMEs | Not changed except `backend/README.md` (fee default row, earlier in the day); they may still contain stale statements (e.g. `backend/README.md` says "~36 test modules" — there are 42 `test_*.py` files; "35+ revisions" is still true at 38) |
+
+`docs/testing/` (the QA audit) was left as is; where it disagrees with this set the newer verification here wins (e.g. its "196 operations" and "51 tables" agree; its fixtures description in `EXISTING_TEST_INVENTORY.md` predates SEC-001).
+
+## 5. Working-tree state (uncommitted — **nothing was committed or pushed by the documentation task**)
+
+| Group | Files | By whom / evidence |
+|---|---|---|
+| Delivery base fee 20 → 40 | `backend/app/core/config.py`, `backend/app/services/delivery.py` (docstring), `backend/.env.example`, `.env.production.example`, `backend/README.md`, `docs/ARCHITECTURE.md`, `docs/FEATURES.md` | earlier in the same working session at the owner's request |
+| Login redesign, sign-in loader (`syncing`), product-image fallback, removed default "Farm Fresh" tag | `mobile/app/(auth)/login.tsx`, `mobile/src/features/auth/LoginParts.tsx` (new), `AuthParts.tsx`, `mobile/src/store/authStore.ts`, `mobile/src/components/ProductCard.tsx`, `mobile/src/theme/colors.ts`, `mobile/assets/login/*` (new) | earlier in the same working session; `tsc` clean at the time; **never seen on a device** |
+| Responsive / text-style work | `mobile/app/(tabs)/account.tsx`, `orders.tsx`, `search.tsx`, `checkout/index.tsx`, `order/[id]/index.tsx`, `Text.tsx`, `TextField.tsx`, `WholesaleProductCard.tsx`, `SearchHome.tsx`, `PhoneSteps.tsx`, `mobile/src/theme/textStyle.ts`, `mobile/src/utils/responsive.ts`, `mobile/scripts/check-text-style.mjs` (new) | **not made by this task or by me** (file times 12:28–12:31 IST) — another session/person is editing the app concurrently; coordinate before committing |
+| Push logging + test | `backend/app/services/push.py`, `backend/tests/test_push_send.py` (new) | not made by this task |
+| QA-audit artefacts | `backend/tests/{_db_safety.py, authz_golden.json, multiproc/, test_authz_matrix.py, test_cross_customer_access.py, test_db_safety.py, test_fixture_integrity.py, test_money_integrity.py, test_refund_integrity.py}`, `backend/tests/conftest.py` (modified), `docs/testing/` | earlier QA audit sessions |
+| This documentation | `docs/00-… 11-…`, `docs/_tools/`, `AGENTS.md`, edits to `docs/FEATURES.md` and `docs/ARCHITECTURE.md` | this task |
+
+The latest EAS OTA update availability was **not** checked; the installed APK listens on channel `preview`, runtime `1.0.0`.
+
+## 6. Recommended next steps (grounded in the findings above)
+
+1. Rotate the committed key (SECR-1) and confirm Render's production variables (CFG-1, FEE-1/O-3).
+2. Fix the 7 fee-dependent tests; then PAY-001; then a CI gate that runs ruff + pytest + `alembic check` + `tsc` ([TASKS](../10-project-management/TASKS.md) E-1…E-3).
+3. Review the three mobile change groups separately and commit them as separate commits (type checks were clean at ≈ 12:56 IST, but others are still editing `mobile/`; re-run before committing).
+4. Resolve the deployment ambiguity and the Admin Firebase-config path (O-2, E-5).
+5. Run a backup restore drill and add alerts for the reconciliation markers (O-9, E-8).
+
+## 7. How to update this file
+
+After any session that changes behaviour, test status, blockers or priorities: refresh §1 with the commands you actually ran and their results, move items between §2/§3, adjust §5 to match `git status`, and change the "Last verified" line. Do not mark anything verified that you did not run.

@@ -1,30 +1,72 @@
+import os
 from collections.abc import Generator
 
 import pytest
-from sqlalchemy import create_engine, text
-from sqlalchemy.orm import Session, sessionmaker
-from starlette.testclient import TestClient
 
-from app.core.config import settings
-from app.core.firebase import set_firebase
-from app.core.rate_limit import limiter
-from app.dependencies.database import get_db
-from app.main import app
-from tests.firebase_fake import fake_firebase
-
-# Explicitly isolate test database: gawachabazaar_test
-TEST_DATABASE_URL = settings.DATABASE_URL.replace(
-    "/gawachabazaar", "/gawachabazaar_test"
+from tests._db_safety import (
+    UNROUTABLE_SENTINEL_URL,
+    UnsafeTestDatabaseError,
+    resolve_test_database_url,
+    verify_live_target,
 )
+
+# ---------------------------------------------------------------------------
+# Database safety - must run BEFORE `app` is imported.
+#
+# The suite TRUNCATEs tables, and application code outside the `get_db`
+# override (app.db.session.SessionLocal: the reservation-expiry sweep, push
+# sends) connects to whatever settings.DATABASE_URL says. So DATABASE_URL
+# itself is pinned to the validated local test database (or to an unroutable
+# sentinel if the configuration is unsafe). The target is never derived from
+# the developer's DATABASE_URL. See tests/_db_safety.py for the policy.
+# ---------------------------------------------------------------------------
+try:
+    TEST_DATABASE_URL: str | None = resolve_test_database_url(os.environ)
+    TEST_DATABASE_ERROR: UnsafeTestDatabaseError | None = None
+except UnsafeTestDatabaseError as _exc:
+    TEST_DATABASE_URL = None
+    TEST_DATABASE_ERROR = _exc
+
+os.environ["DATABASE_URL"] = TEST_DATABASE_URL or UNROUTABLE_SENTINEL_URL
+os.environ["APP_ENV"] = "testing"
+# Never let a test reach real third-party services configured in a dev .env.
+for _name in (
+    "RAZORPAY_KEY_ID",
+    "RAZORPAY_KEY_SECRET",
+    "RAZORPAY_WEBHOOK_SECRET",
+    "CLOUDINARY_CLOUD_NAME",
+    "CLOUDINARY_API_KEY",
+    "CLOUDINARY_API_SECRET",
+    "GOOGLE_MAPS_API_KEY",
+    "FIREBASE_SERVICE_ACCOUNT_JSON",
+):
+    os.environ[_name] = ""
+
+from sqlalchemy import create_engine, text  # noqa: E402
+from sqlalchemy.orm import Session, sessionmaker  # noqa: E402
+from starlette.testclient import TestClient  # noqa: E402
+
+from app.core.firebase import set_firebase  # noqa: E402
+from app.core.rate_limit import limiter  # noqa: E402
+from app.dependencies.database import get_db  # noqa: E402
+from app.main import app  # noqa: E402
+from tests.firebase_fake import fake_firebase  # noqa: E402
+
+
+def require_test_database_url() -> str:
+    """The validated URL, or fail closed before any connection is attempted."""
+    if TEST_DATABASE_URL is None:
+        raise UnsafeTestDatabaseError(str(TEST_DATABASE_ERROR))
+    return TEST_DATABASE_URL
 
 
 @pytest.fixture(scope="session")
 def test_engine():
-    """Session-scoped engine bound strictly to gawachabazaar_test."""
-    assert "gawachabazaar_test" in TEST_DATABASE_URL, (
-        f"Safety failure: tests must run against gawachabazaar_test, got {TEST_DATABASE_URL}"
-    )
-    engine = create_engine(TEST_DATABASE_URL, pool_pre_ping=True)
+    """Session-scoped engine bound strictly to the validated local test DB."""
+    url = require_test_database_url()
+    engine = create_engine(url, pool_pre_ping=True)
+    with engine.connect() as conn:
+        verify_live_target(conn, url)
     yield engine
     engine.dispose()
 
@@ -60,6 +102,16 @@ def db_session(test_engine) -> Generator[Session, None, None]:
     connection = test_engine.connect()
     SessionLocalTest = sessionmaker(bind=connection, autocommit=False, autoflush=False)
     session = SessionLocalTest()
+
+    # Re-verify the live target immediately before the only destructive SQL
+    # in the suite.
+    verify_live_target(connection, require_test_database_url())
+    # verify_live_target autobegins a transaction on the raw Connection; end
+    # it so the Session below owns (and really commits) its own transaction.
+    # Left open, the Session would join it, `session.commit()` would not
+    # commit, and the TRUNCATE's ACCESS EXCLUSIVE locks would block every
+    # other connection for the rest of the test.
+    connection.rollback()
 
     # Clean test tables before each test in dependency order
     session.execute(

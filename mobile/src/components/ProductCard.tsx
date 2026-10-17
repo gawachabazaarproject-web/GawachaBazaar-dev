@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import { StyleSheet, View } from "react-native";
 import { Image } from "expo-image";
 import { Feather } from "@expo/vector-icons";
@@ -67,11 +67,17 @@ export function ProductCard({ product, onPress, index = 0 }: ProductCardProps) {
   const isAvailable = isActive && inStock;
   const price = product.variant?.current_price ?? product.startingPrice ?? null;
   const { origin, mrp, badge } = getEmbellishment(product.slug);
-  const tag = badge ?? origin ?? "Farm Fresh";
+  const tag = badge ?? origin ?? null;
+  const [imageFailed, setImageFailed] = useState(false);
+  const showImage = !!product.imageUrl && !imageFailed;
   const sizeQuantity = product.variant?.quantity ?? product.defaultVariantQuantity;
   const sizeUnit = product.variant?.unit ?? product.defaultVariantUnit;
   const ratePerUnit =
     price && sizeQuantity && sizeUnit ? formatRatePerUnit(price.price, sizeQuantity, sizeUnit) : null;
+  // The comparison rate only helps when it differs from the price: a 1 kg
+  // pack at Rs 160 is already "Rs 160/kg", so repeating it is noise.
+  const packQty = Number.parseFloat(sizeQuantity ?? "");
+  const showRate = !!ratePerUnit && !(packQty === 1 && ["KG", "L", "UNIT"].includes(sizeUnit ?? ""));
   const sizeLabel = product.variant
     ? formatVariantSize(product.variant.quantity, product.variant.unit)
     : product.defaultVariantUnit && product.defaultVariantQuantity
@@ -98,13 +104,19 @@ export function ProductCard({ product, onPress, index = 0 }: ProductCardProps) {
             one view. */}
         <View style={[styles.surface, !inStock && styles.soldOut]}>
           <View style={styles.imageWrap}>
-            <Image
-              source={product.imageUrl ?? undefined}
-              style={styles.image}
-              contentFit="cover"
-              transition={200}
-              placeholder={{ blurhash: "L4C~D%~q00~q~q00%M-;9F%M-;-;" }}
-            />
+            {showImage ? (
+              <Image
+                source={product.imageUrl ?? undefined}
+                style={styles.image}
+                contentFit="cover"
+                transition={200}
+                onError={() => setImageFailed(true)}
+              />
+            ) : (
+              <View style={styles.imageFallback}>
+                <Feather name="image" size={28} color={colors.textMuted} />
+              </View>
+            )}
             {tag ? (
               <View style={styles.badge}>
                 <Feather name="feather" size={12} color={colors.primary} />
@@ -128,14 +140,25 @@ export function ProductCard({ product, onPress, index = 0 }: ProductCardProps) {
           <Text variant="bodyMedium" color={colors.primary} numberOfLines={1} style={styles.name}>
             {product.name}
           </Text>
-          <View style={styles.footer}>
-            <View style={styles.footerInfo}>
-              {sizeLabel ? (
-                <Text variant="caption" color={colors.textSecondary}>
+          {/* Pack size and comparison rate share one tidy line; price and
+              stepper sit together on the line below, so neither column is
+              squeezed into wrapping ("₹160/" + "kg"). */}
+          {sizeLabel ? (
+            <View style={styles.metaRow}>
+              <View style={styles.sizeChip}>
+                <Text variant="captionMedium" color={colors.textSecondary} numberOfLines={1}>
                   {sizeLabel}
                 </Text>
+              </View>
+              {showRate ? (
+                <Text variant="caption" color={colors.textMuted} numberOfLines={1} style={styles.rate}>
+                  {ratePerUnit}
+                </Text>
               ) : null}
-              {ratePerUnit ? (<Text variant="caption" color={colors.textMuted}>{ratePerUnit}</Text>) : null}
+            </View>
+          ) : null}
+          <View style={styles.footer}>
+            <View style={styles.priceWrap}>
               {price ? (
                 <PriceTag amount={price.price} currency={price.currency} mrp={mrp} />
               ) : (
@@ -217,6 +240,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
   },
   image: { width: "100%", height: "100%" },
+  imageFallback: { width: "100%", height: "100%", alignItems: "center", justifyContent: "center", backgroundColor: colors.surfaceTint },
   badge: {
     position: "absolute",
     top: spacing.sm,
@@ -239,14 +263,29 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   name: { marginTop: spacing.sm, paddingHorizontal: 2, fontFamily: fontFamily.devanagari, fontSize: 17, lineHeight: 23, letterSpacing: 0.2 },
+  metaRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs,
+    marginTop: spacing.xs,
+    paddingHorizontal: 2,
+  },
+  sizeChip: {
+    borderRadius: 999,
+    backgroundColor: colors.background,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    flexShrink: 0,
+  },
+  rate: { flexShrink: 1 },
   footer: {
     flexDirection: "row",
-    alignItems: "flex-end",
+    alignItems: "center",
     justifyContent: "space-between",
     marginTop: "auto",
-    paddingTop: 2,
+    paddingTop: spacing.xs,
     paddingHorizontal: 2,
     gap: spacing.xs,
   },
-  footerInfo: { flexShrink: 1 },
+  priceWrap: { flexShrink: 1 },
 });
