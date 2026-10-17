@@ -13,10 +13,15 @@ InventoryLot - never recomputed differently or cached separately (see the
 from datetime import date, datetime
 from decimal import Decimal
 
-from pydantic import Field
+from pydantic import Field, model_validator
 
 from app.schemas.base import BaseSchema
-from app.schemas.inventory import BatchResponse, StockMovementResponse
+from app.schemas.inventory import (
+    AmountUnit,
+    BatchResponse,
+    StockMovementResponse,
+    check_packs_or_amount,
+)
 
 MAX_PAGE_SIZE = 100
 
@@ -141,8 +146,17 @@ class ReceiveStockRequest(BaseSchema):
     batch_id: int | None = Field(default=None, gt=0)
     variant_id: int = Field(..., gt=0)
     location_id: int = Field(..., gt=0)
-    quantity: Decimal = Field(..., gt=0, max_digits=12, decimal_places=3)
+    # Either a number of packs, or the weight/volume received (e.g. 1 KG),
+    # which the server converts into packs of this variant.
+    quantity: Decimal | None = Field(default=None, gt=0, max_digits=12, decimal_places=3)
+    amount: Decimal | None = Field(default=None, gt=0, max_digits=12, decimal_places=3)
+    amount_unit: AmountUnit | None = None
     remarks: str | None = Field(default=None)
+
+    @model_validator(mode="after")
+    def _packs_or_amount(self) -> "ReceiveStockRequest":
+        check_packs_or_amount(self.quantity, self.amount, self.amount_unit)
+        return self
 
 
 class RemoveStockRequest(BaseSchema):

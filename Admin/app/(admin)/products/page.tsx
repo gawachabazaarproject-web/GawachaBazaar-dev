@@ -3,6 +3,7 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
+import { readInitialQuery, useDebounced, useUrlQuerySync } from "@/lib/use-list-query";
 import { hasPermission } from "@/lib/permissions";
 import {
   AdminProductListItem,
@@ -40,7 +41,9 @@ export default function ProductsPage() {
   const [error, setError] = useState<string | null>(null);
 
   const [page, setPage] = useState(1);
-  const [q, setQ] = useState("");
+  const [q, setQ] = useState(readInitialQuery);
+  const dq = useDebounced(q);
+  useUrlQuerySync((v) => { setPage(1); setQ(v); });
   const [status, setStatus] = useState("");
   const [categoryId, setCategoryId] = useState("");
   const [priceMin, setPriceMin] = useState("");
@@ -61,7 +64,7 @@ export default function ProductsPage() {
       const result = await fetchAdminProducts(token, {
         page,
         page_size: PAGE_SIZE,
-        q: q || undefined,
+        q: dq || undefined,
         status: status || undefined,
         category_id: categoryId ? Number(categoryId) : undefined,
         price_min: priceMin || undefined,
@@ -74,7 +77,7 @@ export default function ProductsPage() {
       setLoading(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, q, status, categoryId, priceMin, priceMax]);
+  }, [page, dq, status, categoryId, priceMin, priceMax]);
 
   useEffect(() => {
     load();

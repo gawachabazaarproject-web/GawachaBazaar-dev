@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from "react-native";
 import { Image } from "expo-image";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { useQueryClient } from "@tanstack/react-query";
@@ -17,6 +17,7 @@ import { useToastStore } from "@/store/toastStore";
 import { presentPaymentStatus, isOrderCancellable } from "@/utils/statusPresentation";
 import { formatMoney } from "@/utils/money";
 import { colors, radius, spacing } from "@/theme";
+import { scaled, smallScreenScale } from "@/utils/responsive";
 import { FulfillmentStatus, OrderStatus } from "@/types/api";
 
 const TINT = colors.surfaceTint; // pale sage wash used by the hero, total box and pills
@@ -73,6 +74,7 @@ function heroFor(status: OrderStatus, fulfillment: FulfillmentStatus | null): He
 }
 
 export default function OrderDetailsScreen() {
+  const heroScale = smallScreenScale(useWindowDimensions().width);
   const { id } = useLocalSearchParams<{ id: string }>();
   const orderId = Number(id);
   const router = useRouter();
@@ -176,7 +178,7 @@ export default function OrderDetailsScreen() {
         <View style={styles.hero}>
           <Image
             source={require("../../../assets/order-hero-crate.png")}
-            style={styles.heroArt}
+            style={[styles.heroArt, heroScale < 1 && { width: scaled(128, heroScale), height: scaled(164, heroScale) }]}
             contentFit="contain"
             pointerEvents="none"
           />

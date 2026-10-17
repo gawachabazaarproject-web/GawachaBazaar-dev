@@ -3,6 +3,7 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
+import { readInitialQuery, useDebounced, useUrlQuerySync } from "@/lib/use-list-query";
 import {
   AdminCustomerListItem,
   AdminCustomerListResponse,
@@ -43,7 +44,9 @@ export default function CustomersPage() {
   const [error, setError] = useState<string | null>(null);
 
   const [page, setPage] = useState(1);
-  const [q, setQ] = useState("");
+  const [q, setQ] = useState(readInitialQuery);
+  const dq = useDebounced(q);
+  useUrlQuerySync((v) => { setPage(1); setQ(v); });
   const [accountStatus, setAccountStatus] = useState("");
   const [activity, setActivity] = useState("");
   const [registeredFrom, setRegisteredFrom] = useState("");
@@ -77,7 +80,7 @@ export default function CustomersPage() {
       const result = await fetchCustomers(token, {
         page,
         page_size: PAGE_SIZE,
-        q: q || undefined,
+        q: dq || undefined,
         account_status: accountStatus || undefined,
         activity: activity || undefined,
         registered_from: registeredFrom ? new Date(registeredFrom).toISOString() : undefined,
@@ -94,7 +97,7 @@ export default function CustomersPage() {
       setLoading(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, q, accountStatus, activity, registeredFrom, registeredTo, lastOrderFrom, lastOrderTo, sortBy, sortDir]);
+  }, [page, dq, accountStatus, activity, registeredFrom, registeredTo, lastOrderFrom, lastOrderTo, sortBy, sortDir]);
 
   useEffect(() => {
     load();

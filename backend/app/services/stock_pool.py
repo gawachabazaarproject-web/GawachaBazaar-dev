@@ -17,6 +17,7 @@ from decimal import ROUND_DOWN, Decimal
 
 from sqlalchemy.orm import Session
 
+from app.exceptions.base import BusinessValidationError
 from app.models.inventory_lot import InventoryLot
 from app.models.product_variant import ProductVariant
 
@@ -47,6 +48,21 @@ def to_packs(base_amount: Decimal, pack_size: Decimal) -> Decimal:
     if pack_size <= 0:
         return _ZERO
     return (base_amount / pack_size).quantize(_QTY, rounding=ROUND_DOWN)
+
+
+def weight_to_packs(variant: ProductVariant, amount: Decimal, amount_unit: str) -> Decimal:
+    """Packs of `variant` that `amount` of `amount_unit` makes (e.g. 1 kg of a
+    250 g variant -> 4 packs). The unit must be in the variant's unit family."""
+    family, factor = _UNIT_FAMILIES.get(amount_unit, (amount_unit, Decimal("1")))
+    variant_family, pack_size = variant_size(variant)
+    if family != variant_family or family not in {"MASS", "VOLUME", "COUNT"}:
+        raise BusinessValidationError(
+            f"{amount_unit} cannot be converted to packs of {variant.unit}; enter a number of packs instead."
+        )
+    packs = to_packs(amount * factor, pack_size)
+    if packs <= 0:
+        raise BusinessValidationError("That amount is smaller than one pack-thousandth; enter a larger amount.")
+    return packs
 
 
 def pool_siblings(db: Session, variant: ProductVariant) -> list[ProductVariant]:
@@ -98,5 +114,6 @@ def available_packs_by_variant(
     result: dict[int, Decimal] = {}
     for v in wanted:
         family, size = variant_size(v)
-        result[v.id] = to_packs(pool[(v.product_id, family)], size)
+        # Customers can only buy whole packs: 1.1 kg of 250 g packs is 4 packs.
+        result[v.id] = to_packs(pool[(v.product_id, family)], size).to_integral_value(rounding=ROUND_DOWN)
     return result

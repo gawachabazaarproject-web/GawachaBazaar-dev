@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect } from "react";
+import React, { Suspense, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { PageLoader } from "@/components/Spinner";
@@ -20,5 +20,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     );
   }
 
-  return <AdminShell>{children}</AdminShell>;
+  return (
+    <AdminShell>
+      {/* List pages read ?q= via useSearchParams, which needs a Suspense boundary. */}
+      <Suspense fallback={<PageLoader />}>{children}</Suspense>
+    </AdminShell>
+  );
 }

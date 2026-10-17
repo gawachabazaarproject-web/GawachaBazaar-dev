@@ -1,0 +1,215 @@
+{
+  "S1_migration_race": {
+    "rounds": [
+      {
+        "kind": "empty->head",
+        "procs": [
+          {
+            "rc": 1,
+            "error_lines": [
+              "psycopg.errors.UniqueViolation: duplicate key value violates unique constraint \"pg_type_typname_nsp_index\"",
+              "DETAIL:  Key (typname, typnamespace)=(alembic_version, 270996) already exists.",
+              "The above exception was the direct cause of the following exception:",
+              "    self._handle_dbapi_exception("
+            ]
+          },
+          {
+            "rc": 0,
+            "error_lines": []
+          }
+        ],
+        "final_version": "f1a2b3c4d5e6"
+      },
+      {
+        "kind": "empty->head",
+        "procs": [
+          {
+            "rc": 1,
+            "error_lines": [
+              "psycopg.errors.UniqueViolation: duplicate key value violates unique constraint \"pg_type_typname_nsp_index\"",
+              "DETAIL:  Key (typname, typnamespace)=(alembic_version, 272224) already exists.",
+              "The above exception was the direct cause of the following exception:",
+              "    self._handle_dbapi_exception("
+            ]
+          },
+          {
+            "rc": 0,
+            "error_lines": []
+          }
+        ],
+        "final_version": "f1a2b3c4d5e6"
+      },
+      {
+        "kind": "empty->head",
+        "procs": [
+          {
+            "rc": 1,
+            "error_lines": [
+              "psycopg.errors.UniqueViolation: duplicate key value violates unique constraint \"pg_type_typname_nsp_index\"",
+              "DETAIL:  Key (typname, typnamespace)=(alembic_version, 273454) already exists.",
+              "The above exception was the direct cause of the following exception:",
+              "    self._handle_dbapi_exception("
+            ]
+          },
+          {
+            "rc": 0,
+            "error_lines": []
+          }
+        ],
+        "final_version": "f1a2b3c4d5e6"
+      },
+      {
+        "kind": "2-pending->head",
+        "procs": [
+          {
+            "rc": 0,
+            "error_lines": []
+          },
+          {
+            "rc": 1,
+            "error_lines": [
+              "psycopg.errors.UniqueViolation: duplicate key value violates unique constraint \"pg_class_relname_nsp_index\"",
+              "DETAIL:  Key (relname, relnamespace)=(push_tokens_id_seq, 274682) already exists.",
+              "The above exception was the direct cause of the following exception:",
+              "    self._handle_dbapi_exception("
+            ]
+          }
+        ],
+        "final_version": "f1a2b3c4d5e6"
+      },
+      {
+        "kind": "2-pending->head",
+        "procs": [
+          {
+            "rc": 1,
+            "error_lines": [
+              "psycopg.errors.UniqueViolation: duplicate key value violates unique constraint \"pg_type_typname_nsp_index\"",
+              "DETAIL:  Key (typname, typnamespace)=(push_tokens, 275908) already exists.",
+              "The above exception was the direct cause of the following exception:",
+              "    self._handle_dbapi_exception("
+            ]
+          },
+          {
+            "rc": 0,
+            "error_lines": []
+          }
+        ],
+        "final_version": "f1a2b3c4d5e6"
+      },
+      {
+        "kind": "2-pending->head",
+        "procs": [
+          {
+            "rc": 1,
+            "error_lines": [
+              "psycopg.errors.UniqueViolation: duplicate key value violates unique constraint \"pg_type_typname_nsp_index\"",
+              "DETAIL:  Key (typname, typnamespace)=(push_tokens, 277137) already exists.",
+              "The above exception was the direct cause of the following exception:",
+              "    self._handle_dbapi_exception("
+            ]
+          },
+          {
+            "rc": 0,
+            "error_lines": []
+          }
+        ],
+        "final_version": "f1a2b3c4d5e6"
+      }
+    ]
+  },
+  "S2_S3_rate_limit_and_xff": {
+    "S2_same_client_8_requests_to_A": [
+      401,
+      401,
+      401,
+      401,
+      401,
+      429,
+      429,
+      429
+    ],
+    "S2_same_client_8_requests_to_B": [
+      401,
+      401,
+      401,
+      401,
+      401,
+      429,
+      429,
+      429
+    ],
+    "S2_allowed_total_across_replicas": 10,
+    "S2_documented_limit_per_minute": 5,
+    "S3_control_same_xff_x8": [
+      401,
+      401,
+      401,
+      401,
+      401,
+      429,
+      429,
+      429
+    ],
+    "S3_varying_leftmost_xff_x12": [
+      401,
+      401,
+      401,
+      401,
+      401,
+      401,
+      401,
+      401,
+      401,
+      401,
+      401,
+      401
+    ],
+    "S3_requests_rate_limited_with_spoof": 0
+  },
+  "S4_websocket_cross_replica": {
+    "events_received_on_A": [
+      {
+        "resource": "order",
+        "order_id": 1,
+        "status": "CANCELLED",
+        "previous_status": "PENDING",
+        "occurred_at": "2026-10-13T21:54:09.821045+00:00"
+      }
+    ],
+    "ws_errors": [],
+    "order_cancelled_via_A (same replica as socket)": 1,
+    "order_cancelled_via_B (other replica)": 2,
+    "socket_on_A_saw_event_for_A_action": true,
+    "socket_on_A_saw_event_for_B_action": false,
+    "both_orders_cancelled_in_db": [
+      "CANCELLED",
+      "CANCELLED"
+    ]
+  },
+  "S5_reservation_sweep": {
+    "reservations_created": 12,
+    "reservation_states": {
+      "EXPIRED": 12
+    },
+    "order_states": {
+      "EXPIRED": 12
+    },
+    "lot_reserved_min_max_free_min": [
+      "0.000",
+      "0.000",
+      "1000.000"
+    ],
+    "stock_movements": {},
+    "sweep_reported_expired_by_replica": {
+      "A": 12,
+      "A_sweep_failures": 0,
+      "B": 12,
+      "B_sweep_failures": 0
+    },
+    "sum_reported_vs_actual": [
+      24,
+      12
+    ],
+    "pg_deadlocks_during_sweep": 0
+  }
+}

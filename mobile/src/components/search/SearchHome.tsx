@@ -4,6 +4,7 @@ import { Image, ImageSource } from "expo-image";
 import { Feather } from "@expo/vector-icons";
 import { Text } from "../Text";
 import { colors, spacing } from "@/theme";
+import { scaled, smallScreenScale } from "@/utils/responsive";
 
 /** Horizontal screen padding of the Search landing design (18dp). */
 export const SEARCH_PAD = 18;
@@ -28,20 +29,38 @@ const CATEGORY_ART: { match: RegExp; art: ImageSource; subtitle: string }[] = [
  * peeking in from the right. The bag sits behind the text column; the
  * search field below overlaps its bottom edge (rendered by the screen). */
 export function SearchHero() {
+  const k = smallScreenScale(useWindowDimensions().width);
   return (
     <View style={styles.hero}>
-      <Image source={HERO_BAG} style={styles.heroBag} contentFit="contain" pointerEvents="none" />
+      <Image
+        source={HERO_BAG}
+        style={[styles.heroBag, k < 1 && { width: scaled(165, k), height: scaled(221, k), top: scaled(-21, k) }]}
+        contentFit="contain"
+        pointerEvents="none"
+      />
       <Text variant="eyebrow" color={colors.accentDark}>
         SEARCH
       </Text>
-      <Text variant="displayL" color={colors.primaryDark} style={styles.heroTitle}>
+      <Text
+        variant="displayL"
+        color={colors.primaryDark}
+        style={[styles.heroTitle, k < 1 && { fontSize: scaled(36, k), lineHeight: scaled(48, k) }]}
+      >
         What are you{"\n"}
-        <Text variant="scriptLarge" color={colors.primaryDark} style={styles.heroScript}>
+        <Text
+          variant="scriptLarge"
+          color={colors.primaryDark}
+          style={[styles.heroScript, k < 1 && { fontSize: scaled(40, k), lineHeight: scaled(54, k) }]}
+        >
           looking for?
         </Text>
       </Text>
       <View style={styles.heroUnderline} />
-      <Text variant="body" color={colors.textSecondary} style={styles.heroSubtitle}>
+      <Text
+        variant="body"
+        color={colors.textSecondary}
+        style={[styles.heroSubtitle, k < 1 && { maxWidth: scaled(200, k) }]}
+      >
         Search for fresh fruits, vegetables and daily essentials
       </Text>
     </View>

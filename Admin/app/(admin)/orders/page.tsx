@@ -3,6 +3,7 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
+import { readInitialQuery, useDebounced, useUrlQuerySync } from "@/lib/use-list-query";
 import { useOrderEvents } from "@/lib/realtime-context";
 import { AdminOrderListItem, AdminOrderListResponse, fetchAdminOrders, OrdersApiError } from "@/lib/orders";
 import { formatDateTime, formatMoney, formatPaymentMethod } from "@/lib/format";
@@ -36,7 +37,9 @@ export default function OrdersPage() {
   const [error, setError] = useState<string | null>(null);
 
   const [page, setPage] = useState(1);
-  const [q, setQ] = useState("");
+  const [q, setQ] = useState(readInitialQuery);
+  const dq = useDebounced(q);
+  useUrlQuerySync((v) => { setPage(1); setQ(v); });
   const [status, setStatus] = useState("");
   const [paymentStatus, setPaymentStatus] = useState("");
   const [fulfillmentStatus, setFulfillmentStatus] = useState("");
@@ -54,7 +57,7 @@ export default function OrdersPage() {
       const result = await fetchAdminOrders(token, {
         page,
         page_size: PAGE_SIZE,
-        q: q || undefined,
+        q: dq || undefined,
         status: status || undefined,
         payment_status: paymentStatus || undefined,
         fulfillment_status: fulfillmentStatus || undefined,
@@ -68,7 +71,7 @@ export default function OrdersPage() {
       if (!opts?.silent) setLoading(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, q, status, paymentStatus, fulfillmentStatus, dateFrom, dateTo]);
+  }, [page, dq, status, paymentStatus, fulfillmentStatus, dateFrom, dateTo]);
 
   // Any order/fulfillment/payment/refund status change anywhere re-fetches
   // this same filtered/paginated list, silently - live updates instead of

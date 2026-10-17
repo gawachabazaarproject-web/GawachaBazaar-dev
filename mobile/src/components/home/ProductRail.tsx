@@ -22,7 +22,7 @@ export interface ProductRailProps {
   cardWidth?: number;
 }
 
-const CARD_WIDTH = 158;
+const CARD_WIDTH = 190;
 
 /** Horizontal product carousel with an editorial section heading - the
  * shared shape behind "Today's Market", "Best Sellers", etc. */

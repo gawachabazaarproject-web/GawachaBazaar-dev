@@ -76,7 +76,7 @@ export default function SearchScreen() {
       <View style={[styles.searchRow, !searchEnabled && styles.searchRowHero]}>
         <View style={[styles.searchField, !searchEnabled && styles.searchFieldHero]}>
           <Feather name="search" size={22} color={colors.primaryDark} />
-          <TextInput
+          <TextInput maxFontSizeMultiplier={1.15}
             style={styles.searchInput}
             placeholder="Search for atta, rice, milk..."
             placeholderTextColor={colors.textMuted}

@@ -1,0 +1,252 @@
+{
+ "config": {
+  "levels": [
+   10,
+   25,
+   50,
+   100
+  ],
+  "window_seconds_per_level": 45,
+  "ramp_seconds": 10,
+  "customers": 100,
+  "think_time_s": [
+   0.2,
+   0.6
+  ],
+  "checkout_every_n_iterations": 8,
+  "uvicorn_workers": 1,
+  "debug": false,
+  "db_pool": "pool_size=5,max_overflow=10 (app default)",
+  "note": "generator, server and Postgres share one 12-thread dev machine"
+ },
+ "levels": [
+  {
+   "vus": 10,
+   "ramp_s": 10,
+   "window_s": 45,
+   "requests": 1490,
+   "rps": 33.1,
+   "server_errors_5xx_or_exc": 0,
+   "error_rate_pct": 0.0,
+   "http_4xx": 0,
+   "status_codes": {
+    "200": 1307,
+    "201": 183
+   },
+   "exceptions": {},
+   "overall_ms": {
+    "p50": 236,
+    "p95": 430,
+    "p99": 659,
+    "mean": 255
+   },
+   "server_cpu_cores_avg": 1.06,
+   "server_rss_mb_max": 124.0,
+   "db_connections_max": 10,
+   "per_endpoint": {
+    "GET auth/me": {
+     "n": 165,
+     "p50_ms": 197,
+     "p95_ms": 318,
+     "p99_ms": 405
+    },
+    "GET cart": {
+     "n": 165,
+     "p50_ms": 286,
+     "p95_ms": 434,
+     "p99_ms": 659
+    },
+    "GET catalog list": {
+     "n": 159,
+     "p50_ms": 259,
+     "p95_ms": 432,
+     "p99_ms": 651
+    },
+    "GET catalog search": {
+     "n": 159,
+     "p50_ms": 276,
+     "p95_ms": 421,
+     "p99_ms": 748
+    },
+    "GET home-slides": {
+     "n": 165,
+     "p50_ms": 178,
+     "p95_ms": 299,
+     "p99_ms": 372
+    },
+    "GET offers": {
+     "n": 165,
+     "p50_ms": 169,
+     "p95_ms": 285,
+     "p99_ms": 392
+    },
+    "GET orders": {
+     "n": 165,
+     "p50_ms": 229,
+     "p95_ms": 351,
+     "p99_ms": 447
+    },
+    "GET product detail": {
+     "n": 164,
+     "p50_ms": 234,
+     "p95_ms": 392,
+     "p99_ms": 479
+    },
+    "POST cart/items": {
+     "n": 165,
+     "p50_ms": 319,
+     "p95_ms": 490,
+     "p99_ms": 678
+    },
+    "POST checkout (COD)": {
+     "n": 18,
+     "p50_ms": 571,
+     "p95_ms": 712,
+     "p99_ms": 731
+    }
+   },
+   "checkouts_ok": 18,
+   "integrity": {
+    "ok": true,
+    "orders_in_db": 18,
+    "orders_expected": 18,
+    "duplicate_order_numbers": 0,
+    "lots_out_of_bounds": 0,
+    "orders_without_reservation": 0,
+    "reserved_total": "144.000",
+    "ordered_units_open_orders": "144.000"
+   }
+  },
+  {
+   "vus": 25,
+   "ramp_s": 10,
+   "window_s": 45,
+   "requests": 1323,
+   "rps": 29.4,
+   "server_errors_5xx_or_exc": 0,
+   "error_rate_pct": 0.0,
+   "http_4xx": 0,
+   "status_codes": {
+    "200": 1176,
+    "201": 147
+   },
+   "exceptions": {},
+   "overall_ms": {
+    "p50": 649,
+    "p95": 1063,
+    "p99": 1223,
+    "mean": 672
+   },
+   "server_cpu_cores_avg": 1.09,
+   "server_rss_mb_max": 127.9,
+   "db_connections_max": 15,
+   "per_endpoint": {
+    "GET auth/me": {
+     "n": 147,
+     "p50_ms": 561,
+     "p95_ms": 841,
+     "p99_ms": 1042
+    },
+    "GET cart": {
+     "n": 147,
+     "p50_ms": 729,
+     "p95_ms": 973,
+     "p99_ms": 1168
+    },
+    "GET catalog list": {
+     "n": 147,
+     "p50_ms": 697,
+     "p95_ms": 1197,
+     "p99_ms": 1358
+    },
+    "GET catalog search": {
+     "n": 147,
+     "p50_ms": 677,
+     "p95_ms": 1109,
+     "p99_ms": 1223
+    },
+    "GET home-slides": {
+     "n": 147,
+     "p50_ms": 526,
+     "p95_ms": 975,
+     "p99_ms": 1110
+    },
+    "GET offers": {
+     "n": 147,
+     "p50_ms": 508,
+     "p95_ms": 844,
+     "p99_ms": 931
+    },
+    "GET orders": {
+     "n": 147,
+     "p50_ms": 662,
+     "p95_ms": 945,
+     "p99_ms": 1194
+    },
+    "GET product detail": {
+     "n": 147,
+     "p50_ms": 664,
+     "p95_ms": 1057,
+     "p99_ms": 1213
+    },
+    "POST cart/items": {
+     "n": 147,
+     "p50_ms": 839,
+     "p95_ms": 1122,
+     "p99_ms": 1551
+    }
+   },
+   "checkouts_ok": 0,
+   "integrity": {
+    "ok": true,
+    "orders_in_db": 18,
+    "orders_expected": 18,
+    "duplicate_order_numbers": 0,
+    "lots_out_of_bounds": 0,
+    "orders_without_reservation": 0,
+    "reserved_total": "144.000",
+    "ordered_units_open_orders": "144.000"
+   }
+  }
+ ],
+ "baseline_1vu_probe": {
+  "n": 40,
+  "p50_ms": 33,
+  "p95_ms": 35,
+  "non200": 0
+ },
+ "single_user_service_times": {
+  "GET catalog list": {
+   "p50_ms": 70,
+   "p95_ms": 125
+  },
+  "GET catalog search": {
+   "p50_ms": 68,
+   "p95_ms": 117
+  },
+  "GET product detail": {
+   "p50_ms": 57,
+   "p95_ms": 81
+  },
+  "GET home-slides": {
+   "p50_ms": 33,
+   "p95_ms": 61
+  },
+  "GET offers": {
+   "p50_ms": 34,
+   "p95_ms": 50
+  },
+  "GET auth/me": {
+   "p50_ms": 33,
+   "p95_ms": 42
+  },
+  "GET cart": {
+   "p50_ms": 42,
+   "p95_ms": 49
+  },
+  "GET orders": {
+   "p50_ms": 47,
+   "p95_ms": 68
+  }
+ }
+}

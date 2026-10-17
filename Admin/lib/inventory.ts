@@ -276,7 +276,15 @@ export async function createBatch(accessToken: string, payload: CreateBatchPaylo
 
 export async function receiveStock(
   accessToken: string,
-  payload: { batch_id?: number; variant_id: number; location_id: number; quantity: string; remarks?: string },
+  payload: {
+    batch_id?: number;
+    variant_id: number;
+    location_id: number;
+    quantity?: string;
+    amount?: string;
+    amount_unit?: string;
+    remarks?: string;
+  },
 ): Promise<AdminInventoryLotListItem> {
   return request(accessToken, "/inventory/admin/receive", { method: "POST", body: JSON.stringify(payload) });
 }
@@ -295,7 +303,7 @@ export async function reconcileStock(
 export async function adjustStock(
   accessToken: string,
   lotId: number,
-  payload: { movement_type: string; quantity: string; remarks: string },
+  payload: { movement_type: string; quantity?: string; amount?: string; amount_unit?: string; remarks: string },
 ): Promise<StockMovement> {
   return request(accessToken, `/inventory/lots/${lotId}/movements`, {
     method: "POST",
@@ -374,6 +382,21 @@ export function packTotal(packs: string | number, packQuantity: string | number,
   if (!conv) return `${trim(total)} ${unit.toLowerCase()}`;
   const base = total * conv[0];
   return base >= conv[2] ? `${trim(base / conv[2])} ${conv[3]}` : `${trim(base)} ${conv[1]}`;
+}
+
+/** Units stock can be entered in for a pack unit - weight/volume first (kg for
+ * KG/G packs), or none when the pack can only be counted ("5 packs"). */
+export function amountUnits(unit: string): { value: string; label: string }[] {
+  if (unit === "KG" || unit === "G") return [{ value: "KG", label: "kg" }, { value: "G", label: "g" }];
+  if (unit === "L" || unit === "ML") return [{ value: "L", label: "L" }, { value: "ML", label: "ml" }];
+  return [];
+}
+
+/** Preview of how many packs an entered weight makes (the server does the real conversion). */
+export function amountToPacks(amount: string | number, amountUnit: string, packQuantity: string | number, unit: string): number {
+  const base = (u: string) => (u === "KG" || u === "L" ? 1000 : 1);
+  const packs = (Number(amount) * base(amountUnit)) / (Number(packQuantity) * base(unit));
+  return Math.floor(packs * 1000) / 1000;
 }
 
 /** "1 kg" - the size of one pack. */

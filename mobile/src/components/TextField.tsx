@@ -26,7 +26,7 @@ export const TextField = forwardRef<TextInput, TextFieldProps>(
           </Text>
         ) : null}
         <View style={styles.inputWrapper}>
-          <TextInput
+          <TextInput maxFontSizeMultiplier={1.15}
             ref={ref}
             style={[
               styles.input,

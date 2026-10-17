@@ -1,0 +1,435 @@
+{
+ "public": [
+  "GET /api/v1/ads",
+  "GET /api/v1/catalog/categories",
+  "GET /api/v1/catalog/categories/{category_id}",
+  "GET /api/v1/catalog/products",
+  "GET /api/v1/catalog/products/{product_id}",
+  "GET /api/v1/home-slides",
+  "GET /api/v1/offers",
+  "GET /api/v1/ping",
+  "GET /health",
+  "GET /health/db",
+  "POST /api/v1/auth/legacy-migrate",
+  "POST /api/v1/payments/webhooks/{gateway_slug}"
+ ],
+ "reachable_by_role": {
+  "DELETE /api/v1/addresses/{address_id}": [
+   "CUSTOMER"
+  ],
+  "DELETE /api/v1/cart/items": [
+   "CUSTOMER"
+  ],
+  "DELETE /api/v1/cart/items/{item_id}": [
+   "CUSTOMER"
+  ],
+  "DELETE /api/v1/packaging/operations/{operation_id}/inputs/{input_id}": [
+   "HUB_STAFF",
+   "OPERATIONS"
+  ],
+  "DELETE /api/v1/packaging/operations/{operation_id}/outputs/{output_id}": [
+   "HUB_STAFF",
+   "OPERATIONS"
+  ],
+  "DELETE /api/v1/wishlist/{product_id}": [
+   "CUSTOMER"
+  ],
+  "GET /api/v1/addresses": [
+   "CUSTOMER"
+  ],
+  "GET /api/v1/addresses/{address_id}": [
+   "CUSTOMER"
+  ],
+  "GET /api/v1/auth/me": [
+   "NONE",
+   "CUSTOMER",
+   "WHOLESALER",
+   "SUPPORT",
+   "HUB_STAFF",
+   "OPERATIONS",
+   "DELIVERY_PARTNER"
+  ],
+  "GET /api/v1/bazaar/delivery-quote": [
+   "CUSTOMER"
+  ],
+  "GET /api/v1/bazaar/status": [
+   "CUSTOMER"
+  ],
+  "GET /api/v1/bulk-orders/admin/requests": [
+   "OPERATIONS"
+  ],
+  "GET /api/v1/bulk-orders/admin/requests/{request_id}": [
+   "OPERATIONS"
+  ],
+  "GET /api/v1/bulk-orders/admin/requests/{request_id}/quote": [
+   "OPERATIONS"
+  ],
+  "GET /api/v1/bulk-orders/admin/variants/{variant_id}/availability": [
+   "OPERATIONS"
+  ],
+  "GET /api/v1/bulk-orders/profile": [
+   "CUSTOMER"
+  ],
+  "GET /api/v1/bulk-orders/requests": [
+   "CUSTOMER"
+  ],
+  "GET /api/v1/bulk-orders/requests/{request_id}": [
+   "CUSTOMER"
+  ],
+  "GET /api/v1/bulk-orders/requests/{request_id}/quote": [
+   "CUSTOMER"
+  ],
+  "GET /api/v1/cart": [
+   "CUSTOMER"
+  ],
+  "GET /api/v1/customers": [
+   "SUPPORT"
+  ],
+  "GET /api/v1/customers/dashboard": [
+   "SUPPORT"
+  ],
+  "GET /api/v1/customers/{user_id}": [
+   "SUPPORT"
+  ],
+  "GET /api/v1/customers/{user_id}/addresses": [
+   "SUPPORT"
+  ],
+  "GET /api/v1/customers/{user_id}/orders": [
+   "SUPPORT"
+  ],
+  "GET /api/v1/customers/{user_id}/promotions": [
+   "SUPPORT"
+  ],
+  "GET /api/v1/customers/{user_id}/timeline": [
+   "SUPPORT"
+  ],
+  "GET /api/v1/dashboard": [
+   "OPERATIONS"
+  ],
+  "GET /api/v1/fulfillments": [
+   "HUB_STAFF",
+   "OPERATIONS",
+   "DELIVERY_PARTNER"
+  ],
+  "GET /api/v1/fulfillments/{fulfillment_id}": [
+   "HUB_STAFF",
+   "OPERATIONS",
+   "DELIVERY_PARTNER"
+  ],
+  "GET /api/v1/fulfillments/{fulfillment_id}/order": [
+   "HUB_STAFF",
+   "OPERATIONS",
+   "DELIVERY_PARTNER"
+  ],
+  "GET /api/v1/inventory/admin/dashboard": [
+   "HUB_STAFF",
+   "OPERATIONS"
+  ],
+  "GET /api/v1/inventory/admin/lots": [
+   "HUB_STAFF",
+   "OPERATIONS"
+  ],
+  "GET /api/v1/inventory/admin/lots/{lot_id}": [
+   "HUB_STAFF",
+   "OPERATIONS"
+  ],
+  "GET /api/v1/inventory/admin/stock-alerts": [
+   "HUB_STAFF",
+   "OPERATIONS"
+  ],
+  "GET /api/v1/inventory/batches": [
+   "HUB_STAFF",
+   "OPERATIONS"
+  ],
+  "GET /api/v1/inventory/batches/{batch_id}": [
+   "HUB_STAFF",
+   "OPERATIONS"
+  ],
+  "GET /api/v1/inventory/locations": [
+   "HUB_STAFF",
+   "OPERATIONS"
+  ],
+  "GET /api/v1/inventory/locations/{location_id}": [
+   "HUB_STAFF",
+   "OPERATIONS"
+  ],
+  "GET /api/v1/inventory/lots": [
+   "HUB_STAFF",
+   "OPERATIONS"
+  ],
+  "GET /api/v1/inventory/lots/{lot_id}": [
+   "HUB_STAFF",
+   "OPERATIONS"
+  ],
+  "GET /api/v1/inventory/lots/{lot_id}/movements": [
+   "HUB_STAFF",
+   "OPERATIONS"
+  ],
+  "GET /api/v1/inventory/reservations": [
+   "HUB_STAFF",
+   "OPERATIONS"
+  ],
+  "GET /api/v1/inventory/reservations/{reservation_id}": [
+   "HUB_STAFF",
+   "OPERATIONS"
+  ],
+  "GET /api/v1/orders": [
+   "CUSTOMER"
+  ],
+  "GET /api/v1/orders/admin": [
+   "HUB_STAFF",
+   "OPERATIONS"
+  ],
+  "GET /api/v1/orders/admin/{order_id}": [
+   "HUB_STAFF",
+   "OPERATIONS"
+  ],
+  "GET /api/v1/orders/{order_id}": [
+   "CUSTOMER"
+  ],
+  "GET /api/v1/orders/{order_id}/fulfillment": [
+   "CUSTOMER"
+  ],
+  "GET /api/v1/orders/{order_id}/payment": [
+   "CUSTOMER"
+  ],
+  "GET /api/v1/orders/{order_id}/refund": [
+   "CUSTOMER"
+  ],
+  "GET /api/v1/orders/{order_id}/reservation": [
+   "CUSTOMER"
+  ],
+  "GET /api/v1/packaging/operations": [
+   "HUB_STAFF",
+   "OPERATIONS"
+  ],
+  "GET /api/v1/packaging/operations/{operation_id}": [
+   "HUB_STAFF",
+   "OPERATIONS"
+  ],
+  "GET /api/v1/payments/{payment_id}": [
+   "CUSTOMER"
+  ],
+  "GET /api/v1/payments/{payment_id}/checkout": [
+   "CUSTOMER"
+  ],
+  "GET /api/v1/suppliers": [
+   "HUB_STAFF",
+   "OPERATIONS"
+  ],
+  "GET /api/v1/suppliers/{supplier_id}": [
+   "HUB_STAFF",
+   "OPERATIONS"
+  ],
+  "GET /api/v1/suppliers/{supplier_id}/performance": [
+   "HUB_STAFF",
+   "OPERATIONS"
+  ],
+  "GET /api/v1/suppliers/{supplier_id}/products": [
+   "HUB_STAFF",
+   "OPERATIONS"
+  ],
+  "GET /api/v1/wishlist": [
+   "CUSTOMER"
+  ],
+  "PATCH /api/v1/addresses/{address_id}": [
+   "CUSTOMER"
+  ],
+  "PATCH /api/v1/cart/items/{item_id}": [
+   "CUSTOMER"
+  ],
+  "PATCH /api/v1/inventory/locations/{location_id}": [
+   "HUB_STAFF",
+   "OPERATIONS"
+  ],
+  "PATCH /api/v1/suppliers/{supplier_id}": [
+   "HUB_STAFF",
+   "OPERATIONS"
+  ],
+  "PATCH /api/v1/suppliers/{supplier_id}/products/{supplier_product_id}": [
+   "HUB_STAFF",
+   "OPERATIONS"
+  ],
+  "POST /api/v1/addresses": [
+   "CUSTOMER"
+  ],
+  "POST /api/v1/auth/sync": [
+   "NONE",
+   "CUSTOMER",
+   "WHOLESALER",
+   "SUPPORT",
+   "HUB_STAFF",
+   "OPERATIONS",
+   "DELIVERY_PARTNER"
+  ],
+  "POST /api/v1/bulk-orders/admin/requests/{request_id}/convert": [
+   "OPERATIONS"
+  ],
+  "POST /api/v1/bulk-orders/admin/requests/{request_id}/quote": [
+   "OPERATIONS"
+  ],
+  "POST /api/v1/bulk-orders/admin/requests/{request_id}/quote/{version_id}/reject": [
+   "OPERATIONS"
+  ],
+  "POST /api/v1/bulk-orders/admin/requests/{request_id}/quote/{version_id}/send": [
+   "OPERATIONS"
+  ],
+  "POST /api/v1/bulk-orders/admin/requests/{request_id}/review": [
+   "OPERATIONS"
+  ],
+  "POST /api/v1/bulk-orders/admin/requests/{request_id}/status": [
+   "OPERATIONS"
+  ],
+  "POST /api/v1/bulk-orders/requests": [
+   "CUSTOMER"
+  ],
+  "POST /api/v1/bulk-orders/requests/{request_id}/accept": [
+   "CUSTOMER"
+  ],
+  "POST /api/v1/bulk-orders/requests/{request_id}/cancel": [
+   "CUSTOMER"
+  ],
+  "POST /api/v1/cart": [
+   "CUSTOMER"
+  ],
+  "POST /api/v1/cart/checkout": [
+   "CUSTOMER"
+  ],
+  "POST /api/v1/cart/evaluate-promo": [
+   "CUSTOMER"
+  ],
+  "POST /api/v1/cart/items": [
+   "CUSTOMER"
+  ],
+  "POST /api/v1/fulfillments/{fulfillment_id}/assign": [
+   "HUB_STAFF",
+   "OPERATIONS"
+  ],
+  "POST /api/v1/fulfillments/{fulfillment_id}/deliver": [
+   "DELIVERY_PARTNER"
+  ],
+  "POST /api/v1/fulfillments/{fulfillment_id}/out-for-delivery": [
+   "DELIVERY_PARTNER"
+  ],
+  "POST /api/v1/fulfillments/{fulfillment_id}/status": [
+   "HUB_STAFF",
+   "OPERATIONS"
+  ],
+  "POST /api/v1/inventory/admin/lots/{lot_id}/reconcile": [
+   "HUB_STAFF",
+   "OPERATIONS"
+  ],
+  "POST /api/v1/inventory/admin/lots/{lot_id}/remove": [
+   "HUB_STAFF",
+   "OPERATIONS"
+  ],
+  "POST /api/v1/inventory/admin/receive": [
+   "HUB_STAFF",
+   "OPERATIONS"
+  ],
+  "POST /api/v1/inventory/admin/transfer": [
+   "HUB_STAFF",
+   "OPERATIONS"
+  ],
+  "POST /api/v1/inventory/batches": [
+   "HUB_STAFF",
+   "OPERATIONS"
+  ],
+  "POST /api/v1/inventory/locations": [
+   "HUB_STAFF",
+   "OPERATIONS"
+  ],
+  "POST /api/v1/inventory/lots": [
+   "HUB_STAFF",
+   "OPERATIONS"
+  ],
+  "POST /api/v1/inventory/lots/{lot_id}/movements": [
+   "HUB_STAFF",
+   "OPERATIONS"
+  ],
+  "POST /api/v1/inventory/reservations/{reservation_id}/expire": [
+   "HUB_STAFF",
+   "OPERATIONS"
+  ],
+  "POST /api/v1/orders/{order_id}/cancel": [
+   "CUSTOMER"
+  ],
+  "POST /api/v1/packaging/operations": [
+   "HUB_STAFF",
+   "OPERATIONS"
+  ],
+  "POST /api/v1/packaging/operations/{operation_id}/cancel": [
+   "HUB_STAFF",
+   "OPERATIONS"
+  ],
+  "POST /api/v1/packaging/operations/{operation_id}/complete": [
+   "HUB_STAFF",
+   "OPERATIONS"
+  ],
+  "POST /api/v1/packaging/operations/{operation_id}/inputs": [
+   "HUB_STAFF",
+   "OPERATIONS"
+  ],
+  "POST /api/v1/packaging/operations/{operation_id}/outputs": [
+   "HUB_STAFF",
+   "OPERATIONS"
+  ],
+  "POST /api/v1/packaging/operations/{operation_id}/start": [
+   "HUB_STAFF",
+   "OPERATIONS"
+  ],
+  "POST /api/v1/payments": [
+   "CUSTOMER"
+  ],
+  "POST /api/v1/payments/online/start": [
+   "CUSTOMER"
+  ],
+  "POST /api/v1/payments/online/{session_id}/confirm": [
+   "CUSTOMER"
+  ],
+  "POST /api/v1/payments/online/{session_id}/verify": [
+   "CUSTOMER"
+  ],
+  "POST /api/v1/payments/{payment_id}/confirm": [
+   "CUSTOMER"
+  ],
+  "POST /api/v1/payments/{payment_id}/retry": [
+   "CUSTOMER"
+  ],
+  "POST /api/v1/payments/{payment_id}/verify": [
+   "CUSTOMER"
+  ],
+  "POST /api/v1/push-tokens": [
+   "NONE",
+   "CUSTOMER",
+   "WHOLESALER",
+   "SUPPORT",
+   "HUB_STAFF",
+   "OPERATIONS",
+   "DELIVERY_PARTNER"
+  ],
+  "POST /api/v1/push-tokens/unregister": [
+   "NONE",
+   "CUSTOMER",
+   "WHOLESALER",
+   "SUPPORT",
+   "HUB_STAFF",
+   "OPERATIONS",
+   "DELIVERY_PARTNER"
+  ],
+  "POST /api/v1/suppliers": [
+   "HUB_STAFF",
+   "OPERATIONS"
+  ],
+  "POST /api/v1/suppliers/{supplier_id}/products": [
+   "HUB_STAFF",
+   "OPERATIONS"
+  ],
+  "PUT /api/v1/bulk-orders/profile": [
+   "CUSTOMER"
+  ],
+  "PUT /api/v1/wishlist/{product_id}": [
+   "CUSTOMER"
+  ]
+ }
+}

@@ -3,6 +3,7 @@
 import React, { useCallback, useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
+import { readInitialQuery, useDebounced, useUrlQuerySync } from "@/lib/use-list-query";
 import { hasPermission } from "@/lib/permissions";
 import {
   AdminInventoryLotListItem,
@@ -49,7 +50,9 @@ export default function InventoryPage() {
   const canAdjust = user && hasPermission(user.roles, "inventory.adjust");
 
   const [page, setPage] = useState(1);
-  const [q, setQ] = useState("");
+  const [q, setQ] = useState(readInitialQuery);
+  const dq = useDebounced(q);
+  useUrlQuerySync((v) => { setPage(1); setQ(v); });
   const [locationId, setLocationId] = useState("");
   const [categoryId, setCategoryId] = useState("");
   const [operationalStatus, setOperationalStatus] = useState("");
@@ -75,7 +78,7 @@ export default function InventoryPage() {
       const result = await fetchAdminLots(token, {
         page,
         page_size: PAGE_SIZE,
-        q: q || undefined,
+        q: dq || undefined,
         location_id: locationId ? Number(locationId) : undefined,
         category_id: categoryId ? Number(categoryId) : undefined,
         operational_status: operationalStatus || undefined,
@@ -88,7 +91,7 @@ export default function InventoryPage() {
       loadedOnce.current = true;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, q, locationId, categoryId, operationalStatus]);
+  }, [page, dq, locationId, categoryId, operationalStatus]);
 
   useEffect(() => {
     load();

@@ -94,7 +94,7 @@ All values are environment variables (see `.env.example`; production template is
 | `CLOUDINARY_CLOUD_NAME` / `_API_KEY` / `_API_SECRET` | - | Image uploads (unset = clear error) |
 | `ALLOWED_ORIGINS` | localhost dev origins | CORS allow-list (JSON array or comma list) |
 | `FREE_DELIVERY_MIN_ITEMS` | `15` | Distinct products needed for free delivery |
-| `DELIVERY_BASE_FEE` | `20` | Rs, always charged below the threshold |
+| `DELIVERY_BASE_FEE` | `40` | Rs, always charged below the threshold |
 | `DELIVERY_PER_KM` | `10` | Rs per road km |
 | `DELIVERY_MAX_CHARGED_KM` | `30` | Distance cap |
 | `PACKING_POINT_LATITUDE` / `_LONGITUDE` | - | **Fallback** origin; the warehouse chosen in Admin -> Settings wins |

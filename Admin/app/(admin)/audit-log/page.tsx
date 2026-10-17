@@ -11,8 +11,8 @@ export default function AuditLogPage() {
       />
       <EmptyState
         icon="shield"
-        title="No general-purpose audit log exists yet"
-        message="The closest thing today is StockMovement (inventory-only) and per-domain audit columns on Order/Refund (cancelled_by, approved_by, etc.). Phase 22 adds a unified audit-log domain so every admin mutation is traceable in one place, not scattered per table."
+        title="Audit log viewer is coming soon"
+        message="Every admin change is already recorded for compliance, but there is no screen to browse the history yet. Product and category pages show their own activity feeds in the meantime."
       />
     </div>
   );

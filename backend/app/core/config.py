@@ -62,7 +62,7 @@ class Settings(BaseSettings):
     # in the current calendar month (BAZAAR_TIMEZONE) is eligible for
     # Gawacha Bazaar+.
     FREE_DELIVERY_MIN_ITEMS: int = 15
-    DELIVERY_BASE_FEE: Decimal = Decimal("20")
+    DELIVERY_BASE_FEE: Decimal = Decimal("40")
     DELIVERY_PER_KM: Decimal = Decimal("10")
     DELIVERY_MAX_CHARGED_KM: float = 30.0
     # Fallback origin; the admin-chosen packing point (Settings page) wins.

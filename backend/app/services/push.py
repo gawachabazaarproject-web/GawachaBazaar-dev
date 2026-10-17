@@ -51,6 +51,8 @@ def _send(user_id: int, title: str, body: str, data: dict) -> None:
     try:
         tokens = list(db.scalars(select(PushToken.token).where(PushToken.user_id == user_id)))
         if not tokens:
+            # Nothing registered for this user: the app never reached POST /push-tokens.
+            logger.info("PUSH_NO_TOKENS: user_id=%s (device never registered a token)", user_id)
             return
         messages = [
             {"to": t, "title": title, "body": body, "data": data, "sound": "default", "channelId": "orders"}
@@ -60,7 +62,17 @@ def _send(user_id: int, title: str, body: str, data: dict) -> None:
         resp.raise_for_status()
         dead: list[str] = []
         for token, ticket in zip(tokens, resp.json().get("data", []), strict=False):
-            if ticket.get("status") == "error" and ticket.get("details", {}).get("error") == "DeviceNotRegistered":
+            if ticket.get("status") != "error":
+                continue
+            error = (ticket.get("details") or {}).get("error")
+            # Surface Expo's reason (e.g. InvalidCredentials / MismatchSenderId when FCM credentials
+            # are missing for the app's EAS project) - previously every error except
+            # DeviceNotRegistered was dropped silently.
+            logger.warning(
+                "PUSH_TICKET_ERROR: user_id=%s token=%s...%s error=%s message=%s",
+                user_id, token[:18], token[-4:], error, ticket.get("message"),
+            )
+            if error == "DeviceNotRegistered":
                 dead.append(token)
         if dead:
             db.execute(delete(PushToken).where(PushToken.token.in_(dead)))
