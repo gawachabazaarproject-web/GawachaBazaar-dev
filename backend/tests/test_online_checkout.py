@@ -335,3 +335,204 @@ def test_promo_code_discount_is_what_razorpay_is_asked_to_charge(
     assert done["order"]["discount_amount"] == "5.00"
     assert done["order"]["total_amount"] == "65.00"
     assert done["order"]["applied_promo_code"] == "TEN"
+
+
+# ---------------------------------------------------------------------------
+# PAY-004 / PAY-001 regression tests. Written 2026-10-18 together with the fix;
+
+# ---------------------------------------------------------------------------
+
+
+def test_webhook_is_retryable_after_a_transient_razorpay_error(
+    client: TestClient, db_session: Session, razorpay: FakeRazorpay
+) -> None:
+    """PAY-004: Razorpay's status API fails once while the webhook completes the
+    checkout. The webhook must fail (so Razorpay retries) and the retry of the
+    SAME event id must place the order - not be dropped as a duplicate."""
+    import httpx
+
+    _user, headers, _variant, address = _basket(client, db_session, "OC20")
+    started = _start(client, headers, address.id).json()
+    payment = razorpay.add_payment(started["gateway_order_id"], "captured")
+    body, hdrs = _webhook("payment.captured", payment, event_id="evt_retry_me")
+
+    razorpay.next_error = httpx.Response(500, json={"error": {"description": "boom"}})
+    first = client.post("/api/v1/payments/webhooks/razorpay", content=body, headers=hdrs)
+    assert first.status_code >= 400, first.text
+    db_session.expire_all()
+    assert db_session.query(Order).count() == 0
+
+    second = client.post("/api/v1/payments/webhooks/razorpay", content=body, headers=hdrs)
+    assert second.status_code == 200, second.text
+    db_session.expire_all()
+    assert db_session.query(Order).count() == 1
+    assert db_session.query(Payment).one().status == "PAID"
+    assert db_session.query(CheckoutSession).one().status == "COMPLETED"
+
+
+def test_second_paid_session_for_the_same_cart_is_refunded_not_attached(
+    client: TestClient, db_session: Session, razorpay: FakeRazorpay
+) -> None:
+    """PAY-001: two Razorpay orders were opened for one basket and BOTH were paid.
+    One order, one payment; the second capture is refunded in full."""
+    _user, headers, _variant, address = _basket(client, db_session, "OC21")
+    first = _start(client, headers, address.id).json()
+    # A second, independent session for the same basket (e.g. another device).
+    second_order = razorpay.gateway().initiate_payment(
+        reference="dup", amount=Decimal(str(first["amount"])), currency="INR", idempotency_key="dup-key"
+    )
+    second = CheckoutSession(
+        user_id=db_session.query(CheckoutSession).one().user_id,
+        cart_id=db_session.query(CheckoutSession).one().cart_id,
+        address_id=address.id,
+        amount=Decimal(str(first["amount"])),
+        currency="INR",
+        gateway_name="RAZORPAY",
+        gateway_order_id=second_order.gateway_order_id,
+        status="PENDING",
+    )
+    db_session.add(second)
+    db_session.commit()
+    second_id = second.id
+
+    assert _pay_and_confirm(client, razorpay, headers, first).status_code == 200
+
+    paid_twice = razorpay.add_payment(second_order.gateway_order_id, "captured")
+    response = client.post(
+        f"/api/v1/payments/online/{second_id}/confirm",
+        json={
+            "razorpay_order_id": second_order.gateway_order_id,
+            "razorpay_payment_id": paid_twice["id"],
+            "razorpay_signature": _checkout_signature(second_order.gateway_order_id, paid_twice["id"]),
+        },
+        headers=headers,
+    )
+
+    assert response.status_code == 409, response.text
+    db_session.expire_all()
+    assert db_session.query(Order).count() == 1
+    assert db_session.query(Payment).count() == 1
+    assert db_session.get(CheckoutSession, second_id).status == "REFUNDED"
+    assert [r["payment_id"] for r in razorpay.refunds] == [paid_twice["id"]]
+
+
+# PAY-005 regression tests (paid but the webhook and the app both missed it).
+
+
+def test_reconcile_sweep_places_the_order_for_a_missed_payment(
+    client: TestClient, db_session: Session, razorpay: FakeRazorpay
+) -> None:
+    from datetime import UTC, datetime, timedelta
+
+    from app.services.checkout_session import CheckoutSessionService
+
+    _user, headers, _variant, address = _basket(client, db_session, "OC22")
+    paid = _start(client, headers, address.id).json()
+    razorpay.add_payment(paid["gateway_order_id"], "captured")  # no webhook, no confirm call
+
+    # An abandoned session for another customer must stay untouched.
+    _user2, headers2, _variant2, address2 = _basket(client, db_session, "OC23")
+    abandoned = _start(client, headers2, address2.id).json()
+
+    later = datetime.now(UTC) + timedelta(minutes=5)
+    settled = CheckoutSessionService(db_session, razorpay.gateway()).reconcile_pending(now=later)
+
+    assert settled == 1
+    db_session.expire_all()
+    assert db_session.query(Order).count() == 1
+    assert db_session.get(CheckoutSession, paid["session_id"]).status == "COMPLETED"
+    assert db_session.get(CheckoutSession, abandoned["session_id"]).status == "PENDING"
+    assert db_session.query(Payment).one().status == "PAID"
+
+
+def test_start_again_after_a_missed_payment_places_the_order_instead_of_reopening_the_sheet(
+    client: TestClient, db_session: Session, razorpay: FakeRazorpay
+) -> None:
+    _user, headers, _variant, address = _basket(client, db_session, "OC24")
+    started = _start(client, headers, address.id).json()
+    razorpay.add_payment(started["gateway_order_id"], "captured")  # paid, callback lost
+
+    again = _start(client, headers, address.id)
+
+    assert again.status_code == 409, again.text
+    assert "placed" in again.json()["message"].lower()
+    db_session.expire_all()
+    assert db_session.query(Order).count() == 1
+    assert db_session.query(CheckoutSession).one().status == "COMPLETED"
+
+
+# PAY-008 / PAY-009 regression tests.
+
+
+def test_concurrent_start_calls_share_one_razorpay_order(
+    client: TestClient, db_session: Session, razorpay: FakeRazorpay
+) -> None:
+    """PAY-008: a double tap / two devices must not create two Razorpay orders."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    _user, headers, _variant, address = _basket(client, db_session, "OC25")
+    razorpay.order_delay_seconds = 0.5  # keep the first request busy while the others arrive
+
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        results = [f.result() for f in [pool.submit(_start, client, headers, address.id) for _ in range(4)]]
+
+    assert [r.status_code for r in results] == [200] * 4, [r.text for r in results]
+    assert len({r.json()["gateway_order_id"] for r in results}) == 1
+    assert len(razorpay.orders) == 1
+    db_session.expire_all()
+    assert db_session.query(CheckoutSession).count() == 1
+
+
+def _out_of_stock_after_start(client, db_session, tag):
+    _user, headers, _variant, address = _basket(client, db_session, tag)
+    started = _start(client, headers, address.id).json()
+    db_session.query(InventoryLot).update({"quantity": Decimal("0")})
+    db_session.commit()
+    return headers, started
+
+
+def test_failed_automatic_refund_is_retried_by_the_sweep(
+    client: TestClient, db_session: Session, razorpay: FakeRazorpay
+) -> None:
+    """PAY-009: the refund call fails once; the customer is told it is coming, the
+    session is REFUND_FAILED, and the sweep then completes the refund."""
+    from datetime import UTC, datetime
+
+    import httpx
+
+    from app.services.checkout_session import CheckoutSessionService
+
+    headers, started = _out_of_stock_after_start(client, db_session, "OC26")
+    razorpay.refund_error = httpx.Response(500, json={"error": {"description": "boom"}})
+
+    response = _pay_and_confirm(client, razorpay, headers, started)
+
+    assert response.status_code == 409
+    assert "shortly" in response.json()["message"].lower()
+    db_session.expire_all()
+    assert db_session.query(CheckoutSession).one().status == "REFUND_FAILED"
+    assert razorpay.refunds == []
+
+    refunded = CheckoutSessionService(db_session, razorpay.gateway()).retry_failed_refunds(now=datetime.now(UTC))
+
+    assert refunded == 1
+    db_session.expire_all()
+    assert db_session.query(CheckoutSession).one().status == "REFUNDED"
+    assert len(razorpay.refunds) == 1
+
+
+def test_refund_whose_reply_was_lost_is_recorded_as_refunded_not_failed(
+    client: TestClient, db_session: Session, razorpay: FakeRazorpay
+) -> None:
+    """PAY-009: Razorpay processed the refund but the reply timed out. Do not tell
+    support to refund it again by hand - the payment is looked up and found refunded."""
+    headers, started = _out_of_stock_after_start(client, db_session, "OC27")
+    razorpay.refund_reply_lost = True
+
+    response = _pay_and_confirm(client, razorpay, headers, started)
+
+    assert response.status_code == 409
+    assert "has been refunded" in response.json()["message"]
+    db_session.expire_all()
+    assert db_session.query(CheckoutSession).one().status == "REFUNDED"
+    assert len(razorpay.refunds) == 1

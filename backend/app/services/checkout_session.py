@@ -19,9 +19,9 @@ changed), the payment is refunded automatically and the session records it.
 Every step is idempotent: completing twice returns the same order.
 """
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import func
+from sqlalchemy import func, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -52,6 +52,7 @@ from app.services.payment_state import PaymentStatus, TransactionStatus
 from app.services.razorpay_gateway import to_paise
 
 _PENDING = "PENDING"
+_START_LOCK_NS = 7001  # advisory-lock namespace for CheckoutSessionService.start
 
 
 class PaymentNotConfirmedError(AppException):
@@ -84,6 +85,14 @@ class CheckoutSessionService:
         )
         self._require_stock(plan)
 
+        # One `start` at a time per customer (PAY-008): a double tap or two
+        # devices must find the first request's session instead of each making
+        # its own Razorpay order. Transaction-scoped, so it is released by the
+        # commit below (taken after the quote, which ends
+        # with its own rollback and would otherwise drop it); it is held across the Razorpay order-create call (one
+        # customer's own duplicate requests wait, nobody else is affected).
+        self.db.execute(text("SELECT pg_advisory_xact_lock(:ns, :key)"), {"ns": _START_LOCK_NS, "key": user_id % 2**31})
+
         # Re-opening the sheet for an unchanged basket must reuse the same
         # Razorpay order (a customer who paid in a UPI app and came back
         # must not get a second order to pay).
@@ -101,6 +110,16 @@ class CheckoutSessionService:
             .order_by(CheckoutSession.id.desc())
             .first()
         )
+        if session is not None and self._settle_if_paid(session.id):
+            # The customer already paid this very Razorpay order (UPI hand-off
+            # lost, app restarted...): do not open the sheet again.
+            settled = self.db.query(CheckoutSession).filter(CheckoutSession.id == session.id).one()
+            if settled.status == "COMPLETED":
+                raise ConflictError(
+                    "Your earlier payment went through and your order has been placed. Please check your Orders."
+                )
+            raise ConflictError(settled.failure_reason or "Your earlier payment could not be turned into an order.")
+
         if session is None:
             reference = f"cart-{plan.cart_id}-{int(datetime.now(UTC).timestamp())}"
             result = self.gateway.initiate_payment(
@@ -246,8 +265,62 @@ class CheckoutSessionService:
             return
         try:
             self._finalize(session)
+        except PaymentNotConfirmedError:
+            # Razorpay does not list the capture yet: let the webhook fail so
+            # Razorpay delivers it again (the event row was rolled back).
+            raise
         except AppException as exc:
             logger.warning("CHECKOUT_SESSION_WEBHOOK_NOT_COMPLETED: session_id=%s reason=%s", session_id, exc)
+
+    def _settle_if_paid(self, session_id: int) -> bool:
+        """Completes the session if Razorpay says it was captured. True when it
+        left PENDING (order placed, or refunded); False when unpaid or Razorpay
+        cannot be reached right now."""
+        try:
+            self.complete_from_webhook(session_id)
+        except (PaymentNotConfirmedError, GatewayError):
+            return False
+        return (
+            self.db.query(CheckoutSession.status).filter(CheckoutSession.id == session_id).scalar() != _PENDING
+        )
+
+    def reconcile_pending(
+        self,
+        *,
+        now: datetime,
+        min_age: timedelta = timedelta(minutes=2),
+        max_age: timedelta = timedelta(hours=2),
+        limit: int = 50,
+    ) -> int:
+        """Safety net for "paid but no order" (PAY-005): ask Razorpay about
+        recent PENDING sessions the webhook and the app both missed, and place
+        the order (or refund) for the ones that were captured. Sessions younger
+        than `min_age` are left to the app/webhook; older than `max_age` stop
+        being polled. Safe to run concurrently - each session is row-locked and
+        completion is idempotent. Returns the number settled."""
+        session_ids = [
+            row[0]
+            for row in self.db.query(CheckoutSession.id)
+            .filter(
+                CheckoutSession.status == _PENDING,
+                CheckoutSession.created_at <= now - min_age,
+                CheckoutSession.created_at >= now - max_age,
+            )
+            .order_by(CheckoutSession.id)
+            .limit(limit)
+            .all()
+        ]
+        self.db.rollback()  # end the read transaction before the gateway calls
+        settled = 0
+        for session_id in session_ids:
+            try:
+                if self._settle_if_paid(session_id):
+                    settled += 1
+                    logger.warning("CHECKOUT_SESSION_RECONCILED: session_id=%s", session_id)
+            except Exception:
+                self.db.rollback()
+                logger.exception("CHECKOUT_SESSION_RECONCILE_ERROR: session_id=%s", session_id)
+        return settled
 
     # ------------------------------------------------------------------
     # Shared completion
@@ -265,13 +338,17 @@ class CheckoutSessionService:
 
         # Authoritative: ask Razorpay, never trust the client. A gateway
         # outage propagates (GatewayError -> 502/504) and can simply be retried.
+        # Nothing has changed at this point, so these paths ROLL BACK rather
+        # than commit: when this runs for a webhook, the webhook's dedup row
+        # is in the same transaction, and committing it would make Razorpay's
+        # retry look like a duplicate and be dropped (PAY-004).
         try:
             status = self.gateway.query_status(gateway_order_id=session.gateway_order_id, gateway_transaction_id=None)
         except GatewayError:
-            self.db.commit()
+            self.db.rollback()
             raise
         if status.status != TransactionStatus.SUCCESS or not status.gateway_transaction_id:
-            self.db.commit()
+            self.db.rollback()
             raise PaymentNotConfirmedError()
         if status.amount is not None and status.amount != session.amount:
             logger.error(
@@ -283,7 +360,7 @@ class CheckoutSessionService:
         gateway_payment_id = status.gateway_transaction_id
 
         try:
-            order_detail, _created = OrderService(self.db).checkout(
+            order_detail, created = OrderService(self.db).checkout(
                 session.user_id,
                 CheckoutRequest(address_id=session.address_id, promo_code=session.promo_code),
                 expected_total=session.amount,
@@ -292,10 +369,21 @@ class CheckoutSessionService:
             # Paid, but the order cannot be placed (out of stock, price
             # changed, address deleted...). Give the money back.
             self.db.rollback()
-            self._refund_and_fail(session.id, gateway_payment_id, str(exc))
-            raise ConflictError(
-                f"{exc} Your payment has been refunded."
-            ) from exc
+            final_status = self._refund_and_fail(session.id, gateway_payment_id, str(exc))
+            raise ConflictError(f"{exc} {self._refund_sentence(final_status)}") from exc
+
+        if not created:
+            # The cart was already checked out. That is fine when it is this
+            # very payment being completed again, but if the existing order
+            # carries a different payment (e.g. it was placed as Cash on
+            # Delivery, or another checkout session paid for it) this money is
+            # not needed: refund it instead of silently attaching it (PAY-001).
+            existing = self.db.query(Payment).filter(Payment.order_id == order_detail.id).first()
+            if existing is not None and existing.gateway_order_id != session.gateway_order_id:
+                self.db.rollback()
+                reason = "This basket was already ordered, so this payment was not needed."
+                final_status = self._refund_and_fail(session.id, gateway_payment_id, reason)
+                raise ConflictError(f"{reason} {self._refund_sentence(final_status)}")
 
         payment = self._attach_paid_payment(session, order_detail.id, gateway_payment_id)
         result_payment = PaymentService(self.db, self.gateway).verify_payment(session.user_id, payment.id)
@@ -353,7 +441,8 @@ class CheckoutSessionService:
         self.db.refresh(payment)
         return payment
 
-    def _refund_and_fail(self, session_id: int, gateway_payment_id: str, reason: str) -> None:
+    def _refund_and_fail(self, session_id: int, gateway_payment_id: str, reason: str) -> str:
+        """Returns the session's final status (REFUNDED or REFUND_FAILED)."""
         session = (
             self.db.query(CheckoutSession)
             .filter(CheckoutSession.id == session_id)
@@ -362,6 +451,22 @@ class CheckoutSessionService:
             .first()
         )
         session.failure_reason = reason[:1000]
+        self._try_refund(session, gateway_payment_id)
+        final_status = session.status
+        self.db.commit()
+        return final_status
+
+    @staticmethod
+    def _refund_sentence(final_status: str) -> str:
+        if final_status == "REFUNDED":
+            return "Your payment has been refunded."
+        return "Your payment will be refunded shortly - there is no need to pay again."
+
+    def _try_refund(self, session: CheckoutSession, gateway_payment_id: str | None) -> None:
+        """Refunds the session's captured payment and records the outcome on the
+        session (caller holds the row lock and commits). A refund call that
+        failed or timed out may still have happened on Razorpay's side, so the
+        payment is looked up before declaring REFUND_FAILED (PAY-009)."""
         try:
             self.gateway.refund_payment(
                 gateway_order_id=session.gateway_order_id,
@@ -371,14 +476,61 @@ class CheckoutSessionService:
                 idempotency_key=PaymentService._new_idempotency_key(),
             )
             session.status = "REFUNDED"
-        except Exception as exc:  # money is stuck: needs a human, never swallow quietly
+        except Exception as exc:  # money may be stuck: never swallow quietly
+            if self._payment_already_refunded(session.gateway_order_id):
+                session.status = "REFUNDED"
+                logger.warning("CHECKOUT_SESSION_REFUND_CONFIRMED: session_id=%s (reply lost, payment is refunded)", session.id)
+                return
             session.status = "REFUND_FAILED"
             logger.error(
                 "PAYMENT_RECONCILIATION: checkout_session=%s paid but order failed (%s) and the "
-                "automatic refund FAILED (%s) - refund payment %s manually",
-                session.id, reason, exc, gateway_payment_id,
+                "automatic refund FAILED (%s) - it is retried every sweep; if it keeps failing, "
+                "refund payment %s manually",
+                session.id, session.failure_reason, exc, gateway_payment_id or session.gateway_order_id,
             )
-        self.db.commit()
+
+    def _payment_already_refunded(self, gateway_order_id: str) -> bool:
+        try:
+            status = self.gateway.query_status(gateway_order_id=gateway_order_id, gateway_transaction_id=None)
+        except Exception:
+            return False
+        return status.status == TransactionStatus.SUCCESS and (status.raw_response or {}).get("status") == "refunded"
+
+    def retry_failed_refunds(self, *, now: datetime, max_age: timedelta = timedelta(days=7), limit: int = 20) -> int:
+        """Retries pay-first automatic refunds that failed (REFUND_FAILED) so a
+        gateway hiccup does not leave a customer's money stranded. Returns how
+        many ended REFUNDED. Anything still failing logs an ERROR each sweep."""
+        session_ids = [
+            row[0]
+            for row in self.db.query(CheckoutSession.id)
+            .filter(CheckoutSession.status == "REFUND_FAILED", CheckoutSession.updated_at >= now - max_age)
+            .order_by(CheckoutSession.id)
+            .limit(limit)
+            .all()
+        ]
+        self.db.rollback()
+        refunded = 0
+        for session_id in session_ids:
+            try:
+                session = (
+                    self.db.query(CheckoutSession)
+                    .filter(CheckoutSession.id == session_id)
+                    .populate_existing()
+                    .with_for_update()
+                    .first()
+                )
+                if session is None or session.status != "REFUND_FAILED":
+                    self.db.rollback()
+                    continue
+                self._try_refund(session, None)
+                if session.status == "REFUNDED":
+                    refunded += 1
+                    logger.warning("CHECKOUT_SESSION_REFUND_RETRY_OK: session_id=%s", session_id)
+                self.db.commit()
+            except Exception:
+                self.db.rollback()
+                logger.exception("CHECKOUT_SESSION_REFUND_RETRY_ERROR: session_id=%s", session_id)
+        return refunded
 
     def _response_for_order(self, user_id: int, order_id: int) -> OnlineCheckoutCompleteResponse:
         order = OrderService(self.db).get_order_detail(user_id, order_id)
