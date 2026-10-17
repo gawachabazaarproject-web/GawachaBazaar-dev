@@ -2,24 +2,31 @@ import React, { useState } from "react";
 import { Pressable, View } from "react-native";
 import { Link, useRouter } from "expo-router";
 import { Text } from "@/components/Text";
-import { TextField } from "@/components/TextField";
-import { Button } from "@/components/Button";
 import { useAuthStore } from "@/store/authStore";
 import { authErrorMessage } from "@/auth/errors";
 import { AccountExistsError } from "@/auth/types";
-import { colors } from "@/theme";
+import { colors, fontFamily } from "@/theme";
 import { validateEmail } from "@/utils/validation";
-import { AuthScreen, ErrorBanner, GoogleButton, OrDivider, PhoneButton, authStyles } from "@/features/auth/AuthParts";
+import { ErrorBanner } from "@/features/auth/AuthParts";
+import {
+  LoginField,
+  LoginGoogleButton,
+  LoginOrDivider,
+  LoginShell,
+  LoginSubmitButton,
+  useLoginScale,
+} from "@/features/auth/LoginParts";
 
 type FieldErrors = { email?: string; password?: string };
 
 export default function LoginScreen() {
   const router = useRouter();
-  const login = useAuthStore((s) => s.login);
-  const loginWithGoogle = useAuthStore((s) => s.loginWithGoogle);
-  const authError = useAuthStore((s) => s.authError);
-  const linkEmail = useAuthStore((s) => s.linkEmail);
-  const clearAuthError = useAuthStore((s) => s.clearAuthError);
+  const s = useLoginScale();
+  const login = useAuthStore((st) => st.login);
+  const loginWithGoogle = useAuthStore((st) => st.loginWithGoogle);
+  const authError = useAuthStore((st) => st.authError);
+  const linkEmail = useAuthStore((st) => st.linkEmail);
+  const clearAuthError = useAuthStore((st) => st.clearAuthError);
   const [email, setEmail] = useState(linkEmail ?? "");
   const [password, setPassword] = useState("");
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
@@ -65,13 +72,14 @@ export default function LoginScreen() {
   };
 
   return (
-    <AuthScreen showWordmark subtitle="Fresh groceries, delivered fast.">
-      <GoogleButton onPress={handleGoogle} loading={loading === "google"} disabled={loading === "email"} />
+    <LoginShell>
+      <LoginGoogleButton onPress={handleGoogle} loading={loading === "google"} disabled={loading === "email"} />
 
-      <OrDivider />
+      <LoginOrDivider />
 
-      <TextField
+      <LoginField
         label="Email"
+        icon="mail"
         placeholder="you@example.com"
         autoCapitalize="none"
         autoComplete="email"
@@ -84,9 +92,10 @@ export default function LoginScreen() {
         }}
         error={fieldErrors.email}
       />
-      <View style={authStyles.gap} />
-      <TextField
+      <View style={{ height: 52 * s }} />
+      <LoginField
         label="Password"
+        icon="lock"
         placeholder="Your password"
         secureTextEntry
         autoComplete="current-password"
@@ -99,10 +108,10 @@ export default function LoginScreen() {
         onSubmitEditing={handleLogin}
         error={fieldErrors.password}
       />
-      <View style={authStyles.linkRow}>
+      <View style={{ alignItems: "flex-end", marginTop: 26 * s }}>
         <Link href={{ pathname: "/(auth)/forgot-password", params: email ? { email } : {} }} asChild>
           <Pressable accessibilityRole="link" hitSlop={8}>
-            <Text variant="bodyMedium" color={colors.primary}>
+            <Text style={{ fontFamily: fontFamily.semibold, fontSize: 30 * s, color: colors.primary }}>
               Forgot password?
             </Text>
           </Pressable>
@@ -110,22 +119,17 @@ export default function LoginScreen() {
       </View>
 
       <ErrorBanner message={error ?? authError} />
-      <View style={authStyles.gapLg} />
-      <Button label="Sign in" onPress={handleLogin} loading={loading === "email"} disabled={loading === "google"} fullWidth size="lg" />
+      <View style={{ height: 52 * s }} />
+      <LoginSubmitButton label="Sign in" onPress={handleLogin} loading={loading === "email"} disabled={loading === "google"} />
 
-      <View style={authStyles.footer}>
-        <Text variant="body" color={colors.textSecondary}>
+      <View style={{ flexDirection: "row", justifyContent: "center", flexWrap: "wrap", marginTop: 50 * s, marginBottom: 40 * s }}>
+        <Text style={{ fontFamily: fontFamily.regular, fontSize: 31 * s, color: colors.textSecondary }}>
           Don&apos;t have an account?{" "}
         </Text>
         <Link href="/(auth)/register" asChild>
-          <Text variant="bodyMedium" color={colors.primary}>
-            Create account
-          </Text>
+          <Text style={{ fontFamily: fontFamily.bold, fontSize: 31 * s, color: colors.primary }}>Create account</Text>
         </Link>
       </View>
-
-      <OrDivider />
-      <PhoneButton onPress={() => router.push("/(auth)/phone")} disabled={loading !== null} />
-    </AuthScreen>
+    </LoginShell>
   );
 }

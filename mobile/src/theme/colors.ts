@@ -37,6 +37,12 @@ export const colors = {
   textInverse: "#FFFFFF",
   textOnAccent: "#0B2D20",
 
+  // Login screen artwork-matched surfaces
+  authCard: "#F9F5EC",
+  authIconBg: "#E4EEDC",
+  authButtonStart: "#11602F",
+  authButtonEnd: "#0A3A1E",
+
   // Structure
   border: "#E2DDD0",
   borderStrong: "#D5CEC2",

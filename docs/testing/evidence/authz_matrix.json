@@ -1,0 +1,1962 @@
+{
+ "POST /api/v1/auth/sync": {
+  "anon": 401,
+  "NONE": 200,
+  "CUSTOMER": 200,
+  "WHOLESALER": 200,
+  "SUPPORT": 200,
+  "HUB_STAFF": 200,
+  "OPERATIONS": 200,
+  "DELIVERY_PARTNER": 200
+ },
+ "POST /api/v1/auth/legacy-migrate": {
+  "anon": 422,
+  "NONE": 422,
+  "CUSTOMER": 422,
+  "WHOLESALER": 422,
+  "SUPPORT": 422,
+  "HUB_STAFF": 422,
+  "OPERATIONS": 422,
+  "DELIVERY_PARTNER": 422
+ },
+ "GET /api/v1/auth/me": {
+  "anon": 401,
+  "NONE": 200,
+  "CUSTOMER": 200,
+  "WHOLESALER": 200,
+  "SUPPORT": 200,
+  "HUB_STAFF": 200,
+  "OPERATIONS": 200,
+  "DELIVERY_PARTNER": 200
+ },
+ "GET /api/v1/addresses": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 200,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 403,
+  "OPERATIONS": 403,
+  "DELIVERY_PARTNER": 403
+ },
+ "POST /api/v1/addresses": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 422,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 403,
+  "OPERATIONS": 403,
+  "DELIVERY_PARTNER": 403
+ },
+ "GET /api/v1/addresses/{address_id}": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 404,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 403,
+  "OPERATIONS": 403,
+  "DELIVERY_PARTNER": 403
+ },
+ "PATCH /api/v1/addresses/{address_id}": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 404,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 403,
+  "OPERATIONS": 403,
+  "DELIVERY_PARTNER": 403
+ },
+ "DELETE /api/v1/addresses/{address_id}": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 404,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 403,
+  "OPERATIONS": 403,
+  "DELIVERY_PARTNER": 403
+ },
+ "GET /api/v1/wishlist": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 200,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 403,
+  "OPERATIONS": 403,
+  "DELIVERY_PARTNER": 403
+ },
+ "PUT /api/v1/wishlist/{product_id}": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 404,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 403,
+  "OPERATIONS": 403,
+  "DELIVERY_PARTNER": 403
+ },
+ "DELETE /api/v1/wishlist/{product_id}": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 204,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 403,
+  "OPERATIONS": 403,
+  "DELIVERY_PARTNER": 403
+ },
+ "GET /api/v1/catalog/products/admin": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 403,
+  "OPERATIONS": 403,
+  "DELIVERY_PARTNER": 403
+ },
+ "GET /api/v1/catalog/products/admin/{product_id}": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 403,
+  "OPERATIONS": 403,
+  "DELIVERY_PARTNER": 403
+ },
+ "GET /api/v1/catalog/products/admin/{product_id}/activity": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 403,
+  "OPERATIONS": 403,
+  "DELIVERY_PARTNER": 403
+ },
+ "GET /api/v1/catalog/categories/admin": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 403,
+  "OPERATIONS": 403,
+  "DELIVERY_PARTNER": 403
+ },
+ "GET /api/v1/catalog/categories/admin/{category_id}": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 403,
+  "OPERATIONS": 403,
+  "DELIVERY_PARTNER": 403
+ },
+ "GET /api/v1/catalog/categories/admin/{category_id}/activity": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 403,
+  "OPERATIONS": 403,
+  "DELIVERY_PARTNER": 403
+ },
+ "GET /api/v1/catalog/categories": {
+  "anon": 200,
+  "NONE": 200,
+  "CUSTOMER": 200,
+  "WHOLESALER": 200,
+  "SUPPORT": 200,
+  "HUB_STAFF": 200,
+  "OPERATIONS": 200,
+  "DELIVERY_PARTNER": 200
+ },
+ "POST /api/v1/catalog/categories": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 403,
+  "OPERATIONS": 403,
+  "DELIVERY_PARTNER": 403
+ },
+ "GET /api/v1/catalog/categories/{category_id}": {
+  "anon": 404,
+  "NONE": 404,
+  "CUSTOMER": 404,
+  "WHOLESALER": 404,
+  "SUPPORT": 404,
+  "HUB_STAFF": 404,
+  "OPERATIONS": 404,
+  "DELIVERY_PARTNER": 404
+ },
+ "PATCH /api/v1/catalog/categories/{category_id}": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 403,
+  "OPERATIONS": 403,
+  "DELIVERY_PARTNER": 403
+ },
+ "DELETE /api/v1/catalog/categories/{category_id}": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 403,
+  "OPERATIONS": 403,
+  "DELIVERY_PARTNER": 403
+ },
+ "GET /api/v1/catalog/products": {
+  "anon": 200,
+  "NONE": 200,
+  "CUSTOMER": 200,
+  "WHOLESALER": 200,
+  "SUPPORT": 200,
+  "HUB_STAFF": 200,
+  "OPERATIONS": 200,
+  "DELIVERY_PARTNER": 200
+ },
+ "POST /api/v1/catalog/products": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 403,
+  "OPERATIONS": 403,
+  "DELIVERY_PARTNER": 403
+ },
+ "GET /api/v1/catalog/products/{product_id}": {
+  "anon": 404,
+  "NONE": 404,
+  "CUSTOMER": 404,
+  "WHOLESALER": 404,
+  "SUPPORT": 404,
+  "HUB_STAFF": 404,
+  "OPERATIONS": 404,
+  "DELIVERY_PARTNER": 404
+ },
+ "DELETE /api/v1/catalog/products/{product_id}": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 403,
+  "OPERATIONS": 403,
+  "DELIVERY_PARTNER": 403
+ },
+ "PATCH /api/v1/catalog/products/{product_id}": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 403,
+  "OPERATIONS": 403,
+  "DELIVERY_PARTNER": 403
+ },
+ "POST /api/v1/catalog/categories/{category_id}/image": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 403,
+  "OPERATIONS": 403,
+  "DELIVERY_PARTNER": 403
+ },
+ "DELETE /api/v1/catalog/categories/{category_id}/image": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 403,
+  "OPERATIONS": 403,
+  "DELIVERY_PARTNER": 403
+ },
+ "POST /api/v1/catalog/products/{product_id}/variants": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 403,
+  "OPERATIONS": 403,
+  "DELIVERY_PARTNER": 403
+ },
+ "PATCH /api/v1/catalog/variants/{variant_id}": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 403,
+  "OPERATIONS": 403,
+  "DELIVERY_PARTNER": 403
+ },
+ "DELETE /api/v1/catalog/variants/{variant_id}": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 403,
+  "OPERATIONS": 403,
+  "DELIVERY_PARTNER": 403
+ },
+ "POST /api/v1/catalog/products/{product_id}/images": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 403,
+  "OPERATIONS": 403,
+  "DELIVERY_PARTNER": 403
+ },
+ "PATCH /api/v1/catalog/images/{image_id}": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 403,
+  "OPERATIONS": 403,
+  "DELIVERY_PARTNER": 403
+ },
+ "DELETE /api/v1/catalog/images/{image_id}": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 403,
+  "OPERATIONS": 403,
+  "DELIVERY_PARTNER": 403
+ },
+ "POST /api/v1/catalog/products/{product_id}/images/upload": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 403,
+  "OPERATIONS": 403,
+  "DELIVERY_PARTNER": 403
+ },
+ "POST /api/v1/catalog/variants/{variant_id}/prices": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 403,
+  "OPERATIONS": 403,
+  "DELIVERY_PARTNER": 403
+ },
+ "PATCH /api/v1/catalog/prices/{price_id}": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 403,
+  "OPERATIONS": 403,
+  "DELIVERY_PARTNER": 403
+ },
+ "POST /api/v1/inventory/locations": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 422,
+  "OPERATIONS": 422,
+  "DELIVERY_PARTNER": 403
+ },
+ "GET /api/v1/inventory/locations": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 200,
+  "OPERATIONS": 200,
+  "DELIVERY_PARTNER": 403
+ },
+ "GET /api/v1/inventory/locations/{location_id}": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 404,
+  "OPERATIONS": 404,
+  "DELIVERY_PARTNER": 403
+ },
+ "PATCH /api/v1/inventory/locations/{location_id}": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 404,
+  "OPERATIONS": 404,
+  "DELIVERY_PARTNER": 403
+ },
+ "DELETE /api/v1/inventory/locations/{location_id}": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 403,
+  "OPERATIONS": 403,
+  "DELIVERY_PARTNER": 403
+ },
+ "POST /api/v1/inventory/locations/{location_id}/packing-point": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 403,
+  "OPERATIONS": 403,
+  "DELIVERY_PARTNER": 403
+ },
+ "POST /api/v1/inventory/lots": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 422,
+  "OPERATIONS": 422,
+  "DELIVERY_PARTNER": 403
+ },
+ "GET /api/v1/inventory/lots": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 200,
+  "OPERATIONS": 200,
+  "DELIVERY_PARTNER": 403
+ },
+ "GET /api/v1/inventory/lots/{lot_id}": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 404,
+  "OPERATIONS": 404,
+  "DELIVERY_PARTNER": 403
+ },
+ "POST /api/v1/inventory/lots/{lot_id}/movements": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 422,
+  "OPERATIONS": 422,
+  "DELIVERY_PARTNER": 403
+ },
+ "GET /api/v1/inventory/lots/{lot_id}/movements": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 404,
+  "OPERATIONS": 404,
+  "DELIVERY_PARTNER": 403
+ },
+ "GET /api/v1/inventory/reservations": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 200,
+  "OPERATIONS": 200,
+  "DELIVERY_PARTNER": 403
+ },
+ "GET /api/v1/inventory/reservations/{reservation_id}": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 404,
+  "OPERATIONS": 404,
+  "DELIVERY_PARTNER": 403
+ },
+ "POST /api/v1/inventory/reservations/{reservation_id}/expire": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 404,
+  "OPERATIONS": 404,
+  "DELIVERY_PARTNER": 403
+ },
+ "POST /api/v1/inventory/batches": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 422,
+  "OPERATIONS": 422,
+  "DELIVERY_PARTNER": 403
+ },
+ "GET /api/v1/inventory/batches": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 200,
+  "OPERATIONS": 200,
+  "DELIVERY_PARTNER": 403
+ },
+ "GET /api/v1/inventory/batches/{batch_id}": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 404,
+  "OPERATIONS": 404,
+  "DELIVERY_PARTNER": 403
+ },
+ "GET /api/v1/inventory/admin/dashboard": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 200,
+  "OPERATIONS": 200,
+  "DELIVERY_PARTNER": 403
+ },
+ "GET /api/v1/inventory/admin/lots": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 200,
+  "OPERATIONS": 200,
+  "DELIVERY_PARTNER": 403
+ },
+ "GET /api/v1/inventory/admin/lots/{lot_id}": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 404,
+  "OPERATIONS": 404,
+  "DELIVERY_PARTNER": 403
+ },
+ "POST /api/v1/inventory/admin/receive": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 422,
+  "OPERATIONS": 422,
+  "DELIVERY_PARTNER": 403
+ },
+ "POST /api/v1/inventory/admin/lots/{lot_id}/remove": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 422,
+  "OPERATIONS": 422,
+  "DELIVERY_PARTNER": 403
+ },
+ "GET /api/v1/inventory/admin/stock-alerts": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 200,
+  "OPERATIONS": 200,
+  "DELIVERY_PARTNER": 403
+ },
+ "POST /api/v1/inventory/admin/lots/{lot_id}/reconcile": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 422,
+  "OPERATIONS": 422,
+  "DELIVERY_PARTNER": 403
+ },
+ "POST /api/v1/inventory/admin/transfer": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 422,
+  "OPERATIONS": 422,
+  "DELIVERY_PARTNER": 403
+ },
+ "POST /api/v1/packaging/operations": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 422,
+  "OPERATIONS": 422,
+  "DELIVERY_PARTNER": 403
+ },
+ "GET /api/v1/packaging/operations": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 200,
+  "OPERATIONS": 200,
+  "DELIVERY_PARTNER": 403
+ },
+ "GET /api/v1/packaging/operations/{operation_id}": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 404,
+  "OPERATIONS": 404,
+  "DELIVERY_PARTNER": 403
+ },
+ "POST /api/v1/packaging/operations/{operation_id}/start": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 404,
+  "OPERATIONS": 404,
+  "DELIVERY_PARTNER": 403
+ },
+ "POST /api/v1/packaging/operations/{operation_id}/cancel": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 404,
+  "OPERATIONS": 404,
+  "DELIVERY_PARTNER": 403
+ },
+ "POST /api/v1/packaging/operations/{operation_id}/complete": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 404,
+  "OPERATIONS": 404,
+  "DELIVERY_PARTNER": 403
+ },
+ "POST /api/v1/packaging/operations/{operation_id}/inputs": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 422,
+  "OPERATIONS": 422,
+  "DELIVERY_PARTNER": 403
+ },
+ "DELETE /api/v1/packaging/operations/{operation_id}/inputs/{input_id}": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 404,
+  "OPERATIONS": 404,
+  "DELIVERY_PARTNER": 403
+ },
+ "POST /api/v1/packaging/operations/{operation_id}/outputs": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 422,
+  "OPERATIONS": 422,
+  "DELIVERY_PARTNER": 403
+ },
+ "DELETE /api/v1/packaging/operations/{operation_id}/outputs/{output_id}": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 404,
+  "OPERATIONS": 404,
+  "DELIVERY_PARTNER": 403
+ },
+ "GET /api/v1/cart": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 200,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 403,
+  "OPERATIONS": 403,
+  "DELIVERY_PARTNER": 403
+ },
+ "POST /api/v1/cart": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 200,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 403,
+  "OPERATIONS": 403,
+  "DELIVERY_PARTNER": 403
+ },
+ "POST /api/v1/cart/items": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 422,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 403,
+  "OPERATIONS": 403,
+  "DELIVERY_PARTNER": 403
+ },
+ "DELETE /api/v1/cart/items": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 204,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 403,
+  "OPERATIONS": 403,
+  "DELIVERY_PARTNER": 403
+ },
+ "PATCH /api/v1/cart/items/{item_id}": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 422,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 403,
+  "OPERATIONS": 403,
+  "DELIVERY_PARTNER": 403
+ },
+ "DELETE /api/v1/cart/items/{item_id}": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 404,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 403,
+  "OPERATIONS": 403,
+  "DELIVERY_PARTNER": 403
+ },
+ "POST /api/v1/cart/evaluate-promo": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 200,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 403,
+  "OPERATIONS": 403,
+  "DELIVERY_PARTNER": 403
+ },
+ "POST /api/v1/cart/checkout": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 422,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 403,
+  "OPERATIONS": 403,
+  "DELIVERY_PARTNER": 403
+ },
+ "GET /api/v1/orders/admin": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 200,
+  "OPERATIONS": 200,
+  "DELIVERY_PARTNER": 403
+ },
+ "GET /api/v1/orders/admin/{order_id}": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 404,
+  "OPERATIONS": 404,
+  "DELIVERY_PARTNER": 403
+ },
+ "GET /api/v1/orders": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 200,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 403,
+  "OPERATIONS": 403,
+  "DELIVERY_PARTNER": 403
+ },
+ "GET /api/v1/orders/{order_id}": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 404,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 403,
+  "OPERATIONS": 403,
+  "DELIVERY_PARTNER": 403
+ },
+ "GET /api/v1/orders/{order_id}/payment": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 404,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 403,
+  "OPERATIONS": 403,
+  "DELIVERY_PARTNER": 403
+ },
+ "GET /api/v1/orders/{order_id}/reservation": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 404,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 403,
+  "OPERATIONS": 403,
+  "DELIVERY_PARTNER": 403
+ },
+ "GET /api/v1/orders/{order_id}/fulfillment": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 404,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 403,
+  "OPERATIONS": 403,
+  "DELIVERY_PARTNER": 403
+ },
+ "GET /api/v1/orders/{order_id}/refund": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 404,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 403,
+  "OPERATIONS": 403,
+  "DELIVERY_PARTNER": 403
+ },
+ "POST /api/v1/orders/{order_id}/cancel": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 404,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 403,
+  "OPERATIONS": 403,
+  "DELIVERY_PARTNER": 403
+ },
+ "POST /api/v1/orders/admin/{order_id}/cancel": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 403,
+  "OPERATIONS": 403,
+  "DELIVERY_PARTNER": 403
+ },
+ "GET /api/v1/payments/admin": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 403,
+  "OPERATIONS": 403,
+  "DELIVERY_PARTNER": 403
+ },
+ "GET /api/v1/payments/admin/{payment_id}": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 403,
+  "OPERATIONS": 403,
+  "DELIVERY_PARTNER": 403
+ },
+ "GET /api/v1/payments/refunds": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 403,
+  "OPERATIONS": 403,
+  "DELIVERY_PARTNER": 403
+ },
+ "GET /api/v1/payments/refunds/{refund_id}": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 403,
+  "OPERATIONS": 403,
+  "DELIVERY_PARTNER": 403
+ },
+ "POST /api/v1/payments/refunds/{refund_id}/approve": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 403,
+  "OPERATIONS": 403,
+  "DELIVERY_PARTNER": 403
+ },
+ "POST /api/v1/payments/refunds/{refund_id}/reject": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 403,
+  "OPERATIONS": 403,
+  "DELIVERY_PARTNER": 403
+ },
+ "POST /api/v1/payments/refunds/{refund_id}/sync": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 403,
+  "OPERATIONS": 403,
+  "DELIVERY_PARTNER": 403
+ },
+ "POST /api/v1/payments/refunds/{refund_id}/process": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 403,
+  "OPERATIONS": 403,
+  "DELIVERY_PARTNER": 403
+ },
+ "POST /api/v1/payments": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 422,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 403,
+  "OPERATIONS": 403,
+  "DELIVERY_PARTNER": 403
+ },
+ "GET /api/v1/payments/{payment_id}": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 404,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 403,
+  "OPERATIONS": 403,
+  "DELIVERY_PARTNER": 403
+ },
+ "POST /api/v1/payments/{payment_id}/retry": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 404,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 403,
+  "OPERATIONS": 403,
+  "DELIVERY_PARTNER": 403
+ },
+ "POST /api/v1/payments/{payment_id}/verify": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 404,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 403,
+  "OPERATIONS": 403,
+  "DELIVERY_PARTNER": 403
+ },
+ "GET /api/v1/payments/{payment_id}/checkout": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 404,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 403,
+  "OPERATIONS": 403,
+  "DELIVERY_PARTNER": 403
+ },
+ "POST /api/v1/payments/online/start": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 422,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 403,
+  "OPERATIONS": 403,
+  "DELIVERY_PARTNER": 403
+ },
+ "POST /api/v1/payments/online/{session_id}/confirm": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 422,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 403,
+  "OPERATIONS": 403,
+  "DELIVERY_PARTNER": 403
+ },
+ "POST /api/v1/payments/online/{session_id}/verify": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 404,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 403,
+  "OPERATIONS": 403,
+  "DELIVERY_PARTNER": 403
+ },
+ "POST /api/v1/payments/{payment_id}/confirm": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 422,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 403,
+  "OPERATIONS": 403,
+  "DELIVERY_PARTNER": 403
+ },
+ "POST /api/v1/payments/webhooks/{gateway_slug}": {
+  "anon": 404,
+  "NONE": 404,
+  "CUSTOMER": 404,
+  "WHOLESALER": 404,
+  "SUPPORT": 404,
+  "HUB_STAFF": 404,
+  "OPERATIONS": 404,
+  "DELIVERY_PARTNER": 404
+ },
+ "GET /api/v1/fulfillments": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 200,
+  "OPERATIONS": 200,
+  "DELIVERY_PARTNER": 200
+ },
+ "GET /api/v1/fulfillments/{fulfillment_id}": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 404,
+  "OPERATIONS": 404,
+  "DELIVERY_PARTNER": 404
+ },
+ "GET /api/v1/fulfillments/{fulfillment_id}/order": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 404,
+  "OPERATIONS": 404,
+  "DELIVERY_PARTNER": 404
+ },
+ "POST /api/v1/fulfillments/{fulfillment_id}/status": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 422,
+  "OPERATIONS": 422,
+  "DELIVERY_PARTNER": 403
+ },
+ "POST /api/v1/fulfillments/{fulfillment_id}/assign": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 422,
+  "OPERATIONS": 422,
+  "DELIVERY_PARTNER": 403
+ },
+ "POST /api/v1/fulfillments/{fulfillment_id}/out-for-delivery": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 403,
+  "OPERATIONS": 403,
+  "DELIVERY_PARTNER": 404
+ },
+ "POST /api/v1/fulfillments/{fulfillment_id}/deliver": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 403,
+  "OPERATIONS": 403,
+  "DELIVERY_PARTNER": 404
+ },
+ "POST /api/v1/suppliers": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 422,
+  "OPERATIONS": 422,
+  "DELIVERY_PARTNER": 403
+ },
+ "GET /api/v1/suppliers": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 200,
+  "OPERATIONS": 200,
+  "DELIVERY_PARTNER": 403
+ },
+ "GET /api/v1/suppliers/{supplier_id}": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 404,
+  "OPERATIONS": 404,
+  "DELIVERY_PARTNER": 403
+ },
+ "PATCH /api/v1/suppliers/{supplier_id}": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 404,
+  "OPERATIONS": 404,
+  "DELIVERY_PARTNER": 403
+ },
+ "POST /api/v1/suppliers/{supplier_id}/products": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 422,
+  "OPERATIONS": 422,
+  "DELIVERY_PARTNER": 403
+ },
+ "GET /api/v1/suppliers/{supplier_id}/products": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 404,
+  "OPERATIONS": 404,
+  "DELIVERY_PARTNER": 403
+ },
+ "PATCH /api/v1/suppliers/{supplier_id}/products/{supplier_product_id}": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 404,
+  "OPERATIONS": 404,
+  "DELIVERY_PARTNER": 403
+ },
+ "POST /api/v1/suppliers/{supplier_id}/evaluations": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 403,
+  "OPERATIONS": 403,
+  "DELIVERY_PARTNER": 403
+ },
+ "GET /api/v1/suppliers/{supplier_id}/evaluations": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 403,
+  "OPERATIONS": 403,
+  "DELIVERY_PARTNER": 403
+ },
+ "GET /api/v1/suppliers/{supplier_id}/performance": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 404,
+  "OPERATIONS": 404,
+  "DELIVERY_PARTNER": 403
+ },
+ "GET /api/v1/bulk-orders/profile": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 404,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 403,
+  "OPERATIONS": 403,
+  "DELIVERY_PARTNER": 403
+ },
+ "PUT /api/v1/bulk-orders/profile": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 422,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 403,
+  "OPERATIONS": 403,
+  "DELIVERY_PARTNER": 403
+ },
+ "POST /api/v1/bulk-orders/requests": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 422,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 403,
+  "OPERATIONS": 403,
+  "DELIVERY_PARTNER": 403
+ },
+ "GET /api/v1/bulk-orders/requests": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 200,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 403,
+  "OPERATIONS": 403,
+  "DELIVERY_PARTNER": 403
+ },
+ "GET /api/v1/bulk-orders/requests/{request_id}": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 404,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 403,
+  "OPERATIONS": 403,
+  "DELIVERY_PARTNER": 403
+ },
+ "POST /api/v1/bulk-orders/requests/{request_id}/cancel": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 404,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 403,
+  "OPERATIONS": 403,
+  "DELIVERY_PARTNER": 403
+ },
+ "GET /api/v1/bulk-orders/requests/{request_id}/quote": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 404,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 403,
+  "OPERATIONS": 403,
+  "DELIVERY_PARTNER": 403
+ },
+ "POST /api/v1/bulk-orders/requests/{request_id}/accept": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 404,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 403,
+  "OPERATIONS": 403,
+  "DELIVERY_PARTNER": 403
+ },
+ "GET /api/v1/bulk-orders/admin/requests": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 403,
+  "OPERATIONS": 200,
+  "DELIVERY_PARTNER": 403
+ },
+ "GET /api/v1/bulk-orders/admin/requests/{request_id}": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 403,
+  "OPERATIONS": 404,
+  "DELIVERY_PARTNER": 403
+ },
+ "POST /api/v1/bulk-orders/admin/requests/{request_id}/review": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 403,
+  "OPERATIONS": 404,
+  "DELIVERY_PARTNER": 403
+ },
+ "POST /api/v1/bulk-orders/admin/requests/{request_id}/status": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 403,
+  "OPERATIONS": 422,
+  "DELIVERY_PARTNER": 403
+ },
+ "POST /api/v1/bulk-orders/admin/requests/{request_id}/quote": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 403,
+  "OPERATIONS": 422,
+  "DELIVERY_PARTNER": 403
+ },
+ "GET /api/v1/bulk-orders/admin/requests/{request_id}/quote": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 403,
+  "OPERATIONS": 404,
+  "DELIVERY_PARTNER": 403
+ },
+ "POST /api/v1/bulk-orders/admin/requests/{request_id}/quote/{version_id}/send": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 403,
+  "OPERATIONS": 404,
+  "DELIVERY_PARTNER": 403
+ },
+ "POST /api/v1/bulk-orders/admin/requests/{request_id}/quote/{version_id}/reject": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 403,
+  "OPERATIONS": 404,
+  "DELIVERY_PARTNER": 403
+ },
+ "GET /api/v1/bulk-orders/admin/variants/{variant_id}/availability": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 403,
+  "OPERATIONS": 404,
+  "DELIVERY_PARTNER": 403
+ },
+ "POST /api/v1/bulk-orders/admin/requests/{request_id}/convert": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 403,
+  "OPERATIONS": 404,
+  "DELIVERY_PARTNER": 403
+ },
+ "GET /api/v1/promotions/dashboard": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 403,
+  "OPERATIONS": 403,
+  "DELIVERY_PARTNER": 403
+ },
+ "GET /api/v1/promotions": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 403,
+  "OPERATIONS": 403,
+  "DELIVERY_PARTNER": 403
+ },
+ "POST /api/v1/promotions": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 403,
+  "OPERATIONS": 403,
+  "DELIVERY_PARTNER": 403
+ },
+ "GET /api/v1/promotions/{promotion_id}": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 403,
+  "OPERATIONS": 403,
+  "DELIVERY_PARTNER": 403
+ },
+ "PATCH /api/v1/promotions/{promotion_id}": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 403,
+  "OPERATIONS": 403,
+  "DELIVERY_PARTNER": 403
+ },
+ "POST /api/v1/promotions/{promotion_id}/image": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 403,
+  "OPERATIONS": 403,
+  "DELIVERY_PARTNER": 403
+ },
+ "POST /api/v1/promotions/{promotion_id}/duplicate": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 403,
+  "OPERATIONS": 403,
+  "DELIVERY_PARTNER": 403
+ },
+ "POST /api/v1/promotions/{promotion_id}/activate": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 403,
+  "OPERATIONS": 403,
+  "DELIVERY_PARTNER": 403
+ },
+ "POST /api/v1/promotions/{promotion_id}/pause": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 403,
+  "OPERATIONS": 403,
+  "DELIVERY_PARTNER": 403
+ },
+ "POST /api/v1/promotions/{promotion_id}/disable": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 403,
+  "OPERATIONS": 403,
+  "DELIVERY_PARTNER": 403
+ },
+ "GET /api/v1/promotions/{promotion_id}/redemptions": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 403,
+  "OPERATIONS": 403,
+  "DELIVERY_PARTNER": 403
+ },
+ "GET /api/v1/customers/dashboard": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 200,
+  "HUB_STAFF": 403,
+  "OPERATIONS": 403,
+  "DELIVERY_PARTNER": 403
+ },
+ "GET /api/v1/customers": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 200,
+  "HUB_STAFF": 403,
+  "OPERATIONS": 403,
+  "DELIVERY_PARTNER": 403
+ },
+ "GET /api/v1/customers/{user_id}": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 404,
+  "HUB_STAFF": 403,
+  "OPERATIONS": 403,
+  "DELIVERY_PARTNER": 403
+ },
+ "GET /api/v1/customers/{user_id}/orders": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 404,
+  "HUB_STAFF": 403,
+  "OPERATIONS": 403,
+  "DELIVERY_PARTNER": 403
+ },
+ "GET /api/v1/customers/{user_id}/promotions": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 404,
+  "HUB_STAFF": 403,
+  "OPERATIONS": 403,
+  "DELIVERY_PARTNER": 403
+ },
+ "GET /api/v1/customers/{user_id}/addresses": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 404,
+  "HUB_STAFF": 403,
+  "OPERATIONS": 403,
+  "DELIVERY_PARTNER": 403
+ },
+ "GET /api/v1/customers/{user_id}/timeline": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 404,
+  "HUB_STAFF": 403,
+  "OPERATIONS": 403,
+  "DELIVERY_PARTNER": 403
+ },
+ "GET /api/v1/customers/{user_id}/notes": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 403,
+  "OPERATIONS": 403,
+  "DELIVERY_PARTNER": 403
+ },
+ "POST /api/v1/customers/{user_id}/notes": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 403,
+  "OPERATIONS": 403,
+  "DELIVERY_PARTNER": 403
+ },
+ "PATCH /api/v1/customers/notes/{note_id}": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 403,
+  "OPERATIONS": 403,
+  "DELIVERY_PARTNER": 403
+ },
+ "POST /api/v1/customers/{user_id}/status": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 403,
+  "OPERATIONS": 403,
+  "DELIVERY_PARTNER": 403
+ },
+ "PATCH /api/v1/customers/{user_id}/contact": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 403,
+  "OPERATIONS": 403,
+  "DELIVERY_PARTNER": 403
+ },
+ "POST /api/v1/customers/{user_id}/password": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 403,
+  "OPERATIONS": 403,
+  "DELIVERY_PARTNER": 403
+ },
+ "GET /api/v1/dashboard": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 403,
+  "OPERATIONS": 200,
+  "DELIVERY_PARTNER": 403
+ },
+ "GET /api/v1/staff": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 403,
+  "OPERATIONS": 403,
+  "DELIVERY_PARTNER": 403
+ },
+ "POST /api/v1/staff": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 403,
+  "OPERATIONS": 403,
+  "DELIVERY_PARTNER": 403
+ },
+ "GET /api/v1/staff/{user_id}": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 403,
+  "OPERATIONS": 403,
+  "DELIVERY_PARTNER": 403
+ },
+ "POST /api/v1/staff/{user_id}/roles": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 403,
+  "OPERATIONS": 403,
+  "DELIVERY_PARTNER": 403
+ },
+ "DELETE /api/v1/staff/{user_id}/roles/{role_name}": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 403,
+  "OPERATIONS": 403,
+  "DELIVERY_PARTNER": 403
+ },
+ "PATCH /api/v1/staff/{user_id}/status": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 403,
+  "OPERATIONS": 403,
+  "DELIVERY_PARTNER": 403
+ },
+ "GET /api/v1/ads": {
+  "anon": 200,
+  "NONE": 200,
+  "CUSTOMER": 200,
+  "WHOLESALER": 200,
+  "SUPPORT": 200,
+  "HUB_STAFF": 200,
+  "OPERATIONS": 200,
+  "DELIVERY_PARTNER": 200
+ },
+ "GET /api/v1/ads/admin": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 403,
+  "OPERATIONS": 403,
+  "DELIVERY_PARTNER": 403
+ },
+ "POST /api/v1/ads/admin": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 403,
+  "OPERATIONS": 403,
+  "DELIVERY_PARTNER": 403
+ },
+ "GET /api/v1/ads/admin/{ad_id}": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 403,
+  "OPERATIONS": 403,
+  "DELIVERY_PARTNER": 403
+ },
+ "PATCH /api/v1/ads/admin/{ad_id}": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 403,
+  "OPERATIONS": 403,
+  "DELIVERY_PARTNER": 403
+ },
+ "DELETE /api/v1/ads/admin/{ad_id}": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 403,
+  "OPERATIONS": 403,
+  "DELIVERY_PARTNER": 403
+ },
+ "POST /api/v1/ads/admin/{ad_id}/image": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 403,
+  "OPERATIONS": 403,
+  "DELIVERY_PARTNER": 403
+ },
+ "POST /api/v1/push-tokens": {
+  "anon": 401,
+  "NONE": 422,
+  "CUSTOMER": 422,
+  "WHOLESALER": 422,
+  "SUPPORT": 422,
+  "HUB_STAFF": 422,
+  "OPERATIONS": 422,
+  "DELIVERY_PARTNER": 422
+ },
+ "POST /api/v1/push-tokens/unregister": {
+  "anon": 401,
+  "NONE": 422,
+  "CUSTOMER": 422,
+  "WHOLESALER": 422,
+  "SUPPORT": 422,
+  "HUB_STAFF": 422,
+  "OPERATIONS": 422,
+  "DELIVERY_PARTNER": 422
+ },
+ "GET /api/v1/home-slides": {
+  "anon": 200,
+  "NONE": 200,
+  "CUSTOMER": 200,
+  "WHOLESALER": 200,
+  "SUPPORT": 200,
+  "HUB_STAFF": 200,
+  "OPERATIONS": 200,
+  "DELIVERY_PARTNER": 200
+ },
+ "GET /api/v1/home-slides/admin": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 403,
+  "OPERATIONS": 403,
+  "DELIVERY_PARTNER": 403
+ },
+ "POST /api/v1/home-slides/admin": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 403,
+  "OPERATIONS": 403,
+  "DELIVERY_PARTNER": 403
+ },
+ "POST /api/v1/home-slides/admin/{slide_id}/image": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 403,
+  "OPERATIONS": 403,
+  "DELIVERY_PARTNER": 403
+ },
+ "PATCH /api/v1/home-slides/admin/{slide_id}": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 403,
+  "OPERATIONS": 403,
+  "DELIVERY_PARTNER": 403
+ },
+ "DELETE /api/v1/home-slides/admin/{slide_id}": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 403,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 403,
+  "OPERATIONS": 403,
+  "DELIVERY_PARTNER": 403
+ },
+ "GET /api/v1/bazaar/status": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 200,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 403,
+  "OPERATIONS": 403,
+  "DELIVERY_PARTNER": 403
+ },
+ "GET /api/v1/bazaar/delivery-quote": {
+  "anon": 401,
+  "NONE": 403,
+  "CUSTOMER": 200,
+  "WHOLESALER": 403,
+  "SUPPORT": 403,
+  "HUB_STAFF": 403,
+  "OPERATIONS": 403,
+  "DELIVERY_PARTNER": 403
+ },
+ "GET /api/v1/offers": {
+  "anon": 200,
+  "NONE": 200,
+  "CUSTOMER": 200,
+  "WHOLESALER": 200,
+  "SUPPORT": 200,
+  "HUB_STAFF": 200,
+  "OPERATIONS": 200,
+  "DELIVERY_PARTNER": 200
+ },
+ "GET /api/v1/ping": {
+  "anon": 200,
+  "NONE": 200,
+  "CUSTOMER": 200,
+  "WHOLESALER": 200,
+  "SUPPORT": 200,
+  "HUB_STAFF": 200,
+  "OPERATIONS": 200,
+  "DELIVERY_PARTNER": 200
+ },
+ "GET /health": {
+  "anon": 200,
+  "NONE": 200,
+  "CUSTOMER": 200,
+  "WHOLESALER": 200,
+  "SUPPORT": 200,
+  "HUB_STAFF": 200,
+  "OPERATIONS": 200,
+  "DELIVERY_PARTNER": 200
+ },
+ "GET /health/db": {
+  "anon": 200,
+  "NONE": 200,
+  "CUSTOMER": 200,
+  "WHOLESALER": 200,
+  "SUPPORT": 200,
+  "HUB_STAFF": 200,
+  "OPERATIONS": 200,
+  "DELIVERY_PARTNER": 200
+ }
+}

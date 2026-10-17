@@ -3,7 +3,8 @@
 # NEXT_PUBLIC_API_BASE_URL is inlined into the client bundle at BUILD time
 # (Next.js replaces process.env.NEXT_PUBLIC_* during `next build`), so it
 # must be passed as a build arg - setting it at container runtime has no
-# effect. docker-compose.prod.yml derives it from API_DOMAIN.
+# effect. docker-compose.prod.yml derives it from API_DOMAIN. The same applies
+# to the NEXT_PUBLIC_FIREBASE_* values (public web-app identifiers, not secrets).
 
 FROM node:22-alpine AS deps
 WORKDIR /app
@@ -13,11 +14,24 @@ RUN npm ci --no-audit --no-fund
 FROM node:22-alpine AS builder
 WORKDIR /app
 ARG NEXT_PUBLIC_API_BASE_URL
+ARG NEXT_PUBLIC_FIREBASE_API_KEY
+ARG NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN
+ARG NEXT_PUBLIC_FIREBASE_PROJECT_ID
+ARG NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET
+ARG NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID
+ARG NEXT_PUBLIC_FIREBASE_APP_ID
 ENV NEXT_PUBLIC_API_BASE_URL=${NEXT_PUBLIC_API_BASE_URL} \
+    NEXT_PUBLIC_FIREBASE_API_KEY=${NEXT_PUBLIC_FIREBASE_API_KEY} \
+    NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=${NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN} \
+    NEXT_PUBLIC_FIREBASE_PROJECT_ID=${NEXT_PUBLIC_FIREBASE_PROJECT_ID} \
+    NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=${NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET} \
+    NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=${NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID} \
+    NEXT_PUBLIC_FIREBASE_APP_ID=${NEXT_PUBLIC_FIREBASE_APP_ID} \
     NEXT_TELEMETRY_DISABLED=1
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 RUN test -n "$NEXT_PUBLIC_API_BASE_URL" || (echo "NEXT_PUBLIC_API_BASE_URL build arg is required" && exit 1)
+RUN test -n "$NEXT_PUBLIC_FIREBASE_API_KEY" && test -n "$NEXT_PUBLIC_FIREBASE_PROJECT_ID" && test -n "$NEXT_PUBLIC_FIREBASE_APP_ID" || (echo "NEXT_PUBLIC_FIREBASE_* build args are required - sign-in cannot work without them" && exit 1)
 RUN npx next build --webpack
 
 FROM node:22-alpine AS runner

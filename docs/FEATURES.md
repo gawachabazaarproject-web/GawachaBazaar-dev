@@ -2,7 +2,7 @@
 
 What the product does, by audience. Each feature notes the rule behind it. Status legend:
 **Live** = built and wired end to end; **Placeholder** = page exists but the feature is not built.
-For how it is built see [ARCHITECTURE.md](ARCHITECTURE.md).
+For how it is built see [ARCHITECTURE.md](ARCHITECTURE.md). **Corrections (2026-10-14):** this file was checked against the code and the statements below about push notifications, the Audit log, the checkout slot and the ad-image rule were wrong and have been fixed; the evidence-linked requirement view is [01-requirements/FUNCTIONAL_REQUIREMENTS.md](01-requirements/FUNCTIONAL_REQUIREMENTS.md).
 
 ---
 
@@ -43,14 +43,14 @@ For how it is built see [ARCHITECTURE.md](ARCHITECTURE.md).
   error toast), promo codes (preview uses the same engine as checkout), and a **free-delivery
   progress** bar.
 - A floating **cart bar** shows item count and total on the main screens.
-- **Checkout**: address selection, harvest/delivery slot, summary, **delivery fee** and
+- **Checkout**: address selection, an *illustrative* harvest/delivery slot picker (local UI state only - it is **not** sent to the backend and affects nothing), summary, **delivery fee** and
   discount lines, payment choice - **Cash on Delivery** or **online** (UPI, cards, netbanking,
   wallets through Razorpay Checkout). Retry or complete payment later from the order page.
 - Order success screen.
 
 ### Delivery fee and the Bazaar offer
 - A basket with **15 or more different products** ships **free** - a "Bazaar".
-- Smaller baskets pay **Rs 20 + Rs 10 per km of road distance** from the packing point to the
+- Smaller baskets pay **Rs 40 + Rs 10 per km of road distance** from the packing point to the
   delivery address (capped at 30 km). The cart shows a live quote and "add N more products for
   free delivery".
 - **Gawacha Bazaar+**: six Bazaar orders in a calendar month unlocks Bazaar+; progress is shown
@@ -89,10 +89,10 @@ Sign-in is restricted to staff roles; the sidebar shows only pages the role may 
 | **Delivery** | Fulfillment queue, assign delivery partners, move orders picking -> delivered | `delivery.*` |
 | **Payments** | Payment list/detail, refund approval, rejection and processing | `orders.refund` |
 | **Home slides** | Manage the home hero carousel (image, label, title, script word, body, CTA, link, order) | `ads.*` |
-| **Ads** | Brand ad cards: image, brand name, optional **title and subtitle** shown on the card, link, order, active/inactive. Images **must be 1200 x 500 px (12:5)**; the upload is validated so nothing gets cropped. | `ads.*` |
+| **Ads** | Brand ad cards: image, brand name, optional **title and subtitle** shown on the card, link, order, active/inactive. Images **must be 1200 x 500 px (12:5)**; this is checked by the Admin UI only (the backend does not validate dimensions). | `ads.*` |
 | **Settings** | **Packing point**: choose which warehouse delivery distance is measured from; set a warehouse's map position by pasting coordinates from Google Maps or using the current location. | `settings.manage` (choosing is ADMIN-only) |
 | **Staff** | Create/deactivate staff, assign roles (cannot deactivate yourself) | `staff.*` |
-| **Audit log** | Searchable record of admin actions | `audit.read` |
+| **Audit log** | **Placeholder** - the page shows "No general-purpose audit log exists yet". Admin actions *are* recorded in `admin_action_logs` (47 action names) but only the per-product and per-category activity feeds read them | `audit.read` (enforced by no route) |
 | **Reports** | **Placeholder** - not built yet | `reports.read` |
 | **Reviews** | **Placeholder** - no review domain yet | `reviews.read` |
 
@@ -119,7 +119,8 @@ and the sidebar can collapse (the Orders count becomes a dot).
 | Promotions | Rules, targeting, eligibility, redemptions, auto/promo-code evaluation |
 | Customers and staff | Admin customer management, notes, staff management, audit log |
 | Content | Ads and home slides with image upload |
-| Realtime | WebSocket stream of order/fulfillment/payment/refund changes to staff |
+| Realtime | WebSocket stream of order/fulfillment/payment/refund changes to staff (and to the order's customer) |
+| Notifications | Expo push to customers for eight order/payment/refund events (best effort) |
 | Operations | Health and DB-health endpoints, request IDs, security headers, rate limits on auth, structured logging |
 
 ---
@@ -130,5 +131,5 @@ and the sidebar can collapse (the Orders count becomes a dot).
 - Per-step order times (confirmed, preparing, out for delivery) are not recorded, so the tracker
   shows only placed/delivered times.
 - Multi-replica deployment needs Redis for rate limiting and realtime (ARCHITECTURE section 10).
-- Customer-side reviews, in-app chat support (support is contact details only) and push
-  notifications are not implemented.
+- Customer-side reviews and in-app chat support (support is contact details only; the contact details in the app are still placeholders) are not implemented. Push notifications **are** implemented (Expo push, eight order/payment/refund events - see [05-domains/NOTIFICATIONS.md](05-domains/NOTIFICATIONS.md)); email/SMS from the platform are not.
+- Gawacha Bazaar+ is only an eligibility flag; none of its advertised "upcoming benefits" exists. The `WHOLESALER` role grants no extra access.

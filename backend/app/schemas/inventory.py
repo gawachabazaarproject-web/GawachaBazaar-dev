@@ -4,7 +4,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Literal
 
-from pydantic import Field
+from pydantic import Field, model_validator
 
 from app.schemas.base import BaseSchema
 
@@ -24,6 +24,16 @@ BatchStatus = Literal["HARVESTED", "COLLECTED", "SORTED", "GRADED", "APPROVED", 
 BatchUnit = Literal["KG", "G", "L", "ML", "UNIT", "DOZEN", "BOX", "CRATE"]
 
 MAX_PAGE_SIZE = 100
+
+AmountUnit = Literal["KG", "G", "L", "ML", "UNIT", "DOZEN"]
+
+
+def check_packs_or_amount(quantity: Decimal | None, amount: Decimal | None, amount_unit: str | None) -> None:
+    """Exactly one of `quantity` (packs) or `amount` + `amount_unit`."""
+    if quantity is not None and (amount is not None or amount_unit is not None):
+        raise ValueError("Send either quantity (packs) or amount with amount_unit, not both.")
+    if quantity is None and (amount is None or amount_unit is None):
+        raise ValueError("Send quantity (packs) or both amount and amount_unit.")
 
 
 # ---------------------------------------------------------------------------
@@ -182,11 +192,20 @@ class CreateStockMovementRequest(BaseSchema):
     """
 
     movement_type: MovementType
-    quantity: Decimal = Field(..., gt=0, max_digits=12, decimal_places=3)
+    # Either a number of packs, or a weight/volume (e.g. 1 KG) that the server
+    # converts into packs of the lot's variant.
+    quantity: Decimal | None = Field(default=None, gt=0, max_digits=12, decimal_places=3)
+    amount: Decimal | None = Field(default=None, gt=0, max_digits=12, decimal_places=3)
+    amount_unit: AmountUnit | None = None
     occurred_at: datetime | None = Field(default=None)
     reference_type: str | None = Field(default=None, max_length=50)
     reference_id: int | None = Field(default=None)
     remarks: str | None = Field(default=None)
+
+    @model_validator(mode="after")
+    def _packs_or_amount(self) -> "CreateStockMovementRequest":
+        check_packs_or_amount(self.quantity, self.amount, self.amount_unit)
+        return self
 
 
 class StockMovementResponse(BaseSchema):

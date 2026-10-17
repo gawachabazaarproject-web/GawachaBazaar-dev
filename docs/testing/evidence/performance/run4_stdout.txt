@@ -1,0 +1,88 @@
+D:\Gawacha_Bazaar\GawachaBazaar-dev\backend\tests\test_phase_13_cart_orders.py:14: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+  from starlette.testclient import TestClient
+[ 10 VU] rps=26.2 p50=270ms p95=834ms p99=1761ms err=0.0% cpu=0.78 rss=126.4MB dbconn=13 integrity=True
+[ 25 VU] rps=38.8 p50=540ms p95=874ms p99=1114ms err=0.0% cpu=1.1 rss=130.4MB dbconn=15 integrity=True
+[ 50 VU] rps=38.4 p50=1014ms p95=1742ms p99=2304ms err=0.0% cpu=1.1 rss=135.3MB dbconn=15 integrity=True
+[100 VU] rps=20.0 p50=31940ms p95=570945ms p99=571189ms err=99.67% cpu=0.01 rss=137.2MB dbconn=15 integrity=True
+STOP RULE HIT: stop rule hit at 100 VUs
+Traceback (most recent call last):
+  File "D:\Gawacha_Bazaar\GawachaBazaar-dev\backend\venv\Lib\site-packages\httpx\_transports\default.py", line 101, in map_httpcore_exceptions
+    yield
+  File "D:\Gawacha_Bazaar\GawachaBazaar-dev\backend\venv\Lib\site-packages\httpx\_transports\default.py", line 394, in handle_async_request
+    resp = await self._pool.handle_async_request(req)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Gawacha_Bazaar\GawachaBazaar-dev\backend\venv\Lib\site-packages\httpcore\_async\connection_pool.py", line 256, in handle_async_request
+    raise exc from None
+  File "D:\Gawacha_Bazaar\GawachaBazaar-dev\backend\venv\Lib\site-packages\httpcore\_async\connection_pool.py", line 236, in handle_async_request
+    response = await connection.handle_async_request(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Gawacha_Bazaar\GawachaBazaar-dev\backend\venv\Lib\site-packages\httpcore\_async\connection.py", line 103, in handle_async_request
+    return await self._connection.handle_async_request(request)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Gawacha_Bazaar\GawachaBazaar-dev\backend\venv\Lib\site-packages\httpcore\_async\http11.py", line 136, in handle_async_request
+    raise exc
+  File "D:\Gawacha_Bazaar\GawachaBazaar-dev\backend\venv\Lib\site-packages\httpcore\_async\http11.py", line 106, in handle_async_request
+    ) = await self._receive_response_headers(**kwargs)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Gawacha_Bazaar\GawachaBazaar-dev\backend\venv\Lib\site-packages\httpcore\_async\http11.py", line 177, in _receive_response_headers
+    event = await self._receive_event(timeout=timeout)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Gawacha_Bazaar\GawachaBazaar-dev\backend\venv\Lib\site-packages\httpcore\_async\http11.py", line 217, in _receive_event
+    data = await self._network_stream.read(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Gawacha_Bazaar\GawachaBazaar-dev\backend\venv\Lib\site-packages\httpcore\_backends\anyio.py", line 32, in read
+    with map_exceptions(exc_map):
+  File "C:\Users\VICTUS\AppData\Local\Programs\Python\Python311\Lib\contextlib.py", line 155, in __exit__
+    self.gen.throw(typ, value, traceback)
+  File "D:\Gawacha_Bazaar\GawachaBazaar-dev\backend\venv\Lib\site-packages\httpcore\_exceptions.py", line 14, in map_exceptions
+    raise to_exc(exc) from exc
+httpcore.ReadTimeout
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "D:\Gawacha_Bazaar\GawachaBazaar-dev\backend\tests\multiproc\perf.py", line 313, in <module>
+    main()
+  File "D:\Gawacha_Bazaar\GawachaBazaar-dev\backend\tests\multiproc\perf.py", line 305, in main
+    results["recovery_1vu_probe_after_idle"] = asyncio.run(probe(40, custs))
+                                               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\VICTUS\AppData\Local\Programs\Python\Python311\Lib\asyncio\runners.py", line 190, in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+  File "C:\Users\VICTUS\AppData\Local\Programs\Python\Python311\Lib\asyncio\runners.py", line 118, in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\VICTUS\AppData\Local\Programs\Python\Python311\Lib\asyncio\base_events.py", line 653, in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+  File "D:\Gawacha_Bazaar\GawachaBazaar-dev\backend\tests\multiproc\perf.py", line 255, in probe
+    r = await cl.get("/auth/me", headers={"Authorization": f"Bearer mp.{custs[0]['uid']}"})
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Gawacha_Bazaar\GawachaBazaar-dev\backend\venv\Lib\site-packages\httpx\_client.py", line 1768, in get
+    return await self.request(
+           ^^^^^^^^^^^^^^^^^^^
+  File "D:\Gawacha_Bazaar\GawachaBazaar-dev\backend\venv\Lib\site-packages\httpx\_client.py", line 1540, in request
+    return await self.send(request, auth=auth, follow_redirects=follow_redirects)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Gawacha_Bazaar\GawachaBazaar-dev\backend\venv\Lib\site-packages\httpx\_client.py", line 1629, in send
+    response = await self._send_handling_auth(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Gawacha_Bazaar\GawachaBazaar-dev\backend\venv\Lib\site-packages\httpx\_client.py", line 1657, in _send_handling_auth
+    response = await self._send_handling_redirects(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Gawacha_Bazaar\GawachaBazaar-dev\backend\venv\Lib\site-packages\httpx\_client.py", line 1694, in _send_handling_redirects
+    response = await self._send_single_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Gawacha_Bazaar\GawachaBazaar-dev\backend\venv\Lib\site-packages\httpx\_client.py", line 1730, in _send_single_request
+    response = await transport.handle_async_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Gawacha_Bazaar\GawachaBazaar-dev\backend\venv\Lib\site-packages\httpx\_transports\default.py", line 393, in handle_async_request
+    with map_httpcore_exceptions():
+  File "C:\Users\VICTUS\AppData\Local\Programs\Python\Python311\Lib\contextlib.py", line 155, in __exit__
+    self.gen.throw(typ, value, traceback)
+  File "D:\Gawacha_Bazaar\GawachaBazaar-dev\backend\venv\Lib\site-packages\httpx\_transports\default.py", line 118, in map_httpcore_exceptions
+    raise mapped_exc(message) from exc
+httpx.ReadTimeout
+exit=1

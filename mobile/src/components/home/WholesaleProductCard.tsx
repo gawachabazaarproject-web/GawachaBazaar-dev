@@ -87,7 +87,7 @@ export function WholesaleProductCard({ product, onPress }: WholesaleProductCardP
           </Text>
 
           <View style={styles.qtyRow}>
-            <TextInput
+            <TextInput maxFontSizeMultiplier={1.15}
               value={quantity}
               onChangeText={setQuantity}
               placeholder="Qty"

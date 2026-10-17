@@ -46,6 +46,9 @@ interface AuthState {
   user: AuthUserResponse | null;
   firebaseUser: AuthUser | null;
   loading: boolean;
+  /** True while a fresh sign-in is being confirmed with the backend (can
+   * take a while if the host is waking) - auth screens show a loader. */
+  syncing: boolean;
   isAuthenticated: boolean;
   isEmailVerified: boolean;
   /** Session-level problem to show on the login screen (e.g. the account
@@ -126,6 +129,7 @@ export const useAuthStore = create<AuthState>((set, get) => {
   const syncWithBackend = (fbUser: AuthUser): Promise<void> => {
     if (syncInFlight) return syncInFlight;
     syncInFlight = (async () => {
+      set({ syncing: true });
       try {
         const profile = pendingProfile ?? {};
         let user: AuthUserResponse | null = null;
@@ -173,6 +177,7 @@ export const useAuthStore = create<AuthState>((set, get) => {
         });
       } finally {
         syncInFlight = null;
+        set({ syncing: false });
       }
     })();
     return syncInFlight;
@@ -224,6 +229,7 @@ export const useAuthStore = create<AuthState>((set, get) => {
 
   return {
     ...derived("restoring", null),
+    syncing: false,
     firebaseUser: null,
     authError: null,
     linkEmail: null,

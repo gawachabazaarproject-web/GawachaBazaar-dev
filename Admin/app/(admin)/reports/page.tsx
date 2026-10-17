@@ -11,8 +11,8 @@ export default function ReportsPage() {
       />
       <EmptyState
         icon="bar-chart"
-        title="Waiting on the admin order list (Phase 5)"
-        message="Every report here (sales, AOV, cancellation rate, top products) is an aggregation over orders the admin panel can't query yet. Phase 19 builds these once that endpoint exists - no metric will be shown until the backend can actually compute it."
+        title="Reports are coming soon"
+        message="Sales, order-value and top-product reports are not available yet. For today's live numbers, see the Overview page."
       />
     </div>
   );

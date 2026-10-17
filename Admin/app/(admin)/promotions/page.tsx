@@ -3,6 +3,7 @@
 import React, { useCallback, useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
+import { readInitialQuery, useDebounced, useUrlQuerySync } from "@/lib/use-list-query";
 import { hasPermission } from "@/lib/permissions";
 import {
   PROMOTION_EFFECTIVE_STATUSES,
@@ -35,7 +36,9 @@ export default function PromotionsPage() {
   const [error, setError] = useState<string | null>(null);
 
   const [page, setPage] = useState(1);
-  const [q, setQ] = useState("");
+  const [q, setQ] = useState(readInitialQuery);
+  const dq = useDebounced(q);
+  useUrlQuerySync((v) => { setPage(1); setQ(v); });
   const [effectiveStatus, setEffectiveStatus] = useState("");
   const hasFilters = Boolean(q || effectiveStatus);
 
@@ -61,7 +64,7 @@ export default function PromotionsPage() {
       const result = await fetchPromotions(token, {
         page,
         page_size: PAGE_SIZE,
-        q: q || undefined,
+        q: dq || undefined,
         effective_status: effectiveStatus || undefined,
       });
       setData(result);
@@ -72,7 +75,7 @@ export default function PromotionsPage() {
       loadedOnce.current = true;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, q, effectiveStatus]);
+  }, [page, dq, effectiveStatus]);
 
   useEffect(() => {
     load();

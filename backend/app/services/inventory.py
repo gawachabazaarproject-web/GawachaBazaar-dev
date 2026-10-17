@@ -73,6 +73,7 @@ from app.services.stock_levels import (
     effective_reserve,
     stock_level,
 )
+from app.services.stock_pool import weight_to_packs
 
 _ACTIVE = "ACTIVE"
 _INACTIVE = "INACTIVE"
@@ -556,10 +557,14 @@ class InventoryService:
         if not lot:
             raise NotFoundError("Inventory lot not found.")
 
+        quantity = data.quantity
+        if quantity is None:
+            quantity = weight_to_packs(lot.variant, data.amount, data.amount_unit)
+
         movement = self.apply_movement(
             lot,
             data.movement_type,
-            data.quantity,
+            quantity,
             performed_by_user_id,
             reference_type=data.reference_type,
             reference_id=data.reference_id,
@@ -928,18 +933,21 @@ class InventoryService:
         supplier/wholesaler) - the traceability row still exists, it's
         just not admin-authored. See ReceiveStockRequest docstring.
         """
+        variant = self.db.query(ProductVariant).filter(ProductVariant.id == data.variant_id).first()
+        if not variant:
+            raise NotFoundError("Product variant not found.")
+        quantity = (
+            data.quantity
+            if data.quantity is not None
+            else weight_to_packs(variant, data.amount, data.amount_unit)
+        )
         batch_id = data.batch_id
         if batch_id is None:
-            variant = (
-                self.db.query(ProductVariant).filter(ProductVariant.id == data.variant_id).first()
-            )
-            if not variant:
-                raise NotFoundError("Product variant not found.")
             batch = Batch(
                 product_id=variant.product_id,
                 batch_code=f"ADMIN-{secrets.token_hex(4).upper()}",
                 harvest_date=date.today(),
-                quantity=data.quantity,
+                quantity=quantity,
                 unit=variant.unit if variant.unit != "PACK" else "BOX",
                 status="APPROVED",
             )
@@ -954,7 +962,7 @@ class InventoryService:
         self.apply_movement(
             lot,
             "RECEIPT",
-            data.quantity,
+            quantity,
             admin_user_id,
             reference_type="admin_receive",
             remarks=data.remarks,

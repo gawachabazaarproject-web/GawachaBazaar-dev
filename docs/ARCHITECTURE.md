@@ -1,6 +1,6 @@
 # Gawacha Bazaar - System Architecture
 
-How the whole platform fits together. For *what the product does* see
+How the whole platform fits together. **This overview was corrected against the code on 2026-10-14; the evidence-linked, numbered documentation set starts at [README.md](README.md)** (see [02-architecture/SYSTEM_ARCHITECTURE.md](02-architecture/SYSTEM_ARCHITECTURE.md) and [DATA_FLOW.md](02-architecture/DATA_FLOW.md)). For *what the product does* see
 [FEATURES.md](FEATURES.md); for backend internals see [../backend/README.md](../backend/README.md)
 and [../backend/docs/](../backend/docs).
 
@@ -79,7 +79,7 @@ so a role change applies immediately.
 | Role | Purpose |
 |---|---|
 | `CUSTOMER` | Shops in the app (default for sign-ups) |
-| `WHOLESALER` | Bulk/wholesale buyer |
+| `WHOLESALER` | Bulk/wholesale buyer (role exists; **no route is gated on it** - bulk requests use `CUSTOMER`) |
 | `ADMIN` | Everything |
 | `OPERATIONS` | Inventory, order read, delivery, reports |
 | `HUB_STAFF` | Inventory, order read, delivery assignment |
@@ -91,7 +91,7 @@ Permissions (e.g. `orders.read`, `products.update`, `inventory.adjust`, `ads.man
 Routes use `require_permission("...")` or `require_roles(...)`. The Admin panel keeps a
 mirrored copy in `Admin/lib/permissions.ts` **only to hide UI**; the backend always re-checks.
 
-Admin mutations are written to `admin_action_logs` (viewable in the Audit Log page).
+Admin mutations are written to `admin_action_logs` (47 action names). Nothing reads them generally: only the per-product and per-category activity feeds do, and the Admin "Audit Log" page is a placeholder.
 
 ## 4. Domain model (high level)
 
@@ -133,13 +133,14 @@ REFUND       PENDING_APPROVAL -> APPROVED -> PROCESSING -> REFUNDED
                        \-> REJECTED                        PROCESSING -> FAILED
 ```
 
-Checkout (`POST /cart/checkout`) in one transaction: validates cart and address, **reserves
-stock** (`inventory_reservations`), evaluates the promotion, computes the **delivery fee**,
+Checkout (`POST /cart/checkout`, used for **Cash on Delivery**; bulk conversion has its own routine that reuses the same reservation service) runs in one transaction: validates cart and address, **reserves
+stock** (`inventory_reservations`, 30 minutes), evaluates the promotion, computes the **delivery fee**,
 snapshots lines into `orders`/`order_items`/`order_addresses`, and emits a realtime event.
-Unpaid online orders are **expired** (reservations released) by a background sweep every 120 s.
+Unconfirmed orders are **expired** (reservations released) by a background sweep every 120 s.
+**Online payment for a normal cart is pay-first** (`/payments/online/start|confirm|verify`, `checkout_sessions`): no order exists until Razorpay confirms the capture; if the order then cannot be placed the payment is refunded automatically. The order-first `/payments` flow remains for existing `PENDING` orders (bulk conversions, retry from the order screen).
 
 Payments: Cash on Delivery or Razorpay. For online payments the backend creates a Razorpay
-order, the app opens Checkout, then the result is **verified server-side** (signature) and
+order (from a priced cart in the pay-first flow), the app opens Checkout, then the result is **verified server-side** (signature plus a query to Razorpay) and
 also confirmed by the **Razorpay webhook** (authenticity checked via signature, idempotent via
 `payment_webhook_events`). The app never marks anything paid by itself.
 
@@ -151,7 +152,7 @@ they cannot disagree.
 
 ```
 distinct products in basket >= FREE_DELIVERY_MIN_ITEMS (15)  ->  fee = 0  ("a Bazaar")
-otherwise  fee = ceil( DELIVERY_BASE_FEE (20) + DELIVERY_PER_KM (10) x road_km )
+otherwise  fee = ceil( DELIVERY_BASE_FEE (40) + DELIVERY_PER_KM (10) x road_km )
              road_km capped at DELIVERY_MAX_CHARGED_KM (30)
 ```
 
@@ -198,7 +199,7 @@ renders the permission-filtered sidebar; `lib/realtime-context.tsx` owns the Web
 | Environment | How |
 |---|---|
 | Local | `docker-compose.yml` (Postgres + backend with reload + website) or run each part natively |
-| Production | `docker-compose.prod.yml` on a VPS: Caddy, website, admin, backend, Postgres, `migrate` job, `db-backup`. Runbook: [../deploy/README.md](../deploy/README.md) |
+| Production (**which target is live is unresolved - see [09-deployment-operations/DEPLOYMENT.md](09-deployment-operations/DEPLOYMENT.md)**) | `docker-compose.prod.yml` on a VPS: Caddy, website, admin, backend, Postgres, `migrate` job, `db-backup`. Runbook: [../deploy/README.md](../deploy/README.md) |
 | Kubernetes | Manifests in `k8s/` (namespace, backend and website deployments, services, HPAs, ingress) |
 | CI/CD | `.forgejo/workflows/deploy.yml` builds images on push to `main` |
 

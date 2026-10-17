@@ -3,6 +3,7 @@
 import React, { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
+import { readInitialQuery, useDebounced, useUrlQuerySync } from "@/lib/use-list-query";
 import {
   AdminCategoryListItem,
   CategoryApiError,
@@ -67,7 +68,9 @@ export default function CategoriesPage() {
   const loadedOnce = useRef(false);
   const [error, setError] = useState<string | null>(null);
 
-  const [q, setQ] = useState("");
+  const [q, setQ] = useState(readInitialQuery);
+  const dq = useDebounced(q);
+  useUrlQuerySync((v) => { setQ(v); });
   const [status, setStatus] = useState("");
   const hasFilters = Boolean(q || status);
 
@@ -87,7 +90,7 @@ export default function CategoriesPage() {
       const result = await fetchAdminCategories(token, {
         page: 1,
         page_size: PAGE_SIZE,
-        q: q || undefined,
+        q: dq || undefined,
         status: status || undefined,
       });
       setItems(result.items);
@@ -98,7 +101,7 @@ export default function CategoriesPage() {
       loadedOnce.current = true;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [q, status]);
+  }, [dq, status]);
 
   useEffect(() => {
     load();

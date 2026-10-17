@@ -436,7 +436,7 @@ export default function CheckoutScreen() {
             <View style={styles.promoRow}>
               <View style={styles.promoInputWrapper}>
                 <Feather name="tag" size={18} color={colors.textSecondary} />
-                <TextInput
+                <TextInput maxFontSizeMultiplier={1.15}
                   value={promoInput}
                   onChangeText={(text) => {
                     setPromoInput(text.toUpperCase());

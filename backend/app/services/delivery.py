@@ -3,7 +3,7 @@
 Rule (all values configurable, see app/core/config.py):
   * A basket of FREE_DELIVERY_MIN_ITEMS (15) or more DIFFERENT PRODUCTS - a
     "Bazaar" - ships free.
-  * Anything smaller pays DELIVERY_BASE_FEE (Rs 20) plus DELIVERY_PER_KM
+  * Anything smaller pays DELIVERY_BASE_FEE (Rs 40) plus DELIVERY_PER_KM
     (Rs 10) per km of ROAD distance from the packing point to the delivery
     address (Google Distance Matrix if GOOGLE_MAPS_API_KEY is set, otherwise
     OSRM; if routing is down, straight-line x DELIVERY_ROAD_FACTOR).

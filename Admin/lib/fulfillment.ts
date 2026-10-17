@@ -49,3 +49,59 @@ export function markOutForDelivery(accessToken: string, id: number): Promise<voi
 export function confirmDelivery(accessToken: string, id: number): Promise<void> {
   return post(accessToken, `/${id}/deliver`);
 }
+
+export interface FulfillmentRow {
+  id: number;
+  order_id: number;
+  status: string;
+  delivery_partner_user_id: number | null;
+  inventory_location_id: number | null;
+  assigned_at: string | null;
+  delivered_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface FulfillmentList {
+  items: FulfillmentRow[];
+  page: number;
+  page_size: number;
+  total: number;
+}
+
+export interface FulfillmentOrder {
+  fulfillment_id: number;
+  order_id: number;
+  order_number: string;
+  customer_name: string;
+  total_amount: string;
+  currency: string;
+  payment_method: string | null;
+  payment_status: string | null;
+  items: { id: number; product_name: string; variant_name: string; unit: string; quantity: string }[];
+  address: { address_line_1: string; address_line_2: string | null; city: string; state: string; postal_code: string } | null;
+}
+
+async function get<T>(accessToken: string, path: string): Promise<T> {
+  const response = await fetch(`${API_BASE_URL}/fulfillments${path}`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!response.ok) {
+    const payload = await response.json().catch(() => null);
+    throw new FulfillmentApiError(response.status, payload?.message ?? "Unable to load deliveries.");
+  }
+  return response.json() as Promise<T>;
+}
+
+export function fetchFulfillments(
+  accessToken: string,
+  params: { status?: string; page: number; page_size: number },
+): Promise<FulfillmentList> {
+  const qs = new URLSearchParams({ page: String(params.page), page_size: String(params.page_size) });
+  if (params.status) qs.set("status", params.status);
+  return get<FulfillmentList>(accessToken, `?${qs.toString()}`);
+}
+
+export function fetchFulfillmentOrder(accessToken: string, id: number): Promise<FulfillmentOrder> {
+  return get<FulfillmentOrder>(accessToken, `/${id}/order`);
+}

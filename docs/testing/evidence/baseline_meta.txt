@@ -1,0 +1,5 @@
+start 2026-10-13T21:36:21Z
+cmd: TEST_DATABASE_URL=<local 127.0.0.1:15432/gawachabazaar_test> venv/Scripts/python.exe -u -m pytest -p no:cacheprovider -v --durations=15 --junitxml=docs/testing/evidence/baseline_junit.xml
+exit_code 0
+duration_seconds 543
+end 2026-10-13T21:45:25Z
