@@ -246,7 +246,8 @@ class FirebaseAdminGateway(FirebaseGateway):
                 # token signature was already verified.
                 logger.warning("FIREBASE_REVOCATION_CHECK_FAILED: %s", type(exc).__name__)
                 return
-            valid_after = int(getattr(record, "tokens_valid_after_timestamp", 0) or 0)
+            # firebase_admin reports this in MILLISECONDS; token `iat` is in seconds.
+            valid_after = int(getattr(record, "tokens_valid_after_timestamp", 0) or 0) // 1000
             cached = (now, valid_after, bool(record.disabled))
             if len(self._revocation_cache) > 5000:
                 self._revocation_cache.clear()
