@@ -174,3 +174,24 @@ def test_firebase_uses_render_secret_file_when_env_is_empty(monkeypatch, tmp_pat
 
     assert firebase.FirebaseAdminGateway()._get_app() == "app"
     assert loaded == [str(key_file)]
+
+
+def test_revocation_check_compares_seconds_to_milliseconds_correctly(monkeypatch) -> None:
+    """firebase_admin returns tokens_valid_after_timestamp in ms; a token issued after
+    that moment must NOT be treated as revoked (regression: every sign-in was rejected)."""
+    from firebase_admin import auth
+
+    from app.core.firebase import FirebaseAdminGateway, FirebaseTokenError
+
+    class _Record:
+        disabled = False
+        tokens_valid_after_timestamp = 1_700_000_000 * 1000  # ms
+
+    monkeypatch.setattr(auth, "get_user", lambda uid, app=None: _Record())
+    gateway = FirebaseAdminGateway()
+    gateway._revocation_cache = {}
+
+    gateway._assert_not_revoked({"uid": "u1", "iat": 1_700_000_500}, app=None)  # issued after: fine
+    gateway._revocation_cache = {}
+    with pytest.raises(FirebaseTokenError):
+        gateway._assert_not_revoked({"uid": "u1", "iat": 1_699_999_000}, app=None)  # before: revoked
