@@ -674,7 +674,11 @@ class PaymentService:
         webhook_event.status = "PROCESSED"
         webhook_event.processed_at = datetime.now(UTC)
         session_id = session.id
-        sessions.complete_from_webhook(session_id)  # commits (event row included)
+        # Commits (event row included) when the order is placed or refunded. If
+        # Razorpay cannot confirm the capture yet (GatewayError /
+        # PaymentNotConfirmedError) it ROLLS BACK instead, which removes the
+        # dedup row so Razorpay's retry of this same event is processed (PAY-004).
+        sessions.complete_from_webhook(session_id)
         self.db.commit()
         logger.info(
             "PAYMENT_WEBHOOK_CHECKOUT_SESSION: gateway=%s event_id=%s session_id=%s",

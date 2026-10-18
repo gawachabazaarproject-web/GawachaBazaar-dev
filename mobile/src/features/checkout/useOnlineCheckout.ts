@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { paymentApi, toApiError } from "@/api";
 import { OnlineCheckoutCompleteResponse, OnlineCheckoutResponse, RazorpaySuccessPayload } from "@/types/api";
+import { forgetPendingCheckout, isUnknownOutcome, rememberPendingCheckout } from "./pendingCheckout";
 
 /** The backend has not seen the capture yet (Razorpay can lag a moment). */
 const NOT_CONFIRMED = "PAYMENT_NOT_CONFIRMED";
@@ -44,7 +45,11 @@ export function useOnlineCheckout() {
     setError(null);
     setBusy(true);
     try {
-      setCheckout(await paymentApi.startOnline(addressId, promoCode));
+      const started = await paymentApi.startOnline(addressId, promoCode);
+      // Remember it before the sheet opens: if the app dies mid-payment the
+      // next launch re-checks this session (see usePendingPaymentResume).
+      await rememberPendingCheckout(started.session_id);
+      setCheckout(started);
     } catch (err) {
       setError(toApiError(err).message);
     } finally {
@@ -61,15 +66,23 @@ export function useOnlineCheckout() {
     try {
       for (let attempt = 1; ; attempt++) {
         try {
-          return await paymentApi.confirmOnline(current.session_id, payload);
+          const done = await paymentApi.confirmOnline(current.session_id, payload);
+          await forgetPendingCheckout();
+          return done;
         } catch (err) {
           const apiErr = toApiError(err);
-          if (apiErr.code !== NOT_CONFIRMED) throw err;
+          // Razorpay already reported success, so "not confirmed yet", offline,
+          // timeouts, 5xx and an expired sign-in all mean "unknown", never
+          // "failed": keep trying, then hand over to the background re-check.
+          if (apiErr.code !== NOT_CONFIRMED && !isUnknownOutcome(apiErr)) throw err;
           if (attempt >= CONFIRM_ATTEMPTS) return "pending";
           await sleep(CONFIRM_RETRY_MS);
         }
       }
     } catch (err) {
+      // A definite answer from the backend (e.g. refunded because the order
+      // could not be placed) - show its message.
+      await forgetPendingCheckout();
       setError(toApiError(err).message);
       return null;
     } finally {
@@ -84,10 +97,19 @@ export function useOnlineCheckout() {
     if (!current) return null;
     setBusy(true);
     try {
-      return await paymentApi.verifyOnline(current.session_id);
-    } catch {
-      // Not paid (the normal "customer closed the sheet" case) or unknown:
-      // either way nothing was charged that we know of, and no order exists.
+      const done = await paymentApi.verifyOnline(current.session_id);
+      await forgetPendingCheckout();
+      return done;
+    } catch (err) {
+      const apiErr = toApiError(err);
+      if (apiErr.code === NOT_CONFIRMED) return null; // the normal "closed the sheet" case; stays remembered
+      if (isUnknownOutcome(apiErr)) {
+        // We could not ask: do not pretend nothing happened.
+        setError("We couldn't check your payment just now. If money was deducted, your order will appear in Orders shortly.");
+      } else {
+        await forgetPendingCheckout();
+        setError(apiErr.message);
+      }
       return null;
     } finally {
       setBusy(false);

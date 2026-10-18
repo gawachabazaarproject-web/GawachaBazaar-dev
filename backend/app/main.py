@@ -20,8 +20,10 @@ from app.core.request_id import RequestIDMiddleware
 from app.core.security_headers import SecurityHeadersMiddleware
 from app.db.session import SessionLocal
 from app.dependencies.database import get_db
+from app.dependencies.payments import get_payment_gateway
 from app.exceptions.handlers import register_exception_handlers
 from app.schemas.base import DatabaseHealthResponse, HealthResponse
+from app.services.checkout_session import CheckoutSessionService
 from app.services.inventory_reservation import InventoryReservationService
 
 # No Celery/APScheduler exists in this codebase - this is the smallest
@@ -45,6 +47,35 @@ async def _reservation_expiry_sweep_loop() -> None:
                 logger.info("INVENTORY_RESERVATION_SWEEP: expired_count=%s", count)
         except Exception:
             logger.exception("INVENTORY_RESERVATION_SWEEP_LOOP_ERROR")
+        finally:
+            db.close()
+
+
+# Paid-but-no-order safety net (PAY-005): re-asks Razorpay about recent pending
+# online checkouts the webhook and the app both missed. Same in-process
+# single-worker pattern as the reservation sweep; duplicates are harmless.
+CHECKOUT_RECONCILE_INTERVAL_SECONDS = 300
+
+
+def _run_checkout_reconcile(db: Session) -> int:
+    gateway = get_payment_gateway()
+    if not gateway.is_configured:
+        return 0
+    service = CheckoutSessionService(db, gateway)
+    now = datetime.now(UTC)
+    return service.reconcile_pending(now=now) + service.retry_failed_refunds(now=now)
+
+
+async def _checkout_reconcile_loop() -> None:
+    while True:
+        await asyncio.sleep(CHECKOUT_RECONCILE_INTERVAL_SECONDS)
+        db = SessionLocal()
+        try:
+            count = await asyncio.to_thread(_run_checkout_reconcile, db)
+            if count:
+                logger.warning("CHECKOUT_RECONCILE_SWEEP: settled_count=%s", count)
+        except Exception:
+            logger.exception("CHECKOUT_RECONCILE_LOOP_ERROR")
         finally:
             db.close()
 
@@ -85,12 +116,14 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             "with UPLOADS_NOT_CONFIGURED."
         )
     sweep_task = asyncio.create_task(_reservation_expiry_sweep_loop())
+    reconcile_task = asyncio.create_task(_checkout_reconcile_loop())
     yield
-    sweep_task.cancel()
-    try:
-        await sweep_task
-    except asyncio.CancelledError:
-        pass
+    for task in (sweep_task, reconcile_task):
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
     logger.info("Shutting down %s", settings.APP_NAME)
 
 

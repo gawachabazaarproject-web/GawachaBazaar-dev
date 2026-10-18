@@ -15,6 +15,7 @@ import hmac
 import json
 import re
 import secrets
+import time
 from decimal import Decimal
 
 import httpx
@@ -58,6 +59,11 @@ class FakeRazorpay:
         self.requests: list[httpx.Request] = []
         self.refund_status = "processed"
         self.next_error: httpx.Response | Exception | None = None
+        # Refund-call faults: fail the next refund before Razorpay sees it, or let
+        # Razorpay process it and then lose the reply (the dangerous case).
+        self.refund_error: httpx.Response | Exception | None = None
+        self.refund_reply_lost = False
+        self.order_delay_seconds = 0.0  # widen the race window for concurrency tests
 
     def handler(self, request: httpx.Request) -> httpx.Response:
         self.requests.append(request)
@@ -69,6 +75,8 @@ class FakeRazorpay:
 
         path = request.url.path
         if request.method == "POST" and path == "/v1/orders":
+            if self.order_delay_seconds:
+                time.sleep(self.order_delay_seconds)
             body = json.loads(request.content)
             order = {
                 "id": f"order_{secrets.token_hex(7)}", "entity": "order",
@@ -95,12 +103,24 @@ class FakeRazorpay:
 
         m = re.fullmatch(r"/v1/payments/([\w]+)/refund", path)
         if m and request.method == "POST":
+            if self.refund_error is not None:
+                error, self.refund_error = self.refund_error, None
+                if isinstance(error, Exception):
+                    raise error
+                return error
             body = json.loads(request.content)
             refund = {
                 "id": f"rfnd_{secrets.token_hex(7)}", "payment_id": m.group(1),
                 "amount": body["amount"], "status": self.refund_status,
             }
             self.refunds.append(refund)
+            for items in self.payments.values():
+                for payment in items:
+                    if payment["id"] == m.group(1):
+                        payment["status"] = "refunded"
+            if self.refund_reply_lost:
+                self.refund_reply_lost = False
+                raise httpx.ReadTimeout("reply lost", request=request)
             return httpx.Response(200, json=refund)
 
         return httpx.Response(404, json={"error": {"description": "not found"}})

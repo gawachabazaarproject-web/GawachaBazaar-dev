@@ -9,10 +9,12 @@ import threading
 
 import httpx
 from sqlalchemy import delete, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
 from app.core.logging import logger
 from app.db.session import SessionLocal
+from app.models.notification_event import NotificationEvent
 from app.models.push_token import PushToken
 
 EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send"
@@ -26,6 +28,7 @@ _MESSAGES: dict[tuple[str, str], tuple[str, str]] = {
     ("fulfillment", "PACKED"): ("Order packed", "Your order #{id} is packed and almost ready."),
     ("fulfillment", "OUT_FOR_DELIVERY"): ("Out for delivery", "Your order #{id} is on its way."),
     ("payment", "PAID"): ("Payment received", "Payment for order #{id} was successful."),
+    ("refund", "APPROVED"): ("Refund approved", "Your refund for order #{id} is approved and will be processed shortly."),
     ("refund", "REFUNDED"): ("Refund processed", "Your refund for order #{id} has been processed."),
 }
 
@@ -46,9 +49,45 @@ def unregister_token(db: Session, user_id: int, token: str) -> None:
     db.commit()
 
 
-def _send(user_id: int, title: str, body: str, data: dict) -> None:
+# (resource, status) -> stable event type the app routes on. Keep in sync with
+# mobile/src/features/notifications/notificationRouting.ts.
+_EVENT_TYPES: dict[tuple[str, str], str] = {
+    ("order", "PENDING"): "ORDER_PLACED",
+    ("order", "CONFIRMED"): "ORDER_CONFIRMED",
+    ("order", "CANCELLED"): "ORDER_CANCELLED",
+    ("order", "COMPLETED"): "ORDER_DELIVERED",
+    ("fulfillment", "PACKED"): "ORDER_PACKED",
+    ("fulfillment", "OUT_FOR_DELIVERY"): "OUT_FOR_DELIVERY",
+    ("payment", "PAID"): "PAYMENT_RECEIVED",
+    ("refund", "APPROVED"): "REFUND_INITIATED",
+    ("refund", "REFUNDED"): "REFUND_COMPLETED",
+}
+
+
+def _claim_event(db: Session, dedupe_key: str, user_id: int, event_type: str) -> bool:
+    """Record the event; False if it was already recorded (duplicate -> do not send)."""
+    claimed = db.scalar(
+        pg_insert(NotificationEvent)
+        .values(dedupe_key=dedupe_key, user_id=user_id, event_type=event_type)
+        .on_conflict_do_nothing(index_elements=["dedupe_key"])
+        .returning(NotificationEvent.id)
+    )
+    db.commit()
+    return claimed is not None
+
+
+def _send(
+    user_id: int,
+    title: str,
+    body: str,
+    data: dict,
+    dedupe_key: str | None = None,
+) -> None:
     db = SessionLocal()
     try:
+        if dedupe_key is not None and not _claim_event(db, dedupe_key, user_id, str(data.get("type", ""))):
+            logger.info("PUSH_DUPLICATE_SKIPPED: user_id=%s key=%s", user_id, dedupe_key)
+            return
         tokens = list(db.scalars(select(PushToken.token).where(PushToken.user_id == user_id)))
         if not tokens:
             # Nothing registered for this user: the app never reached POST /push-tokens.
@@ -88,8 +127,11 @@ def notify_user_status(*, resource: str, order_id: int, user_id: int, new_status
     if msg is None:
         return
     title, body = msg
+    event_type = _EVENT_TYPES[(resource, new_status)]
+    # `orderId` stays for already-installed app versions; `type` drives newer ones.
+    data = {"type": event_type, "orderId": order_id}
     threading.Thread(
         target=_send,
-        args=(user_id, title, body.format(id=order_id), {"orderId": order_id}),
+        args=(user_id, title, body.format(id=order_id), data, f"{resource}:{order_id}:{new_status}"),
         daemon=True,
     ).start()
