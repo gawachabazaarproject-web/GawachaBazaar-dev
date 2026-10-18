@@ -69,6 +69,8 @@ This documentation set (the numbered folders under `docs/`) was created on 2026-
 
 The latest EAS OTA update availability was **not** checked; the installed APK listens on channel `preview`, runtime `1.0.0`.
 
+**2026-10-18 push work (uncommitted):** `notification_events` model + migration `c3d5e7f9a1b2`, `services/push.py` (de-dupe + `type`), `tests/test_push_send.py` (+3 tests), `mobile/src/features/notifications/{notificationRouting.ts,usePushNotifications.ts}`, `docs/notifications/`, regenerated `DATABASE_SCHEMA.md`. Real-device delivery **not** verified. See [`../notifications/`](../notifications/README.md).
+
 ## 6. Recommended next steps (grounded in the findings above)
 
 1. Rotate the committed key (SECR-1) and confirm Render's production variables (CFG-1, FEE-1/O-3).

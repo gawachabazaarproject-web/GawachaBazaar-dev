@@ -44,14 +44,15 @@ import httpx  # noqa: E402
 from sqlalchemy.orm import sessionmaker  # noqa: E402
 
 BACKEND = Path(__file__).resolve().parents[2]
-EVIDENCE = BACKEND.parent / "docs" / "testing" / "evidence" / "performance"
+EVIDENCE = Path(os.environ.get("PERF_EVIDENCE_DIR") or BACKEND.parent / "docs" / "testing" / "evidence" / "performance")
 EVIDENCE.mkdir(parents=True, exist_ok=True)
 PORT = 18010
 BASE = f"http://127.0.0.1:{PORT}/api/v1"
 ENGINE = create_engine(URL)
 LEVELS = [int(x) for x in os.environ.get("PERF_LEVELS", "10,25,50,100").split(",")]
 DURATION = int(os.environ.get("PERF_SECONDS", "45"))
-N_CUSTOMERS = 100
+N_CUSTOMERS = int(os.environ.get("PERF_CUSTOMERS", "100"))
+NO_STOP = os.environ.get("PERF_NO_STOP") == "1"  # keep escalating past the stop rule
 
 
 def guarded(sql: str) -> None:
@@ -121,7 +122,9 @@ class Stats:
 async def vu(idx: int, cust: dict, products: list[int], stop_at: float, st: Stats, start_delay: float) -> None:
     headers = {"Authorization": f"Bearer mp.{cust['uid']}"}
     rng = random.Random(idx)
-    async with httpx.AsyncClient(base_url=BASE, timeout=30, limits=httpx.Limits(max_connections=4)) as cl:
+    # verify=False: plain http to localhost - skips building an SSL context per virtual user,
+    # which on Windows starves the generator itself at a few hundred users.
+    async with httpx.AsyncClient(base_url=BASE, timeout=30, verify=False, limits=httpx.Limits(max_connections=4)) as cl:
 
         async def call(name, method, url, **kw):
             t_abs, t0 = time.time(), time.perf_counter()
@@ -322,7 +325,9 @@ def main() -> None:
             print(f"[{n:>3} VU] rps={lvl['rps']} p50={lvl['overall_ms']['p50']}ms p95={lvl['overall_ms']['p95']}ms "
                   f"p99={lvl['overall_ms']['p99']}ms err={lvl['error_rate_pct']}% cpu={lvl['server_cpu_cores_avg']} "
                   f"rss={lvl['server_rss_mb_max']}MB dbconn={lvl['db_connections_max']} integrity={lvl['integrity']['ok']}", flush=True)
-            if lvl["error_rate_pct"] > 5 or (lvl["overall_ms"]["p99"] or 0) > 8000 or lvl["overall_ms"]["p99"] is None or not lvl["integrity"]["ok"]:
+            stop = (lvl["error_rate_pct"] > 5 or (lvl["overall_ms"]["p99"] or 0) > 8000
+                    or lvl["overall_ms"]["p99"] is None or not lvl["integrity"]["ok"])
+            if stop and not NO_STOP:
                 results["stopped_early"] = f"stop rule hit at {n} VUs"
                 print("STOP RULE HIT:", results["stopped_early"], flush=True)
                 break

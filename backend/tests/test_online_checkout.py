@@ -11,6 +11,7 @@ from decimal import Decimal
 from sqlalchemy.orm import Session
 from starlette.testclient import TestClient
 
+from app.core.config import settings
 from app.models.cart import Cart
 from app.models.checkout_session import CheckoutSession
 from app.models.inventory_lot import InventoryLot
@@ -23,6 +24,13 @@ from tests.test_razorpay_payments import (  # noqa: F401 - razorpay is a pytest 
     _webhook,
     razorpay,
 )
+
+# 2 x Rs 25 basket + the configured base delivery fee (the test addresses have no
+# coordinates, so no per-km charge) - follows DELIVERY_BASE_FEE instead of a literal.
+BASKET_TOTAL = Decimal("50.00") + settings.DELIVERY_BASE_FEE
+BASKET_TOTAL_MINOR = int(BASKET_TOTAL * 100)
+PROMO_TOTAL = BASKET_TOTAL - Decimal("5.00")  # 10% off the Rs 50 subtotal
+PROMO_TOTAL_MINOR = int(PROMO_TOTAL * 100)
 
 
 def _basket(client: TestClient, db_session: Session, tag: str, quantity: str = "2"):
@@ -58,10 +66,10 @@ def test_start_opens_razorpay_without_creating_an_order(
     assert response.status_code == 200, response.text
     body = response.json()
     # 2 x 25.00 + Rs 20 base delivery (one product, not a 15-product Bazaar).
-    assert Decimal(body["amount"]) == Decimal("70.00")
-    assert body["amount_minor"] == 7000
+    assert Decimal(body["amount"]) == BASKET_TOTAL
+    assert body["amount_minor"] == BASKET_TOTAL_MINOR
     assert body["gateway_order_id"] in razorpay.orders
-    assert razorpay.orders[body["gateway_order_id"]]["amount"] == 7000
+    assert razorpay.orders[body["gateway_order_id"]]["amount"] == BASKET_TOTAL_MINOR
 
     db_session.expire_all()
     assert db_session.query(Order).count() == 0  # nothing placed yet
@@ -94,8 +102,8 @@ def test_confirm_after_payment_places_the_paid_confirmed_order(
     assert response.status_code == 200, response.text
     body = response.json()
     assert body["order"]["status"] == "CONFIRMED"
-    assert body["order"]["total_amount"] == "70.00"
-    assert body["order"]["delivery_fee"] == "20.00"
+    assert Decimal(body["order"]["total_amount"]) == BASKET_TOTAL
+    assert Decimal(body["order"]["delivery_fee"]) == settings.DELIVERY_BASE_FEE
     assert body["payment"]["status"] == "PAID"
     assert body["payment"]["payment_method"] == "UPI"
 
@@ -237,7 +245,7 @@ def test_paid_but_out_of_stock_is_refunded_and_no_order_is_placed(
     assert response.status_code == 409
     assert "refunded" in response.json()["message"].lower()
     assert len(razorpay.refunds) == 1
-    assert razorpay.refunds[0]["amount"] == 7000
+    assert razorpay.refunds[0]["amount"] == BASKET_TOTAL_MINOR
     db_session.expire_all()
     assert db_session.query(Order).count() == 0
     assert db_session.query(CheckoutSession).one().status == "REFUNDED"
@@ -327,13 +335,13 @@ def test_promo_code_discount_is_what_razorpay_is_asked_to_charge(
         headers=headers,
     ).json()
 
-    # 50.00 - 5.00 (10%) + Rs 20 delivery = 65.00
-    assert Decimal(started["amount"]) == Decimal("65.00")
-    assert razorpay.orders[started["gateway_order_id"]]["amount"] == 6500
+    # 50.00 - 5.00 (10%) + the base delivery fee
+    assert Decimal(started["amount"]) == PROMO_TOTAL
+    assert razorpay.orders[started["gateway_order_id"]]["amount"] == PROMO_TOTAL_MINOR
 
     done = _pay_and_confirm(client, razorpay, headers, started).json()
     assert done["order"]["discount_amount"] == "5.00"
-    assert done["order"]["total_amount"] == "65.00"
+    assert Decimal(done["order"]["total_amount"]) == PROMO_TOTAL
     assert done["order"]["applied_promo_code"] == "TEN"
 
 
