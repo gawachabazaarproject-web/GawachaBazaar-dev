@@ -195,3 +195,22 @@ def test_revocation_check_compares_seconds_to_milliseconds_correctly(monkeypatch
     gateway._revocation_cache = {}
     with pytest.raises(FirebaseTokenError):
         gateway._assert_not_revoked({"uid": "u1", "iat": 1_699_999_000}, app=None)  # before: revoked
+
+
+def test_receipt_error_is_logged_and_dead_token_removed(db_session: Session, monkeypatch, captured) -> None:
+    user, _ = _customer(db_session, "PS9")
+    _register(db_session, user.id)
+    receipts = {"data": {"t1": {"status": "error", "message": "bad key", "details": {"error": "InvalidCredentials"}}}}
+    monkeypatch.setattr(httpx, "post", lambda *a, **k: _Resp(receipts))
+
+    push._check_receipts(user.id, {"t1": TOKEN})
+
+    assert any("PUSH_RECEIPT_ERROR" in m and "InvalidCredentials" in m for _l, m in captured)
+    db_session.expire_all()
+    assert db_session.query(PushToken).count() == 1  # credentials problem keeps the token
+
+    gone = {"data": {"t1": {"status": "error", "message": "gone", "details": {"error": "DeviceNotRegistered"}}}}
+    monkeypatch.setattr(httpx, "post", lambda *a, **k: _Resp(gone))
+    push._check_receipts(user.id, {"t1": TOKEN})
+    db_session.expire_all()
+    assert db_session.query(PushToken).count() == 0
