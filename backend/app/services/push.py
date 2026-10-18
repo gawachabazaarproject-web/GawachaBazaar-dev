@@ -12,12 +12,17 @@ from sqlalchemy import delete, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.core.logging import logger
 from app.db.session import SessionLocal
 from app.models.notification_event import NotificationEvent
 from app.models.push_token import PushToken
 
 EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send"
+EXPO_RECEIPTS_URL = "https://exp.host/--/api/v2/push/getReceipts"
+# Expo's ticket only means "queued"; delivery problems (e.g. missing FCM credentials)
+# appear later in the receipt, so check it once after a short delay.
+_RECEIPT_DELAY_SECONDS = 45
 
 # (resource, status) -> (title, body). Only customer-meaningful transitions.
 _MESSAGES: dict[tuple[str, str], tuple[str, str]] = {
@@ -100,8 +105,11 @@ def _send(
         resp = httpx.post(EXPO_PUSH_URL, json=messages, timeout=10)
         resp.raise_for_status()
         dead: list[str] = []
+        ticket_ids: dict[str, str] = {}
         for token, ticket in zip(tokens, resp.json().get("data", []), strict=False):
             if ticket.get("status") != "error":
+                if ticket.get("id"):
+                    ticket_ids[ticket["id"]] = token
                 continue
             error = (ticket.get("details") or {}).get("error")
             # Surface Expo's reason (e.g. InvalidCredentials / MismatchSenderId when FCM credentials
@@ -116,8 +124,41 @@ def _send(
         if dead:
             db.execute(delete(PushToken).where(PushToken.token.in_(dead)))
             db.commit()
+        if ticket_ids:
+            logger.info("PUSH_ACCEPTED_BY_EXPO: user_id=%s tickets=%s", user_id, len(ticket_ids))
+            if not settings.is_testing:
+                timer = threading.Timer(_RECEIPT_DELAY_SECONDS, _check_receipts, args=(user_id, ticket_ids))
+                timer.daemon = True
+                timer.start()
     except Exception:  # noqa: BLE001 - push is best-effort
         logger.exception("PUSH_SEND_FAILED: user_id=%s", user_id)
+    finally:
+        db.close()
+
+
+def _check_receipts(user_id: int, ticket_ids: dict[str, str]) -> None:
+    """Log Expo's delivery receipts (never raises). A DeviceNotRegistered receipt drops the token."""
+    db = SessionLocal()
+    try:
+        resp = httpx.post(EXPO_RECEIPTS_URL, json={"ids": list(ticket_ids)}, timeout=10)
+        resp.raise_for_status()
+        receipts = resp.json().get("data", {}) or {}
+        dead: list[str] = []
+        for ticket_id, receipt in receipts.items():
+            if receipt.get("status") == "ok":
+                logger.info("PUSH_RECEIPT_OK: user_id=%s", user_id)
+                continue
+            error = (receipt.get("details") or {}).get("error")
+            logger.warning(
+                "PUSH_RECEIPT_ERROR: user_id=%s error=%s message=%s", user_id, error, receipt.get("message")
+            )
+            if error == "DeviceNotRegistered" and ticket_id in ticket_ids:
+                dead.append(ticket_ids[ticket_id])
+        if dead:
+            db.execute(delete(PushToken).where(PushToken.token.in_(dead)))
+            db.commit()
+    except Exception:  # noqa: BLE001 - diagnostics only
+        logger.exception("PUSH_RECEIPT_CHECK_FAILED: user_id=%s", user_id)
     finally:
         db.close()
 
