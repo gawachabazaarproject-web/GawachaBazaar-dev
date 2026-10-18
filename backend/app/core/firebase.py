@@ -19,6 +19,10 @@ from dataclasses import dataclass
 from app.core.config import settings
 from app.core.logging import logger
 
+# Where Render mounts a Secret File called google-services-account.json. Used only when
+# FIREBASE_SERVICE_ACCOUNT_JSON is empty, so local development is unaffected.
+RENDER_SECRET_FILE = "/etc/secrets/google-services-account.json"
+
 
 @dataclass(frozen=True)
 class FirebaseIdentity:
@@ -133,6 +137,9 @@ class FirebaseAdminGateway(FirebaseGateway):
 
             credential = None
             raw_cred = (settings.FIREBASE_SERVICE_ACCOUNT_JSON or "").strip()
+            if not raw_cred and os.path.isfile(RENDER_SECRET_FILE):
+                # Render "Secret File" named google-services-account.json: no env var needed.
+                raw_cred = RENDER_SECRET_FILE
             if raw_cred:
                 if os.path.isfile(raw_cred):
                     try:

@@ -49,7 +49,7 @@ Payment: `PENDING → PROCESSING → PAID` (terminal); `PROCESSING → FAILED | 
 | Customer paid but the app never called back | Webhook (if delivered) or `/verify` completes it; otherwise **only a log line** exists | `complete_from_webhook`, no reconciliation job |
 | Money captured for a payment/session nothing matches | `PAYMENT_WEBHOOK_UNKNOWN_REFERENCE` logged, event `FAILED`, **no refund, no alert** | `process_webhook` |
 | Pay-first order cannot be placed | Automatic refund; if the refund call fails the session becomes `REFUND_FAILED` and `PAYMENT_RECONCILIATION` is logged for manual handling | `_refund_and_fail` |
-| Latest cart already ordered another way (COD) when a pay-first payment completes | **Defect PAY-001:** payment attached to the existing order, no refund | `test_money_integrity.py::…refunded_not_attached` (strict `xfail`) |
+| Latest cart already ordered another way (COD, or another paid session) when a pay-first payment completes | PAY-001 fix (2026-10-18, tested): refunded, not attached; session `REFUNDED` | `test_money_integrity.py`, `test_online_checkout.py` |
 | Two customers pay for the last unit | One order, one automatic refund | `test_two_customers_paying_for_the_last_unit_one_order_one_refund` |
 
 ## Cash on Delivery
@@ -66,7 +66,7 @@ No gateway, no transaction row at confirmation. At delivery `_collect_cod_paymen
 
 ## Known gaps
 
-- PAY-001 open; no automatic reconciliation of unmatched captures; no alerting on the reconciliation log markers.
+- PAY-001 fixed (2026-10-18). Paid-but-no-order checkouts are now re-checked by a 5-minute in-process sweep (sessions 2 min to 2 h old) and by `start` when it reuses a session (PAY-005, backend part). The app now remembers the session id (`pendingCheckout.ts`) and re-checks it on launch and resume (`usePendingPaymentResume`, mounted in the tabs layout); after a Razorpay success callback offline/5xx/401 errors show "confirming", not an error (unverified on a device). Still open: captures that match no session or payment, and no alerting on the reconciliation log markers.
 - `payment_method` is `UPI` for cards/netbanking/wallets too (naming debt). **PNB leftovers:** `payment_gateway.py` still contains a deliberately incomplete, **unwired** `PNBGateway` placeholder adapter (every call raises "PNB merchant API contract … not yet available"), several comments mention PNB, and `test_phase_14_payments.py` subclasses it as `FakePNBGateway`. The live gateway is `RazorpayGateway` (`dependencies/payments.py`). The adapter's docstring points to `docs/architecture/PHASE_14_PAYMENTS.md`, which does not exist in `backend/docs/`.
 - Razorpay live-mode behaviour, payment-link flows, partial refunds and multi-capture were not examined.
 - The order-first and pay-first paths duplicate some logic; changes to one must be mirrored.

@@ -7,6 +7,7 @@ import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 import { Text } from "@/components/Text";
+import { usePendingPaymentResume } from "@/features/checkout/usePendingPaymentResume";
 import { colors, spacing, timings } from "@/theme";
 
 const ICONS: Record<string, keyof typeof Feather.glyphMap> = {
@@ -95,6 +96,7 @@ function TabBarItem({
 }
 
 export default function TabsLayout() {
+  usePendingPaymentResume();
   return (
     <Tabs tabBar={(props) => <CustomTabBar {...props} />} screenOptions={{ headerShown: false }}>
       <Tabs.Screen name="index" />

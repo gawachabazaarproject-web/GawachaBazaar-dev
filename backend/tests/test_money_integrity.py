@@ -12,7 +12,6 @@ Assertions are business rules, not implementation details:
 from concurrent.futures import ThreadPoolExecutor
 from decimal import Decimal
 
-import pytest
 from sqlalchemy.orm import Session
 from starlette.testclient import TestClient
 
@@ -52,16 +51,6 @@ def _lot_state(db: Session):
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "DEFECT PAY-001 (confirmed, unfixed): CheckoutSessionService._finalize ignores the `created` flag of "
-        "OrderService.checkout, so a captured online payment is marked COMPLETED against an unrelated "
-        "already-existing order (here a COD order) with no Payment row and no refund. See "
-        "docs/testing/DEFECT_LOG.md. Remove this marker when fixed - strict=True makes the suite fail "
-        "the moment the defect disappears, forcing the marker's removal."
-    ),
-)
 def test_online_payment_for_a_basket_already_ordered_by_cod_is_refunded_not_attached(
     client: TestClient, db_session: Session, razorpay: FakeRazorpay
 ) -> None:
@@ -99,7 +88,7 @@ def test_online_payment_for_a_basket_already_ordered_by_cod_is_refunded_not_atta
         f"captured online payment kept and attached to the COD order "
         f"(response={response.status_code}, session={session.status}, refunded_minor={refunded_minor})"
     )
-    assert refunded_minor in (0, 7000)
+    assert refunded_minor in (0, started["amount_minor"])
 
 
 # ---------------------------------------------------------------------------
