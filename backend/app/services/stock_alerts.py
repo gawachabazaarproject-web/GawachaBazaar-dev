@@ -6,12 +6,11 @@ dashboard's Low stock card and the Admin's header alerts, so both always agree.
 from dataclasses import dataclass
 from decimal import Decimal
 
-from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.models.inventory_lot import InventoryLot
 from app.models.product import Product
 from app.models.product_variant import ProductVariant
+from app.services.stock_pool import available_packs_by_variant
 from app.services.stock_levels import (
     ALERT_LEVELS,
     BELOW,
@@ -31,16 +30,18 @@ class StockAlert:
     product_name: str
     variant_name: str
     unit: str
-    available: Decimal
+    pack_quantity: Decimal  # size of one pack, in `unit`
+    available: Decimal  # whole packs this size can sell
     reserve_level: Decimal  # the reserve in force (own setting, else the default)
     level: str  # OUT / BELOW / NEAR
 
 
 def list_stock_alerts(db: Session) -> list[StockAlert]:
-    """Per ACTIVE variant of an ACTIVE product, available stock summed across
-    its active lots (a variant with no stock record counts as 0), most urgent
-    first. One nearly-empty lot is not an alert if another lot is full."""
-    available = func.coalesce(func.sum(InventoryLot.quantity - InventoryLot.reserved_quantity), 0)
+    """Per ACTIVE variant of an ACTIVE product, the packs it can actually
+    sell: its own assigned share plus the product's shared stock (see
+    app/services/stock_pool.py), the same number the product page and the app
+    use - so a size that still sells from the shared pool is never reported
+    as out of stock. A variant with no stock counts as 0. Most urgent first."""
     rows = (
         db.query(
             Product.id,
@@ -48,30 +49,23 @@ def list_stock_alerts(db: Session) -> list[StockAlert]:
             Product.name,
             ProductVariant.name,
             ProductVariant.unit,
+            ProductVariant.quantity,
             ProductVariant.reserve_level,
-            available,
         )
         .select_from(ProductVariant)
         .join(Product, Product.id == ProductVariant.product_id)
-        .outerjoin(
-            InventoryLot,
-            (InventoryLot.variant_id == ProductVariant.id) & (InventoryLot.status != "INACTIVE"),
-        )
         .filter(ProductVariant.status == "ACTIVE", Product.status == "ACTIVE")
-        .group_by(
-            Product.id, ProductVariant.id, Product.name, ProductVariant.name, ProductVariant.unit,
-            ProductVariant.reserve_level,
-        )
         .all()
     )
+    packs = available_packs_by_variant(db, [r[1] for r in rows])
     alerts: list[StockAlert] = []
-    for product_id, variant_id, product_name, variant_name, unit, reserve, avail in rows:
-        avail = max(Decimal(avail), Decimal("0"))
+    for product_id, variant_id, product_name, variant_name, unit, quantity, reserve in rows:
+        avail = max(packs.get(variant_id, Decimal("0")), Decimal("0"))
         level = stock_level(avail, reserve)
         if level in ALERT_LEVELS:
             alerts.append(
                 StockAlert(
-                    product_id, variant_id, product_name, variant_name, unit, avail,
+                    product_id, variant_id, product_name, variant_name, unit, quantity, avail,
                     effective_reserve(reserve), level,
                 )
             )

@@ -35,6 +35,8 @@ class DashboardLowStockResponse(BaseSchema):
     product_name: str
     variant_name: str
     unit: str
+    # Size of one pack in `unit`; `available` and `reserve_level` count packs.
+    pack_quantity: Decimal = Decimal("1")
     available: Decimal
     # The reserve in force for this item and where it stands: OUT / BELOW / NEAR.
     reserve_level: Decimal

@@ -120,6 +120,7 @@ class DashboardService:
                 product_name=a.product_name,
                 variant_name=a.variant_name,
                 unit=a.unit,
+                pack_quantity=a.pack_quantity,
                 available=a.available,
                 reserve_level=a.reserve_level,
                 level=a.level,
