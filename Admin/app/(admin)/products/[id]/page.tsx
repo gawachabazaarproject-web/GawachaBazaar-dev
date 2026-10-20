@@ -357,7 +357,7 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
             ) : (
               <div className="rounded border border-neutral-200 p-3">
                 <h3 className="mb-3 font-display text-sm font-semibold text-primary-900">Add stock to sizes</h3>
-                <ReceiveStockForm variants={product.variants} onReceived={load} onCancel={() => setAddStockOpen(false)} />
+                <ReceiveStockForm productId={product.id} variants={product.variants} onReceived={load} onCancel={() => setAddStockOpen(false)} />
               </div>
             )}
           </div>

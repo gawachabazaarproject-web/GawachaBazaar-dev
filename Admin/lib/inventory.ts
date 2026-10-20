@@ -254,10 +254,12 @@ export async function setStockShares(
   accessToken: string,
   productId: number,
   shares: { variant_id: number; amount: string; amount_unit: string }[],
+  /** true: the amounts are added to each size's current share instead of replacing it. */
+  add = false,
 ): Promise<ProductStockItem> {
   return request(accessToken, `/inventory/admin/products/${productId}/stock-shares`, {
     method: "PUT",
-    body: JSON.stringify({ shares }),
+    body: JSON.stringify({ shares, add }),
   });
 }
 

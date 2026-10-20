@@ -267,9 +267,11 @@ class StockShare(BaseSchema):
 
 class SetStockSharesRequest(BaseSchema):
     """Assign stock of a product to specific sizes. Each entry sets that
-    size's whole share; sizes not listed keep theirs."""
+    size's whole share (or, with `add`, adds to its current share); sizes not
+    listed keep theirs."""
 
     shares: list[StockShare] = Field(..., min_length=1, max_length=50)
+    add: bool = False
 
 
 class ProductStockListResponse(BaseSchema):

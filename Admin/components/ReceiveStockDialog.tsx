@@ -66,6 +66,7 @@ export function ReceiveStockDialog({
         />
 
         <ReceiveStockForm
+          productId={Number(productId) || 0}
           variants={variants}
           onReceived={onReceived}
           onCancel={handleClose}

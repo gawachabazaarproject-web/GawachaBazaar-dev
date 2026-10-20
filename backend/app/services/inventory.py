@@ -867,6 +867,8 @@ class InventoryService:
             vid: sum((avail(l) * size_of[vid] for l in lots if l.variant_id == vid and l.is_share), Decimal("0"))
             for vid in wanted
         }
+        if data.add:  # amounts are increments on top of what each size already has
+            wanted = {vid: current[vid] + amount for vid, amount in wanted.items()}
         free_base = sum((avail(l) * size_of[l.variant_id] for l in free_lots()), Decimal("0"))
         release = {vid: current[vid] - wanted[vid] for vid in wanted if current[vid] > wanted[vid]}
         need = {vid: wanted[vid] - current[vid] for vid in wanted if wanted[vid] > current[vid]}
