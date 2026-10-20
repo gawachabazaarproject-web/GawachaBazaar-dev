@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useEffect, useId, useMemo, useRef, useState } from "react";
+import React, { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 export interface SelectOption {
   value: string;
@@ -42,7 +43,11 @@ export function SearchableSelect({
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
   const root = useRef<HTMLDivElement>(null);
+  const popover = useRef<HTMLDivElement>(null);
   const input = useRef<HTMLInputElement>(null);
+  // The list floats above everything (portal + fixed position) so a dialog's
+  // own scroll area or a table's overflow can never clip it.
+  const [box, setBox] = useState<{ left: number; width: number; top?: number; bottom?: number; maxHeight: number } | null>(null);
   const listId = useId();
 
   const all = useMemo<SelectOption[]>(() => [{ value: "", label: placeholder }, ...options], [options, placeholder]);
@@ -52,10 +57,36 @@ export function SearchableSelect({
   }, [all, query]);
   const selected = options.find((o) => o.value === value);
 
+  useLayoutEffect(() => {
+    if (!open) return;
+    const place = () => {
+      const r = root.current?.getBoundingClientRect();
+      if (!r) return;
+      const below = window.innerHeight - r.bottom - 12;
+      const above = r.top - 12;
+      const flip = below < 220 && above > below; // little room underneath: open upwards
+      const room = Math.max(160, Math.min(flip ? above : below, 340));
+      setBox(
+        flip
+          ? { left: r.left, width: r.width, bottom: window.innerHeight - r.top + 4, maxHeight: room }
+          : { left: r.left, width: r.width, top: r.bottom + 4, maxHeight: room },
+      );
+    };
+    place();
+    window.addEventListener("resize", place);
+    window.addEventListener("scroll", place, true); // any scrolling ancestor, e.g. the dialog
+    return () => {
+      window.removeEventListener("resize", place);
+      window.removeEventListener("scroll", place, true);
+    };
+  }, [open]);
+
   useEffect(() => {
     if (!open) return;
     const onDown = (e: MouseEvent) => {
-      if (root.current && !root.current.contains(e.target as Node)) setOpen(false);
+      const t = e.target as Node;
+      if (root.current?.contains(t) || popover.current?.contains(t)) return;
+      setOpen(false);
     };
     document.addEventListener("mousedown", onDown);
     return () => document.removeEventListener("mousedown", onDown);
@@ -116,44 +147,50 @@ export function SearchableSelect({
       {/* Keeps native form validation working for required pickers. */}
       {required && <input tabIndex={-1} aria-hidden required value={value} onChange={() => undefined} className="pointer-events-none absolute inset-0 h-full w-full opacity-0" />}
 
-      {open && (
-        <div className="absolute left-0 right-0 z-50 mt-1 overflow-hidden rounded border border-neutral-200 bg-white shadow-xl">
-          <div className="border-b border-neutral-100 p-2">
-            <input
-              ref={input}
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              onKeyDown={onKeyDown}
-              placeholder="Search..."
-              aria-label="Search options"
-              className="w-full rounded border border-neutral-300 px-2.5 py-1.5 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
-            />
-          </div>
-          <ul id={listId} role="listbox" className="max-h-60 overflow-y-auto py-1">
-            {shown.length === 0 ? (
-              <li className="px-3 py-2 text-sm text-neutral-400">No matches</li>
-            ) : (
-              shown.map((o, i) => (
-                <li
-                  key={o.value || "__empty"}
-                  role="option"
-                  aria-selected={o.value === value}
-                  onMouseEnter={() => setActive(i)}
-                  onMouseDown={(e) => {
-                    e.preventDefault();
-                    pick(o);
-                  }}
-                  className={`cursor-pointer px-3 py-1.5 text-sm ${o.indent ? "pl-6" : ""} ${o.strong ? "font-bold" : ""} ${
-                    o.value === value ? "bg-primary-50 text-primary-900" : "text-neutral-700"
-                  } ${i === active ? "bg-neutral-100" : ""} ${o.value === "" ? "text-neutral-400" : ""}`}
-                >
-                  {o.label}
-                </li>
-              ))
-            )}
-          </ul>
-        </div>
-      )}
+      {open && box &&
+        createPortal(
+          <div
+            ref={popover}
+            style={{ position: "fixed", left: box.left, width: box.width, top: box.top, bottom: box.bottom, maxHeight: box.maxHeight }}
+            className="z-[100] flex flex-col overflow-hidden rounded border border-neutral-200 bg-white text-[13px] shadow-xl"
+          >
+            <div className="shrink-0 border-b border-neutral-100 p-2">
+              <input
+                ref={input}
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                onKeyDown={onKeyDown}
+                placeholder="Search..."
+                aria-label="Search options"
+                className="w-full rounded border border-neutral-300 px-2.5 py-1.5 text-[13px] focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+              />
+            </div>
+            <ul id={listId} role="listbox" className="min-h-0 flex-1 overflow-y-auto py-1">
+              {shown.length === 0 ? (
+                <li className="px-3 py-2 text-neutral-400">No matches</li>
+              ) : (
+                shown.map((o, i) => (
+                  <li
+                    key={o.value || "__empty"}
+                    role="option"
+                    aria-selected={o.value === value}
+                    onMouseEnter={() => setActive(i)}
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      pick(o);
+                    }}
+                    className={`cursor-pointer px-3 py-1.5 ${o.indent ? "pl-6" : ""} ${o.strong ? "font-bold" : ""} ${
+                      o.value === value ? "bg-primary-50 text-primary-900" : "text-neutral-700"
+                    } ${i === active ? "bg-neutral-100" : ""} ${o.value === "" ? "text-neutral-400" : ""}`}
+                  >
+                    {o.label}
+                  </li>
+                ))
+              )}
+            </ul>
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }

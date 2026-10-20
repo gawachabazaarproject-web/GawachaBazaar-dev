@@ -112,7 +112,7 @@ export function ReceiveStockForm({
     }
   };
 
-  if (variants.length === 0) return <p className="text-sm text-neutral-400">This product has no sizes yet. Add a size first.</p>;
+  if (variants.length === 0) return <p className="text-[13px] text-neutral-400">This product has no sizes yet. Add a size first.</p>;
 
   return (
     <div>
@@ -136,7 +136,7 @@ export function ReceiveStockForm({
           return (
             <div key={v.id} className="flex items-center gap-2 rounded border border-neutral-200 p-2">
               <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium text-neutral-800">{v.name}</p>
+                <p className="truncate text-[13px] font-medium text-neutral-800">{v.name}</p>
                 <p className="text-xs text-neutral-400">{v.sku} · pack of {packSize(v.quantity, v.unit)}</p>
               </div>
               <input
@@ -147,13 +147,13 @@ export function ReceiveStockForm({
                 onChange={(e) => setRow(v.id, { quantity: e.target.value })}
                 placeholder="0"
                 aria-label={`${v.name} quantity received`}
-                className="w-24 rounded border border-neutral-300 px-2 py-1.5 text-right text-sm"
+                className="w-24 rounded border border-neutral-300 px-2 py-1.5 text-right text-[13px]"
               />
               <select
                 value={unit}
                 onChange={(e) => setRow(v.id, { unit: e.target.value })}
                 aria-label={`${v.name} unit`}
-                className="rounded border border-neutral-300 bg-white px-2 py-1.5 text-sm"
+                className="rounded border border-neutral-300 bg-white px-2 py-1.5 text-[13px]"
               >
                 {units.map((u) => <option key={u.value} value={u.value}>{u.label}</option>)}
                 <option value="PACKS">packs</option>
@@ -171,11 +171,11 @@ export function ReceiveStockForm({
         value={remarks}
         onChange={(e) => setRemarks(e.target.value)}
         placeholder="e.g. receiving reference, source"
-        className="mb-3 w-full rounded border border-neutral-300 px-3 py-2 text-sm"
+        className="mb-3 w-full rounded border border-neutral-300 px-3 py-2 text-[13px]"
       />
 
       {filled.length > 0 && (
-        <div className="mb-3 rounded border border-primary-200 bg-primary-50/40 p-3 text-sm">
+        <div className="mb-3 rounded border border-primary-200 bg-primary-50/40 p-3 text-[13px]">
           <p className="mb-1 font-semibold text-primary-900">Review before saving{locationName ? ` - into ${locationName}` : ""}</p>
           <ul className="space-y-0.5 text-neutral-700">
             {filled.map((v) => (
@@ -188,19 +188,19 @@ export function ReceiveStockForm({
         </div>
       )}
 
-      {error && <p className="mb-3 rounded border border-status-danger/30 bg-status-dangerLight px-3 py-2 text-sm text-status-danger">{error}</p>}
-      {saved && <p className="mb-3 rounded border border-primary-200 bg-primary-50 px-3 py-2 text-sm text-primary-900">{saved}</p>}
+      {error && <p className="mb-3 rounded border border-status-danger/30 bg-status-dangerLight px-3 py-2 text-[13px] text-status-danger">{error}</p>}
+      {saved && <p className="mb-3 rounded border border-primary-200 bg-primary-50 px-3 py-2 text-[13px] text-primary-900">{saved}</p>}
 
       <div className="flex justify-end gap-2">
         {onCancel && (
-          <button onClick={onCancel} className="rounded border border-neutral-300 px-4 py-2 text-sm font-medium text-neutral-700">
+          <button onClick={onCancel} className="rounded border border-neutral-300 px-3.5 py-1.5 text-[13px] font-medium text-neutral-700">
             Close
           </button>
         )}
         <button
           onClick={handleSubmit}
           disabled={saving || !locationId || filled.length === 0}
-          className="rounded bg-primary-800 px-4 py-2 text-sm font-semibold text-white disabled:opacity-40"
+          className="rounded bg-primary-800 px-3.5 py-1.5 text-[13px] font-semibold text-white disabled:opacity-40"
         >
           {saving ? <BusyLabel>Saving...</BusyLabel> : filled.length > 1 ? `Save stock for ${filled.length} sizes` : "Save stock"}
         </button>

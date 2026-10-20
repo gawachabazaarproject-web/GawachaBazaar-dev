@@ -53,8 +53,8 @@ export function ReceiveStockDialog({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
-      <div className="max-h-[90vh] w-full max-w-xl overflow-y-auto rounded bg-white p-6 shadow-xl">
-        <h2 className="mb-4 font-display text-lg font-semibold text-primary-900">Receive stock</h2>
+      <div className="max-h-[88vh] w-full max-w-lg overflow-y-auto rounded bg-white p-5 text-[13px] shadow-xl">
+        <h2 className="mb-3 font-display text-base font-semibold text-primary-900">Receive stock</h2>
 
         <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-neutral-500">Product</label>
         <SearchableSelect
