@@ -65,13 +65,12 @@ export function ReceiveStockDialog({
           options={products.map((p) => ({ value: String(p.id), label: p.name }))}
         />
 
-        {productId ? (
-          <ReceiveStockForm variants={variants} onReceived={onReceived} onCancel={handleClose} />
-        ) : (
-          <div className="flex justify-end">
-            <button onClick={handleClose} className="rounded border border-neutral-300 px-4 py-2 text-sm font-medium text-neutral-700">Cancel</button>
-          </div>
-        )}
+        <ReceiveStockForm
+          variants={variants}
+          onReceived={onReceived}
+          onCancel={handleClose}
+          emptyHint={productId ? "This product has no sizes yet. Add a size first." : "Choose a product above to enter what arrived for each of its sizes."}
+        />
       </div>
     </div>
   );

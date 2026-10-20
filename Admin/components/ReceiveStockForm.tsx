@@ -31,10 +31,13 @@ export function ReceiveStockForm({
   variants,
   onReceived,
   onCancel,
+  emptyHint = "This product has no sizes yet. Add a size first.",
 }: {
   variants: ProductVariant[];
   onReceived: () => void;
   onCancel?: () => void;
+  /** Shown in the sizes area while there are no sizes to fill in. */
+  emptyHint?: string;
 }) {
   const { getAccessToken } = useAuth();
   const [rows, setRows] = useState<Record<number, Row>>({});
@@ -112,8 +115,6 @@ export function ReceiveStockForm({
     }
   };
 
-  if (variants.length === 0) return <p className="text-[13px] text-neutral-400">This product has no sizes yet. Add a size first.</p>;
-
   return (
     <div>
       <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-neutral-500">Warehouse</label>
@@ -129,6 +130,9 @@ export function ReceiveStockForm({
         What arrived (fill in the sizes you received)
       </label>
       <div className="space-y-2">
+        {variants.length === 0 && (
+          <p className="rounded border border-dashed border-neutral-300 px-3 py-4 text-center text-[13px] text-neutral-400">{emptyHint}</p>
+        )}
         {variants.map((v) => {
           const units = amountUnits(v.unit);
           const unit = entryUnit(v);
