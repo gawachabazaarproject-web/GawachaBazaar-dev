@@ -29,6 +29,7 @@ import { StatusBadge } from "@/components/StatusBadge";
 import { ReceiveStockDialog } from "@/components/ReceiveStockDialog";
 import { AddWarehouseDialog } from "@/components/AddWarehouseDialog";
 import { RemoveStockDialog } from "@/components/RemoveStockDialog";
+import { ProductStockView } from "@/components/ProductStockView";
 
 const PAGE_SIZE = 20;
 
@@ -53,6 +54,7 @@ export default function InventoryPage() {
   const [q, setQ] = useState(readInitialQuery);
   const dq = useDebounced(q);
   useUrlQuerySync((v) => { setPage(1); setQ(v); });
+  const [view, setView] = useState<"product" | "lot">("product");
   const [locationId, setLocationId] = useState("");
   const [categoryId, setCategoryId] = useState("");
   const [operationalStatus, setOperationalStatus] = useState("");
@@ -156,25 +158,41 @@ export default function InventoryPage() {
         </div>
       )}
 
+      <div className="mb-3 inline-flex rounded border border-neutral-300 bg-white p-0.5 text-sm font-semibold">
+        {([["product", "By product"], ["lot", "By lot / warehouse"]] as const).map(([key, label]) => (
+          <button
+            key={key}
+            onClick={() => setView(key)}
+            className={`rounded px-3 py-1 ${view === key ? "bg-primary-800 text-white" : "text-neutral-600 hover:bg-neutral-50"}`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
       <div className="mb-4 flex flex-wrap items-center gap-2 rounded border border-neutral-200 bg-white p-3">
         <input
           value={q}
           onChange={(e) => { setPage(1); setQ(e.target.value); }}
-          placeholder="Product name, SKU, or batch code"
+          placeholder={view === "product" ? "Product name" : "Product name, SKU, or batch code"}
           className="min-w-[220px] flex-1 rounded border border-neutral-300 px-3 py-1.5 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
         />
-        <select value={locationId} onChange={(e) => { setPage(1); setLocationId(e.target.value); }} className="rounded border border-neutral-300 bg-white px-2 py-1.5 text-sm text-neutral-700">
-          <option value="">Warehouse: All</option>
-          {locations.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
-        </select>
+        {view === "lot" && (
+          <select value={locationId} onChange={(e) => { setPage(1); setLocationId(e.target.value); }} className="rounded border border-neutral-300 bg-white px-2 py-1.5 text-sm text-neutral-700">
+            <option value="">Warehouse: All</option>
+            {locations.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
+          </select>
+        )}
         <select value={categoryId} onChange={(e) => { setPage(1); setCategoryId(e.target.value); }} className="rounded border border-neutral-300 bg-white px-2 py-1.5 text-sm text-neutral-700">
           <option value="">Category: All</option>
           {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
-        <select value={operationalStatus} onChange={(e) => { setPage(1); setOperationalStatus(e.target.value); }} className="rounded border border-neutral-300 bg-white px-2 py-1.5 text-sm text-neutral-700">
-          <option value="">Status: All</option>
-          {OPERATIONAL_STATUSES.map((s) => <option key={s} value={s}>{s.replaceAll("_", " ")}</option>)}
-        </select>
+        {view === "lot" && (
+          <select value={operationalStatus} onChange={(e) => { setPage(1); setOperationalStatus(e.target.value); }} className="rounded border border-neutral-300 bg-white px-2 py-1.5 text-sm text-neutral-700">
+            <option value="">Status: All</option>
+            {OPERATIONAL_STATUSES.map((s) => <option key={s} value={s}>{s.replaceAll("_", " ")}</option>)}
+          </select>
+        )}
         {hasFilters && (
           <button onClick={clearFilters} className="text-sm font-medium text-primary-700 hover:underline">
             Clear filters
@@ -182,7 +200,9 @@ export default function InventoryPage() {
         )}
       </div>
 
-      <div className="overflow-hidden rounded border border-neutral-200 bg-white">
+      {view === "product" && <ProductStockView q={dq} categoryId={categoryId} />}
+
+      {view === "lot" && <div className="overflow-hidden rounded border border-neutral-200 bg-white">
         {loading ? (
           <TableSkeleton rows={8} columns={9} />
         ) : error ? (
@@ -223,7 +243,7 @@ export default function InventoryPage() {
             <Pagination page={data.page} pageSize={data.page_size} total={data.total} onPageChange={setPage} />
           </>
         )}
-      </div>
+      </div>}
 
       <ReceiveStockDialog open={receiveOpen} onClose={() => setReceiveOpen(false)} onReceived={refreshAll} />
       <RemoveStockDialog open={removing !== null} lot={removing} onClose={() => setRemoving(null)} onDone={refreshAll} />

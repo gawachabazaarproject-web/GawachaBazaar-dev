@@ -18,6 +18,7 @@ from app.schemas.admin_inventory import (
     AdminInventoryLotDetailResponse,
     AdminInventoryLotListItemResponse,
     AdminInventoryLotListResponse,
+    ProductStockListResponse,
     InventoryDashboardResponse,
     ReceiveStockRequest,
     ReconcileStockRequest,
@@ -330,6 +331,22 @@ def admin_inventory_dashboard(
     db: Session = Depends(get_db),
 ) -> InventoryDashboardResponse:
     return InventoryService(db).admin_dashboard()
+
+
+@router.get(
+    "/admin/products",
+    response_model=ProductStockListResponse,
+    summary="Stock per product (shared pool total) with each size's packs and weight",
+)
+def admin_list_product_stock(
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=ADMIN_MAX_PAGE_SIZE),
+    category_id: int | None = Query(default=None),
+    q: str | None = Query(default=None, max_length=150, description="Product name"),
+    current_user: User = Depends(require_permission("inventory.read")),
+    db: Session = Depends(get_db),
+) -> ProductStockListResponse:
+    return InventoryService(db).admin_list_product_stock(page, page_size, category_id, q)
 
 
 @router.get(
