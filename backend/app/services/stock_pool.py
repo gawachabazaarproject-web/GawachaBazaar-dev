@@ -78,6 +78,47 @@ def pool_siblings(db: Session, variant: ProductVariant) -> list[ProductVariant]:
     ]
 
 
+def pool_base_amounts(
+    db: Session, product_ids: set[int] | list[int]
+) -> tuple[dict[tuple[int, str], Decimal], list[ProductVariant]]:
+    """Sellable stock per (product, unit family) in the family's base unit
+    (g / ml / pieces), pooled across every sibling's ACTIVE lots minus
+    reservations. Also returns the products' variants so callers do not
+    have to re-query them."""
+    variants = (
+        db.query(ProductVariant).filter(ProductVariant.product_id.in_(list(product_ids))).all()
+        if product_ids
+        else []
+    )
+    by_id = {v.id: v for v in variants}
+    lots = (
+        db.query(InventoryLot)
+        .filter(InventoryLot.variant_id.in_(list(by_id)), InventoryLot.status == "ACTIVE")
+        .all()
+        if by_id
+        else []
+    )
+    pool: dict[tuple[int, str], Decimal] = defaultdict(lambda: _ZERO)
+    for lot in lots:
+        owner = by_id[lot.variant_id]
+        family, size = variant_size(owner)
+        available = lot.quantity - lot.reserved_quantity
+        if available > 0:
+            pool[(owner.product_id, family)] += available * size
+    return pool, variants
+
+
+def display_amount(family: str, base_amount: Decimal) -> tuple[Decimal, str]:
+    """A base-unit amount as people read it: g -> kg, ml -> L, pieces as is."""
+    if family == "MASS":
+        return (base_amount / 1000).quantize(_QTY), "kg"
+    if family == "VOLUME":
+        return (base_amount / 1000).quantize(_QTY), "L"
+    if family == "COUNT":
+        return base_amount.quantize(_QTY), "pcs"
+    return base_amount.quantize(_QTY), family.lower()
+
+
 def available_packs_by_variant(
     db: Session, variant_ids: list[int]
 ) -> dict[int, Decimal]:
@@ -89,27 +130,7 @@ def available_packs_by_variant(
     if not variant_ids:
         return {}
     wanted = db.query(ProductVariant).filter(ProductVariant.id.in_(variant_ids)).all()
-    product_ids = {v.product_id for v in wanted}
-    variants = (
-        db.query(ProductVariant).filter(ProductVariant.product_id.in_(product_ids)).all()
-    )
-    by_id = {v.id: v for v in variants}
-    lots = (
-        db.query(InventoryLot)
-        .filter(
-            InventoryLot.variant_id.in_(list(by_id)),
-            InventoryLot.status == "ACTIVE",
-        )
-        .all()
-    )
-
-    pool: dict[tuple[int, str], Decimal] = defaultdict(lambda: _ZERO)
-    for lot in lots:
-        owner = by_id[lot.variant_id]
-        family, size = variant_size(owner)
-        available = lot.quantity - lot.reserved_quantity
-        if available > 0:
-            pool[(owner.product_id, family)] += available * size
+    pool, _ = pool_base_amounts(db, {v.product_id for v in wanted})
 
     result: dict[int, Decimal] = {}
     for v in wanted:

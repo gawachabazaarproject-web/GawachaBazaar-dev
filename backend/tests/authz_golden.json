@@ -133,6 +133,10 @@
    "HUB_STAFF",
    "OPERATIONS"
   ],
+  "GET /api/v1/inventory/admin/products": [
+   "HUB_STAFF",
+   "OPERATIONS"
+  ],
   "GET /api/v1/inventory/admin/stock-alerts": [
    "HUB_STAFF",
    "OPERATIONS"

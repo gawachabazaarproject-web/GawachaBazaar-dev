@@ -205,6 +205,47 @@ export async function fetchAdminLots(
   return request(accessToken, `/inventory/admin/lots?${search.toString()}`);
 }
 
+export interface ProductStockVariant {
+  variant_id: number;
+  variant_name: string;
+  sku: string;
+  status: string;
+  pack_quantity: string;
+  pack_unit: string;
+  /** Whole packs sellable from the product's shared pool. */
+  available_packs: string;
+  /** What those packs add up to, in `amount_unit` (kg / L / pcs). */
+  available_amount: string;
+  amount_unit: string;
+}
+
+export interface ProductStockItem {
+  product_id: number;
+  product_name: string;
+  category_name: string;
+  /** Stock per unit family, e.g. "100 kg". */
+  totals: { amount: string; amount_unit: string }[];
+  variants: ProductStockVariant[];
+}
+
+export interface ProductStockListResponse {
+  items: ProductStockItem[];
+  page: number;
+  page_size: number;
+  total: number;
+}
+
+export async function fetchProductStock(
+  accessToken: string,
+  params: { page?: number; page_size?: number; category_id?: number; q?: string },
+): Promise<ProductStockListResponse> {
+  const search = new URLSearchParams();
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== "") search.set(key, String(value));
+  });
+  return request(accessToken, `/inventory/admin/products?${search.toString()}`);
+}
+
 export async function fetchLotDetail(accessToken: string, id: number): Promise<AdminInventoryLotDetail> {
   return request(accessToken, `/inventory/admin/lots/${id}`);
 }
