@@ -4,7 +4,6 @@ from typing import TYPE_CHECKING
 
 from sqlalchemy import (
     BigInteger,
-    Boolean,
     CheckConstraint,
     DateTime,
     ForeignKey,
@@ -14,7 +13,6 @@ from sqlalchemy import (
     String,
     UniqueConstraint,
     func,
-    false,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -84,14 +82,6 @@ class ProductVariant(Base):
     reserve_level: Mapped[Decimal | None] = mapped_column(
         Numeric(12, 3),
         nullable=True,
-    )
-    # True once an admin divided the product's stock between its sizes: this
-    # size then sells only from lots entered against itself and no longer
-    # shares the product's pool (see app/services/stock_pool.py).
-    dedicated_stock: Mapped[bool] = mapped_column(
-        Boolean,
-        nullable=False,
-        server_default=false(),
     )
     status: Mapped[str] = mapped_column(
         String(30),

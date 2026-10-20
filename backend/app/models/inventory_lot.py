@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING
 
 from sqlalchemy import (
     BigInteger,
+    Boolean,
     CheckConstraint,
     DateTime,
     ForeignKey,
@@ -13,6 +14,7 @@ from sqlalchemy import (
     String,
     UniqueConstraint,
     func,
+    false,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -34,6 +36,7 @@ class InventoryLot(Base):
             "batch_id",
             "variant_id",
             "location_id",
+            "is_share",
             name="uq_inventory_lots_batch_variant_location",
         ),
         CheckConstraint(
@@ -96,6 +99,14 @@ class InventoryLot(Base):
         Numeric(12, 3),
         nullable=False,
         server_default="0",
+    )
+    # A share lot holds stock an admin assigned to ONE size of the product
+    # (see InventoryService.set_stock_shares): only that size sells from it,
+    # whereas ordinary lots are shared by every size of the unit family.
+    is_share: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        server_default=false(),
     )
     status: Mapped[str] = mapped_column(
         String(30),

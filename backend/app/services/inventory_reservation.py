@@ -155,12 +155,18 @@ class InventoryReservationService:
 
         def candidates(variant_id: int) -> list[InventoryLot]:
             ids = set(pool_for_variant[variant_id])
+            # A size's own assigned share (is_share) is used first, then its
+            # ordinary lots, then the siblings' ordinary lots. Another size's
+            # share is never touched: it was assigned to that size.
             own = [l for l in locked_lots if l.variant_id == variant_id]
             others = [
-                l for l in locked_lots if l.variant_id in ids and l.variant_id != variant_id
+                l
+                for l in locked_lots
+                if l.variant_id in ids and l.variant_id != variant_id and not l.is_share
             ]
             key = lambda l: (l.created_at, l.id)  # noqa: E731 - FIFO
-            return sorted(own, key=key) + sorted(others, key=key)
+            own_key = lambda l: (not l.is_share, l.created_at, l.id)  # noqa: E731
+            return sorted(own, key=own_key) + sorted(others, key=key)
 
         # Allocate (in memory only, against the now-locked, fresh
         # quantities) before writing anything - if any variant can't be
