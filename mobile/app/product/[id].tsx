@@ -14,7 +14,7 @@ import { Skeleton } from "@/components/Skeleton";
 import { ProductCard, productSummaryToCardData } from "@/components/ProductCard";
 import { useProduct, useProducts } from "@/features/catalog/useCatalog";
 import { useVariantStepper } from "@/features/cart/useCart";
-import { formatRatePerUnit, formatVariantSize } from "@/utils/money";
+import { formatVariantSize } from "@/utils/money";
 import { getEmbellishment } from "@/utils/productEmbellishments";
 import { colors, radius, spacing } from "@/theme";
 import { ProductVariantResponse } from "@/types/api";
@@ -147,11 +147,6 @@ export default function ProductDetailScreen() {
                     <Text variant="bodySmall" color={active ? colors.textInverse : colors.textPrimary}>
                       {formatVariantSize(variant.quantity, variant.unit)}
                     </Text>
-                    {variant.current_price ? (
-                      <Text variant="caption" color={active ? colors.textInverse : colors.textMuted}>
-                        {formatRatePerUnit(variant.current_price.price, variant.quantity, variant.unit)}
-                      </Text>
-                    ) : null}
                   </Pressable>
                 );
               })}

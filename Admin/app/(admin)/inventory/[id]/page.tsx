@@ -134,7 +134,8 @@ export default function InventoryLotDetailPage({ params }: { params: Promise<{ i
           variantId={lot.variant_id}
           reserveLevel={lot.reserve_level}
           effectiveReserve={lot.effective_reserve}
-          unit={lot.unit}
+          variantUnit={lot.unit}
+          variantQuantity={lot.variant_quantity}
           canEdit={!!canAdjust}
           onSaved={load}
         />

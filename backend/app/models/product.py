@@ -16,6 +16,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
+from app.models.product_category import ProductCategory
 
 if TYPE_CHECKING:
     from app.models.batch import Batch
@@ -80,6 +81,13 @@ class Product(Base):
     category: Mapped["Category"] = relationship(
         "Category",
         back_populates="products",
+    )
+    # Extra categories the product is also listed in (the main one stays
+    # `category_id`, which installed apps rely on).
+    extra_category_links: Mapped[list[ProductCategory]] = relationship(
+        ProductCategory,
+        cascade="all, delete-orphan",
+        passive_deletes=True,
     )
     variants: Mapped[list["ProductVariant"]] = relationship(
         "ProductVariant",

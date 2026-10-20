@@ -9,7 +9,7 @@ import { QuantityStepper } from "./QuantityStepper";
 import { PressableScale } from "./PressableScale";
 import { WishlistButton } from "./WishlistButton";
 import { useVariantStepper } from "@/features/cart/useCart";
-import { formatRatePerUnit, formatVariantSize } from "@/utils/money";
+import { formatVariantSize } from "@/utils/money";
 import { getEmbellishment } from "@/utils/productEmbellishments";
 import { colors, fontFamily, shadows, spacing } from "@/theme";
 import { PriceResponse, ProductSummaryResponse, ProductVariantResponse } from "@/types/api";
@@ -72,12 +72,6 @@ export function ProductCard({ product, onPress, index = 0 }: ProductCardProps) {
   const showImage = !!product.imageUrl && !imageFailed;
   const sizeQuantity = product.variant?.quantity ?? product.defaultVariantQuantity;
   const sizeUnit = product.variant?.unit ?? product.defaultVariantUnit;
-  const ratePerUnit =
-    price && sizeQuantity && sizeUnit ? formatRatePerUnit(price.price, sizeQuantity, sizeUnit) : null;
-  // The comparison rate only helps when it differs from the price: a 1 kg
-  // pack at Rs 160 is already "Rs 160/kg", so repeating it is noise.
-  const packQty = Number.parseFloat(sizeQuantity ?? "");
-  const showRate = !!ratePerUnit && !(packQty === 1 && ["KG", "L", "UNIT"].includes(sizeUnit ?? ""));
   const sizeLabel = product.variant
     ? formatVariantSize(product.variant.quantity, product.variant.unit)
     : product.defaultVariantUnit && product.defaultVariantQuantity
@@ -150,11 +144,6 @@ export function ProductCard({ product, onPress, index = 0 }: ProductCardProps) {
                   {sizeLabel}
                 </Text>
               </View>
-              {showRate ? (
-                <Text variant="caption" color={colors.textMuted} numberOfLines={1} style={styles.rate}>
-                  {ratePerUnit}
-                </Text>
-              ) : null}
             </View>
           ) : null}
           <View style={styles.footer}>
@@ -277,7 +266,6 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
     flexShrink: 0,
   },
-  rate: { flexShrink: 1 },
   footer: {
     flexDirection: "row",
     alignItems: "center",

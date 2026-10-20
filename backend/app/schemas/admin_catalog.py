@@ -36,6 +36,7 @@ class AdminProductListItemResponse(BaseSchema):
     slug: str
     category_id: int
     category_name: str
+    extra_category_ids: list[int] = []
     status: str
     primary_image_url: str | None
     price: Decimal | None
@@ -152,6 +153,7 @@ class AdminProductDetailResponse(BaseSchema):
     created_at: datetime
     updated_at: datetime
     category: CategoryResponse
+    extra_categories: list[CategoryResponse] = []
     images: list[ProductImageResponse]
     variants: list[ProductVariantResponse]
     variant_stock: list[VariantStockResponse]
