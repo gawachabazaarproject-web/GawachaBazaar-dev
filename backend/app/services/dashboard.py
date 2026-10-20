@@ -59,7 +59,10 @@ class DashboardService:
             .scalar(),
             attention=self._unpicked_orders(now),
             low_stock_count=len(low_stock_rows),
-            low_stock=low_stock_rows[:LIST_LIMIT],
+            low_stock_out_count=sum(1 for r in low_stock_rows if r.level == "OUT"),
+            low_stock_below_count=sum(1 for r in low_stock_rows if r.level == "BELOW"),
+            low_stock_near_count=sum(1 for r in low_stock_rows if r.level == "NEAR"),
+            low_stock=self._mixed_low_stock(low_stock_rows),
             delivery_issues=self._delivery_issues(now),
         )
 
@@ -109,6 +112,18 @@ class DashboardService:
             )
             for order, since in rows
         ]
+
+    @staticmethod
+    def _mixed_low_stock(rows: list[DashboardLowStockResponse]) -> list[DashboardLowStockResponse]:
+        """The card's rows: half out-of-stock, half low (at/near the reserve),
+        topping up from whichever side has more, still most urgent first. A
+        plain top-N would be all out-of-stock items whenever there are many."""
+        out = [r for r in rows if r.level == "OUT"]
+        rest = [r for r in rows if r.level != "OUT"]
+        half = LIST_LIMIT // 2
+        take_out = min(len(out), max(half, LIST_LIMIT - len(rest)))
+        picked = out[:take_out] + rest[: LIST_LIMIT - take_out]
+        return sorted(picked, key=lambda r: {"OUT": 0, "BELOW": 1, "NEAR": 2}[r.level])
 
     def _low_stock(self) -> list[DashboardLowStockResponse]:
         """Items out of stock, at/below their reserve level, or close to it -

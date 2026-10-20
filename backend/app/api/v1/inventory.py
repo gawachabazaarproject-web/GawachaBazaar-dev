@@ -440,10 +440,11 @@ def admin_remove_stock(
     summary="Items out of stock, at/below their reserve level, or close to it",
 )
 def admin_stock_alerts(
+    limit: int = Query(default=20, ge=1, le=1000, description="Most urgent N items to list"),
     current_user: User = Depends(require_permission("inventory.read")),
     db: Session = Depends(get_db),
 ) -> StockAlertsResponse:
-    return InventoryService(db).stock_alerts()
+    return InventoryService(db).stock_alerts(limit)
 
 
 @router.post(

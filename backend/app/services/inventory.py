@@ -1277,7 +1277,7 @@ class InventoryService:
         last_movement = self._last_movement_by_lot([lot.id]).get(lot.id)
         return self._enrich_lot(lot, last_movement)
 
-    def stock_alerts(self) -> StockAlertsResponse:
+    def stock_alerts(self, limit: int = 20) -> StockAlertsResponse:
         alerts = list_stock_alerts(self.db)
         counts = count_by_level(alerts)
         return StockAlertsResponse(
@@ -1292,7 +1292,7 @@ class InventoryService:
                     available=a.available,
                     reserve_level=a.reserve_level, level=a.level,
                 )
-                for a in alerts[:20]
+                for a in alerts[:limit]
             ],
         )
 

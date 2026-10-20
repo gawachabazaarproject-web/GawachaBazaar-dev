@@ -408,8 +408,8 @@ export interface StockAlerts {
 }
 
 /** Items out of stock, at/below their reserve level, or close to it. */
-export async function fetchStockAlerts(accessToken: string): Promise<StockAlerts> {
-  return request(accessToken, "/inventory/admin/stock-alerts");
+export async function fetchStockAlerts(accessToken: string, limit?: number): Promise<StockAlerts> {
+  return request(accessToken, `/inventory/admin/stock-alerts${limit ? `?limit=${limit}` : ""}`);
 }
 
 const UNIT_BASE: Record<string, [number, string, number, string]> = {
