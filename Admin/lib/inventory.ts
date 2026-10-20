@@ -212,23 +212,22 @@ export interface ProductStockVariant {
   status: string;
   pack_quantity: string;
   pack_unit: string;
-  /** Whole packs sellable from the product's shared pool. */
+  /** Whole packs this size can sell: its own share plus the unassigned stock. */
   available_packs: string;
   /** What those packs add up to, in `amount_unit` (kg / L / pcs). */
   available_amount: string;
   amount_unit: string;
-  /** True once the product's stock was divided between its sizes. */
-  dedicated: boolean;
-  /** What this size's own lots hold (in `amount_unit`). */
-  held_amount: string;
+  /** Stock assigned to this size alone (in `amount_unit`) and the packs it makes. */
+  share_amount: string;
+  share_packs: string;
 }
 
 export interface ProductStockItem {
   product_id: number;
   product_name: string;
   category_name: string;
-  /** Stock per unit family, e.g. "100 kg". */
-  totals: { amount: string; amount_unit: string }[];
+  /** Stock per unit family, e.g. "34 kg" of which "10 kg" is still unassigned. */
+  totals: { family: string; amount: string; amount_unit: string; unassigned_amount: string }[];
   variants: ProductStockVariant[];
 }
 
@@ -250,25 +249,15 @@ export async function fetchProductStock(
   return request(accessToken, `/inventory/admin/products?${search.toString()}`);
 }
 
-export async function divideProductStock(
+/** Sets how much stock each listed size has been assigned (its whole share). */
+export async function setStockShares(
   accessToken: string,
   productId: number,
-  payload: { shares: { variant_id: number; amount: string; amount_unit: string }[] },
+  shares: { variant_id: number; amount: string; amount_unit: string }[],
 ): Promise<ProductStockItem> {
-  return request(accessToken, `/inventory/admin/products/${productId}/divide-stock`, {
-    method: "POST",
-    body: JSON.stringify(payload),
-  });
-}
-
-export async function shareProductStock(
-  accessToken: string,
-  productId: number,
-  variantId: number,
-): Promise<ProductStockItem> {
-  return request(accessToken, `/inventory/admin/products/${productId}/share-stock`, {
-    method: "POST",
-    body: JSON.stringify({ variant_id: variantId }),
+  return request(accessToken, `/inventory/admin/products/${productId}/stock-shares`, {
+    method: "PUT",
+    body: JSON.stringify({ shares }),
   });
 }
 
