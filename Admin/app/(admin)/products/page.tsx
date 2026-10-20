@@ -148,7 +148,7 @@ export default function ProductsPage() {
         >
           <option value="">Category: All</option>
           {categories.map((c) => (
-            <option key={c.id} value={c.id}>{c.name}</option>
+            <option key={c.id} value={c.id} style={{ fontWeight: c.parent_id ? 400 : 700 }}>{c.name}</option>
           ))}
         </select>
         <input
