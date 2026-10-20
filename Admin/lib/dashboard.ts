@@ -24,6 +24,8 @@ export interface DashboardLowStock {
   product_name: string;
   variant_name: string;
   unit: string;
+  /** Size of one pack in `unit`; `available` and `reserve_level` count packs. */
+  pack_quantity: string;
   available: string;
   /** The reserve in force for this item. */
   reserve_level: string;

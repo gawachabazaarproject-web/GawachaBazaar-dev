@@ -323,7 +323,7 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
                               : "bg-neutral-100 text-neutral-600"
                         }`}
                       >
-                        {vs.stock_level === "OUT" ? "Out of stock" : vs.stock_level === "BELOW" ? "Below reserve" : "Close to reserve"}
+                        {vs.stock_level === "OUT" ? "Out of stock" : vs.stock_level === "BELOW" ? "Low on stock" : "Close to reserve"}
                       </span>
                     )}
                   </span>
