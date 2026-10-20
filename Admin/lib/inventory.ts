@@ -446,17 +446,19 @@ export function packTotal(packs: string | number, packQuantity: string | number,
 export function amountUnits(unit: string): { value: string; label: string }[] {
   if (unit === "KG" || unit === "G") return [{ value: "KG", label: "kg" }, { value: "G", label: "g" }];
   if (unit === "L" || unit === "ML") return [{ value: "L", label: "L" }, { value: "ML", label: "ml" }];
+  if (unit === "UNIT" || unit === "DOZEN") return [{ value: "UNIT", label: "pieces" }, { value: "DOZEN", label: "dozen" }];
   return [];
 }
 
 /** Preview of how many packs an entered weight makes (the server does the real conversion). */
 export function amountToPacks(amount: string | number, amountUnit: string, packQuantity: string | number, unit: string): number {
-  const base = (u: string) => (u === "KG" || u === "L" ? 1000 : 1);
+  const base = (u: string) => (u === "KG" || u === "L" ? 1000 : u === "DOZEN" ? 12 : 1);
   const packs = (Number(amount) * base(amountUnit)) / (Number(packQuantity) * base(unit));
   return Math.floor(packs * 1000) / 1000;
 }
 
 /** "1 kg" - the size of one pack. */
 export function packSize(packQuantity: string | number, unit: string): string {
-  return `${trim(Number(packQuantity))} ${unit.toLowerCase()}`;
+  const label = ({ UNIT: "pc", DOZEN: "dozen" } as Record<string, string>)[unit] ?? unit.toLowerCase();
+  return `${trim(Number(packQuantity))} ${label}`;
 }

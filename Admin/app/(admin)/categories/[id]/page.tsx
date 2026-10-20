@@ -27,6 +27,7 @@ import { EmptyState } from "@/components/EmptyState";
 import { ImageDropzone } from "@/components/ImageDropzone";
 import { Icon } from "@/components/icons";
 import { BusyLabel, PageLoader } from "@/components/Spinner";
+import { SearchableSelect } from "@/components/SearchableSelect";
 
 export default function CategoryDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -323,17 +324,15 @@ export default function CategoryDetailPage({ params }: { params: Promise<{ id: s
             />
           </Field>
           <Field label="Parent category">
-            <select
+            <SearchableSelect
               value={general.parent_id}
-              onChange={(e) => updateField("parent_id", e.target.value)}
+              onChange={(v) => updateField("parent_id", v)}
               disabled={!canEdit || category.children.length > 0}
-              className="w-full rounded border border-neutral-300 bg-white px-3 py-2 text-sm disabled:bg-neutral-50"
-            >
-              <option value="">No parent (top-level)</option>
-              {allCategories.filter((c) => c.id !== categoryId && c.parent_id === null).map((c) => (
-                <option key={c.id} value={c.id}>{c.name}</option>
-              ))}
-            </select>
+              placeholder="No parent (top-level)"
+              options={allCategories
+                .filter((c) => c.id !== categoryId && c.parent_id === null)
+                .map((c) => ({ value: String(c.id), label: c.name }))}
+            />
           </Field>
           <Field label="Status">
             <select

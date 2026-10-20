@@ -30,6 +30,7 @@ import { ReceiveStockDialog } from "@/components/ReceiveStockDialog";
 import { AddWarehouseDialog } from "@/components/AddWarehouseDialog";
 import { RemoveStockDialog } from "@/components/RemoveStockDialog";
 import { ProductStockView } from "@/components/ProductStockView";
+import { SearchableSelect, categoryOptions } from "@/components/SearchableSelect";
 
 const PAGE_SIZE = 20;
 
@@ -178,15 +179,21 @@ export default function InventoryPage() {
           className="min-w-[220px] flex-1 rounded border border-neutral-300 px-3 py-1.5 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
         />
         {view === "lot" && (
-          <select value={locationId} onChange={(e) => { setPage(1); setLocationId(e.target.value); }} className="rounded border border-neutral-300 bg-white px-2 py-1.5 text-sm text-neutral-700">
-            <option value="">Warehouse: All</option>
-            {locations.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
-          </select>
+          <SearchableSelect
+            className="w-52"
+            value={locationId}
+            onChange={(v) => { setPage(1); setLocationId(v); }}
+            placeholder="Warehouse: All"
+            options={locations.map((l) => ({ value: String(l.id), label: l.name }))}
+          />
         )}
-        <select value={categoryId} onChange={(e) => { setPage(1); setCategoryId(e.target.value); }} className="rounded border border-neutral-300 bg-white px-2 py-1.5 text-sm text-neutral-700">
-          <option value="">Category: All</option>
-          {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-        </select>
+        <SearchableSelect
+          className="w-56"
+          value={categoryId}
+          onChange={(v) => { setPage(1); setCategoryId(v); }}
+          placeholder="Category: All"
+          options={categoryOptions(categories)}
+        />
         {view === "lot" && (
           <select value={operationalStatus} onChange={(e) => { setPage(1); setOperationalStatus(e.target.value); }} className="rounded border border-neutral-300 bg-white px-2 py-1.5 text-sm text-neutral-700">
             <option value="">Status: All</option>

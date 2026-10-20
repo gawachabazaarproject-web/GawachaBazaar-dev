@@ -15,6 +15,7 @@ import {
 } from "@/lib/inventory";
 import { ProductVariant } from "@/lib/products";
 import { BusyLabel } from "@/components/Spinner";
+import { SearchableSelect } from "@/components/SearchableSelect";
 
 interface Row {
   quantity: string;
@@ -116,14 +117,13 @@ export function ReceiveStockForm({
   return (
     <div>
       <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-neutral-500">Warehouse</label>
-      <select
+      <SearchableSelect
+        className="mb-3"
         value={locationId}
-        onChange={(e) => setLocationId(e.target.value)}
-        className="mb-3 w-full rounded border border-neutral-300 bg-white px-3 py-2 text-sm"
-      >
-        <option value="">Choose a warehouse</option>
-        {locations.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
-      </select>
+        onChange={setLocationId}
+        placeholder="Choose a warehouse"
+        options={locations.map((l) => ({ value: String(l.id), label: l.name }))}
+      />
 
       <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-neutral-500">
         What arrived (fill in the sizes you received)

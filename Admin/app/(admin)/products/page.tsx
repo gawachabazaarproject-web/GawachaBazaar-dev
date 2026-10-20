@@ -23,6 +23,7 @@ import { TableSkeleton } from "@/components/TableSkeleton";
 import { Pagination } from "@/components/Pagination";
 import { StatusBadge } from "@/components/StatusBadge";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { SearchableSelect, categoryOptions } from "@/components/SearchableSelect";
 
 const PAGE_SIZE = 20;
 const LOW_STOCK_THRESHOLD = 10;
@@ -141,16 +142,13 @@ export default function ProductsPage() {
             <option key={s} value={s}>{s}</option>
           ))}
         </select>
-        <select
+        <SearchableSelect
+          className="w-56"
           value={categoryId}
-          onChange={(e) => { setPage(1); setCategoryId(e.target.value); }}
-          className="rounded border border-neutral-300 bg-white px-2 py-1.5 text-sm text-neutral-700"
-        >
-          <option value="">Category: All</option>
-          {categories.map((c) => (
-            <option key={c.id} value={c.id} style={{ fontWeight: c.parent_id ? 400 : 700 }}>{c.name}</option>
-          ))}
-        </select>
+          onChange={(v) => { setPage(1); setCategoryId(v); }}
+          placeholder="Category: All"
+          options={categoryOptions(categories)}
+        />
         <input
           type="number"
           value={priceMin}

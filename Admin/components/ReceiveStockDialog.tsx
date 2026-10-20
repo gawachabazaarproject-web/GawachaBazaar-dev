@@ -4,6 +4,7 @@ import React, { useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { fetchAdminProducts, fetchAdminProductDetail, AdminProductListItem, ProductVariant } from "@/lib/products";
 import { ReceiveStockForm } from "@/components/ReceiveStockForm";
+import { SearchableSelect } from "@/components/SearchableSelect";
 
 /** Receive stock: pick a product, then add stock to any of its sizes in one form. */
 export function ReceiveStockDialog({
@@ -56,14 +57,13 @@ export function ReceiveStockDialog({
         <h2 className="mb-4 font-display text-lg font-semibold text-primary-900">Receive stock</h2>
 
         <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-neutral-500">Product</label>
-        <select
+        <SearchableSelect
+          className="mb-3"
           value={productId}
-          onChange={(e) => setProductId(e.target.value)}
-          className="mb-3 w-full rounded border border-neutral-300 bg-white px-3 py-2 text-sm"
-        >
-          <option value="">Choose a product</option>
-          {products.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-        </select>
+          onChange={setProductId}
+          placeholder="Choose a product"
+          options={products.map((p) => ({ value: String(p.id), label: p.name }))}
+        />
 
         {productId ? (
           <ReceiveStockForm variants={variants} onReceived={onReceived} onCancel={handleClose} />
