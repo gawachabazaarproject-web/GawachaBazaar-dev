@@ -59,5 +59,8 @@ class DashboardSummaryResponse(BaseSchema):
     refunds_pending_approval: int
     attention: list[DashboardAttentionOrderResponse]
     low_stock_count: int
+    low_stock_out_count: int = 0
+    low_stock_below_count: int = 0
+    low_stock_near_count: int = 0
     low_stock: list[DashboardLowStockResponse]
     delivery_issues: list[DashboardDeliveryIssueResponse]

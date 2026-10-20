@@ -51,6 +51,9 @@ export interface DashboardSummary {
   refunds_pending_approval: number;
   attention: DashboardAttentionOrder[];
   low_stock_count: number;
+  low_stock_out_count: number;
+  low_stock_below_count: number;
+  low_stock_near_count: number;
   low_stock: DashboardLowStock[];
   delivery_issues: DashboardDeliveryIssue[];
 }

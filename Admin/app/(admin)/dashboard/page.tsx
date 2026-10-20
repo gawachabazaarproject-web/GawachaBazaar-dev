@@ -133,10 +133,20 @@ export default function DashboardPage() {
         </Panel>
 
         <Panel
+          className="order-first"
           title={data && data.low_stock_count > data.low_stock.length ? `Low stock (${data.low_stock_count})` : "Low stock"}
           empty="Every item is comfortably above its reserve."
           loading={!data}
-          footer={<Link href="/inventory" className="text-xs font-semibold text-primary-700 hover:underline">Open inventory →</Link>}
+          summary={
+            data && data.low_stock_count > 0 ? (
+              <div className="flex flex-wrap gap-1.5 text-xs font-semibold">
+                <span className="rounded-full bg-status-dangerLight px-2 py-0.5 text-status-danger">{data.low_stock_out_count} out of stock</span>
+                <span className="rounded-full bg-status-warningLight px-2 py-0.5 text-status-warning">{data.low_stock_below_count} low on stock</span>
+                <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-neutral-600">{data.low_stock_near_count} close to reserve</span>
+              </div>
+            ) : undefined
+          }
+          footer={<Link href="/inventory/alerts" className="text-xs font-semibold text-primary-700 hover:underline">See all →</Link>}
         >
           {data?.low_stock.map((item) => (
             <Link
@@ -205,21 +215,26 @@ function Panel({
   empty,
   loading,
   footer,
+  summary,
+  className,
   children,
 }: {
   title: string;
   empty: string;
   loading: boolean;
   footer?: React.ReactNode;
+  summary?: React.ReactNode;
+  className?: string;
   children?: React.ReactNode;
 }) {
   const items = React.Children.toArray(children);
   return (
-    <div className="rounded border border-neutral-200 bg-white p-4">
+    <div className={`rounded border border-neutral-200 bg-white p-4 ${className ?? ""}`}>
       <div className="mb-2 flex items-center justify-between">
         <h2 className="font-display text-base font-semibold text-primary-900">{title}</h2>
         {footer}
       </div>
+      {summary && <div className="mb-2">{summary}</div>}
       {loading ? (
         <div className="flex justify-center py-6 text-primary-700"><Spinner className="h-6 w-6" /></div>
       ) : items.length === 0 ? (
