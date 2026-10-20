@@ -1,15 +1,15 @@
 # API Reference
 
-> **Status:** Verified (generated from source). **Generated:** 2026-10-14 by [`docs/_tools/gen_api_reference.py`](../_tools/gen_api_reference.py).
+> **Status:** Verified (generated from source). **Generated:** 2026-10-20 by [`docs/_tools/gen_api_reference.py`](../_tools/gen_api_reference.py).
 > **Evidence:** router decorators in [`backend/app/api/v1/`](../../backend/app/api/v1), router mounting in [`router.py`](../../backend/app/api/v1/router.py), the app's own OpenAPI document (`app.openapi()`), and the reviewed role matrix [`backend/tests/authz_golden.json`](../../backend/tests/authz_golden.json).
 
 Conventions (envelope, errors, pagination): [API_CONVENTIONS.md](API_CONVENTIONS.md). Webhook: [WEBHOOKS.md](WEBHOOKS.md). Roles and permissions: [USER_ROLES_AND_PERMISSIONS](../01-requirements/USER_ROLES_AND_PERMISSIONS.md).
 
-**196 HTTP operations + 1 WebSocket.** Interactive docs (`/docs`, `/redoc`, `/openapi.json`) are served only when `APP_ENV` is not `production` ([`main.py`](../../backend/app/main.py)).
+**200 HTTP operations + 1 WebSocket.** Interactive docs (`/docs`, `/redoc`, `/openapi.json`) are served only when `APP_ENV` is not `production` ([`main.py`](../../backend/app/main.py)).
 
 How to read the **Auth** column: `roles A/B` = caller must hold at least one of those roles (checked live against `user_roles`); `perm x.y` = the caller's roles must grant that permission in the static map ([`permissions.py`](../../backend/app/core/permissions.py)); `signed-in user` = any ACTIVE user whose token verified (email/password users also need a verified email). Router-level role gates apply to every route in that router. **Request** column: `name(p|q|h)` are path/query/header parameters; the schema name is the JSON body model. **Response** lists declared success responses (`code: Schema`); every error uses the uniform envelope.
 
-Field-level request/response schemas live in the OpenAPI document (205 schemas at generation time) and the Pydantic models in [`backend/app/schemas/`](../../backend/app/schemas); they are not repeated here to avoid drift.
+Field-level request/response schemas live in the OpenAPI document (213 schemas at generation time) and the Pydantic models in [`backend/app/schemas/`](../../backend/app/schemas); they are not repeated here to avoid drift.
 
 ## Index
 
@@ -21,12 +21,12 @@ Field-level request/response schemas live in the OpenAPI document (205 schemas a
 | [bazaar](#bazaar) | 2 |
 | [bulk_orders](#bulk-orders) | 18 |
 | [cart](#cart) | 8 |
-| [catalog](#catalog) | 27 |
+| [catalog](#catalog) | 28 |
 | [customers](#customers) | 13 |
 | [dashboard](#dashboard) | 1 |
 | [fulfillments](#fulfillments) | 7 |
 | [home_slides](#home-slides) | 6 |
-| [inventory](#inventory) | 25 |
+| [inventory](#inventory) | 28 |
 | [offers](#offers) | 1 |
 | [orders](#orders) | 10 |
 | [packaging](#packaging) | 10 |
@@ -130,33 +130,34 @@ Source: [`backend/app/api/v1/catalog.py`](../../backend/app/api/v1/catalog.py)
 
 | Method | Path | Auth | Request | Response | Notes |
 |---|---|---|---|---|---|
-| GET | `/api/v1/catalog/categories` | Public | parent_id(q), page(q), page_size(q) | 200: CategoryListResponse | List active categories [L176](../../backend/app/api/v1/catalog.py#L176) |
-| POST | `/api/v1/catalog/categories` | perm categories.create | CreateCategoryRequest | 201: CategoryResponse | Create a category [L233](../../backend/app/api/v1/catalog.py#L233) |
-| GET | `/api/v1/catalog/categories/admin` | perm categories.read | page(q), page_size(q), status(q), parent_id(q), q(q) | 200: AdminCategoryListResponse | List/search/filter every category regardless of status (admin panel) [L128](../../backend/app/api/v1/catalog.py#L128) |
-| GET | `/api/v1/catalog/categories/admin/{category_id}` | perm categories.read | category_id(p) | 200: AdminCategoryDetailResponse | Get the complete admin detail for any category regardless of status [L145](../../backend/app/api/v1/catalog.py#L145) |
-| GET | `/api/v1/catalog/categories/admin/{category_id}/activity` | perm categories.read | category_id(p) | 200: ProductActivityResponse | Real audit-log activity for this category [L158](../../backend/app/api/v1/catalog.py#L158) |
-| DELETE | `/api/v1/catalog/categories/{category_id}` | perm categories.delete | category_id(p) | 204 | Delete a category that has no products or subcategories [L260](../../backend/app/api/v1/catalog.py#L260) |
-| GET | `/api/v1/catalog/categories/{category_id}` | Public | category_id(p) | 200: CategoryDetailResponse | Get an active category (with direct active children) [L190](../../backend/app/api/v1/catalog.py#L190) |
-| PATCH | `/api/v1/catalog/categories/{category_id}` | perm categories.update | category_id(p), UpdateCategoryRequest | 200: CategoryResponse | Update a category (including lifecycle status) [L246](../../backend/app/api/v1/catalog.py#L246) |
-| DELETE | `/api/v1/catalog/categories/{category_id}/image` | perm categories.update | category_id(p) | 200: CategoryResponse | Remove a category's image [L292](../../backend/app/api/v1/catalog.py#L292) |
-| POST | `/api/v1/catalog/categories/{category_id}/image` | perm categories.update | category_id(p), multipart: Body_upload_category_image_api_v1_catalog_categories__category_id__image_post | 200: CategoryResponse | Upload (or replace) a category's image via Cloudinary [L273](../../backend/app/api/v1/catalog.py#L273) |
-| DELETE | `/api/v1/catalog/images/{image_id}` | perm products.manage_media | image_id(p) | 204 | Delete a product image [L419](../../backend/app/api/v1/catalog.py#L419) |
-| PATCH | `/api/v1/catalog/images/{image_id}` | perm products.manage_media | image_id(p), UpdateProductImageRequest | 200: ProductImageResponse | Update a product image, including primary image handoff [L405](../../backend/app/api/v1/catalog.py#L405) |
-| PATCH | `/api/v1/catalog/prices/{price_id}` | perm products.manage_pricing | price_id(p), UpdatePriceRequest | 200: PriceResponse | Activate/deactivate or end a price's validity window [L473](../../backend/app/api/v1/catalog.py#L473) |
-| GET | `/api/v1/catalog/products` | Public | category_id(q), q(q), page(q), page_size(q) | 200: ProductListResponse | List active products, optionally filtered by category and/or name search [L201](../../backend/app/api/v1/catalog.py#L201) |
-| POST | `/api/v1/catalog/products` | perm products.create | CreateProductRequest | 201: ProductResponse | Create a product [L308](../../backend/app/api/v1/catalog.py#L308) |
-| GET | `/api/v1/catalog/products/admin` | perm products.read | page(q), page_size(q), status(q), category_id(q), q(q), price_min(q), price_max(q), created_from(q), created_to(q), updated_from(q), updated_to(q) | 200: AdminProductListResponse | List/search/filter every product regardless of status (admin panel) [L63](../../backend/app/api/v1/catalog.py#L63) |
-| GET | `/api/v1/catalog/products/admin/{product_id}` | perm products.read | product_id(p) | 200: AdminProductDetailResponse | Get the complete admin detail for any product regardless of status [L98](../../backend/app/api/v1/catalog.py#L98) |
-| GET | `/api/v1/catalog/products/admin/{product_id}/activity` | perm products.read | product_id(p) | 200: ProductActivityResponse | Real audit-log activity for this product and its variants/prices [L111](../../backend/app/api/v1/catalog.py#L111) |
-| DELETE | `/api/v1/catalog/products/{product_id}` | perm products.delete | product_id(p) | 204 | Permanently delete a product (refused if it has order/quote/supplier history - archive it instead) [L321](../../backend/app/api/v1/catalog.py#L321) |
-| GET | `/api/v1/catalog/products/{product_id}` | Public | product_id(p) | 200: ProductResponse | Get an active product with images, active variants, and current prices [L216](../../backend/app/api/v1/catalog.py#L216) |
-| PATCH | `/api/v1/catalog/products/{product_id}` | perm products.update | product_id(p), UpdateProductRequest | 200: ProductResponse | Update a product (including lifecycle status) [L334](../../backend/app/api/v1/catalog.py#L334) |
-| POST | `/api/v1/catalog/products/{product_id}/images` | perm products.manage_media | product_id(p), CreateProductImageRequest | 201: ProductImageResponse | Add a product image [L391](../../backend/app/api/v1/catalog.py#L391) |
-| POST | `/api/v1/catalog/products/{product_id}/images/upload` | perm products.manage_media | product_id(p), multipart: Body_upload_product_image_api_v1_catalog_products__product_id__images_upload_post | 201: ProductImageResponse | Upload a product image via Cloudinary and attach it to the product [L433](../../backend/app/api/v1/catalog.py#L433) |
-| POST | `/api/v1/catalog/products/{product_id}/variants` | perm products.update | product_id(p), CreateProductVariantRequest | 201: ProductVariantResponse | Create a product variant [L349](../../backend/app/api/v1/catalog.py#L349) |
-| DELETE | `/api/v1/catalog/variants/{variant_id}` | perm products.update | variant_id(p) | 204 | Delete a product variant that has no order, quote or stock history [L377](../../backend/app/api/v1/catalog.py#L377) |
-| PATCH | `/api/v1/catalog/variants/{variant_id}` | perm products.update | variant_id(p), UpdateProductVariantRequest | 200: ProductVariantResponse | Update a product variant (including lifecycle status) [L363](../../backend/app/api/v1/catalog.py#L363) |
-| POST | `/api/v1/catalog/variants/{variant_id}/prices` | perm products.manage_pricing | variant_id(p), CreatePriceRequest | 201: PriceResponse | Create a new price for a variant (preserves price history) [L459](../../backend/app/api/v1/catalog.py#L459) |
+| GET | `/api/v1/catalog/categories` | Public | parent_id(q), page(q), page_size(q) | 200: CategoryListResponse | List active categories [L177](../../backend/app/api/v1/catalog.py#L177) |
+| POST | `/api/v1/catalog/categories` | perm categories.create | CreateCategoryRequest | 201: CategoryResponse | Create a category [L234](../../backend/app/api/v1/catalog.py#L234) |
+| GET | `/api/v1/catalog/categories/admin` | perm categories.read | page(q), page_size(q), status(q), parent_id(q), q(q) | 200: AdminCategoryListResponse | List/search/filter every category regardless of status (admin panel) [L129](../../backend/app/api/v1/catalog.py#L129) |
+| GET | `/api/v1/catalog/categories/admin/{category_id}` | perm categories.read | category_id(p) | 200: AdminCategoryDetailResponse | Get the complete admin detail for any category regardless of status [L146](../../backend/app/api/v1/catalog.py#L146) |
+| GET | `/api/v1/catalog/categories/admin/{category_id}/activity` | perm categories.read | category_id(p) | 200: ProductActivityResponse | Real audit-log activity for this category [L159](../../backend/app/api/v1/catalog.py#L159) |
+| PUT | `/api/v1/catalog/categories/reorder` | perm categories.update | ReorderCategoriesRequest | 204 | Set the display order of sibling categories/subcategories [L247](../../backend/app/api/v1/catalog.py#L247) |
+| DELETE | `/api/v1/catalog/categories/{category_id}` | perm categories.delete | category_id(p) | 204 | Delete a category that has no products or subcategories [L274](../../backend/app/api/v1/catalog.py#L274) |
+| GET | `/api/v1/catalog/categories/{category_id}` | Public | category_id(p) | 200: CategoryDetailResponse | Get an active category (with direct active children) [L191](../../backend/app/api/v1/catalog.py#L191) |
+| PATCH | `/api/v1/catalog/categories/{category_id}` | perm categories.update | category_id(p), UpdateCategoryRequest | 200: CategoryResponse | Update a category (including lifecycle status) [L260](../../backend/app/api/v1/catalog.py#L260) |
+| DELETE | `/api/v1/catalog/categories/{category_id}/image` | perm categories.update | category_id(p) | 200: CategoryResponse | Remove a category's image [L306](../../backend/app/api/v1/catalog.py#L306) |
+| POST | `/api/v1/catalog/categories/{category_id}/image` | perm categories.update | category_id(p), multipart: Body_upload_category_image_api_v1_catalog_categories__category_id__image_post | 200: CategoryResponse | Upload (or replace) a category's image via Cloudinary [L287](../../backend/app/api/v1/catalog.py#L287) |
+| DELETE | `/api/v1/catalog/images/{image_id}` | perm products.manage_media | image_id(p) | 204 | Delete a product image [L433](../../backend/app/api/v1/catalog.py#L433) |
+| PATCH | `/api/v1/catalog/images/{image_id}` | perm products.manage_media | image_id(p), UpdateProductImageRequest | 200: ProductImageResponse | Update a product image, including primary image handoff [L419](../../backend/app/api/v1/catalog.py#L419) |
+| PATCH | `/api/v1/catalog/prices/{price_id}` | perm products.manage_pricing | price_id(p), UpdatePriceRequest | 200: PriceResponse | Activate/deactivate or end a price's validity window [L487](../../backend/app/api/v1/catalog.py#L487) |
+| GET | `/api/v1/catalog/products` | Public | category_id(q), q(q), page(q), page_size(q) | 200: ProductListResponse | List active products, optionally filtered by category and/or name search [L202](../../backend/app/api/v1/catalog.py#L202) |
+| POST | `/api/v1/catalog/products` | perm products.create | CreateProductRequest | 201: ProductResponse | Create a product [L322](../../backend/app/api/v1/catalog.py#L322) |
+| GET | `/api/v1/catalog/products/admin` | perm products.read | page(q), page_size(q), status(q), category_id(q), q(q), price_min(q), price_max(q), created_from(q), created_to(q), updated_from(q), updated_to(q) | 200: AdminProductListResponse | List/search/filter every product regardless of status (admin panel) [L64](../../backend/app/api/v1/catalog.py#L64) |
+| GET | `/api/v1/catalog/products/admin/{product_id}` | perm products.read | product_id(p) | 200: AdminProductDetailResponse | Get the complete admin detail for any product regardless of status [L99](../../backend/app/api/v1/catalog.py#L99) |
+| GET | `/api/v1/catalog/products/admin/{product_id}/activity` | perm products.read | product_id(p) | 200: ProductActivityResponse | Real audit-log activity for this product and its variants/prices [L112](../../backend/app/api/v1/catalog.py#L112) |
+| DELETE | `/api/v1/catalog/products/{product_id}` | perm products.delete | product_id(p) | 204 | Permanently delete a product (refused if it has order/quote/supplier history - archive it instead) [L335](../../backend/app/api/v1/catalog.py#L335) |
+| GET | `/api/v1/catalog/products/{product_id}` | Public | product_id(p) | 200: ProductResponse | Get an active product with images, active variants, and current prices [L217](../../backend/app/api/v1/catalog.py#L217) |
+| PATCH | `/api/v1/catalog/products/{product_id}` | perm products.update | product_id(p), UpdateProductRequest | 200: ProductResponse | Update a product (including lifecycle status) [L348](../../backend/app/api/v1/catalog.py#L348) |
+| POST | `/api/v1/catalog/products/{product_id}/images` | perm products.manage_media | product_id(p), CreateProductImageRequest | 201: ProductImageResponse | Add a product image [L405](../../backend/app/api/v1/catalog.py#L405) |
+| POST | `/api/v1/catalog/products/{product_id}/images/upload` | perm products.manage_media | product_id(p), multipart: Body_upload_product_image_api_v1_catalog_products__product_id__images_upload_post | 201: ProductImageResponse | Upload a product image via Cloudinary and attach it to the product [L447](../../backend/app/api/v1/catalog.py#L447) |
+| POST | `/api/v1/catalog/products/{product_id}/variants` | perm products.update | product_id(p), CreateProductVariantRequest | 201: ProductVariantResponse | Create a product variant [L363](../../backend/app/api/v1/catalog.py#L363) |
+| DELETE | `/api/v1/catalog/variants/{variant_id}` | perm products.update | variant_id(p) | 204 | Delete a product variant that has no order, quote or stock history [L391](../../backend/app/api/v1/catalog.py#L391) |
+| PATCH | `/api/v1/catalog/variants/{variant_id}` | perm products.update | variant_id(p), UpdateProductVariantRequest | 200: ProductVariantResponse | Update a product variant (including lifecycle status) [L377](../../backend/app/api/v1/catalog.py#L377) |
+| POST | `/api/v1/catalog/variants/{variant_id}/prices` | perm products.manage_pricing | variant_id(p), CreatePriceRequest | 201: PriceResponse | Create a new price for a variant (preserves price history) [L473](../../backend/app/api/v1/catalog.py#L473) |
 
 ## customers
 
@@ -219,31 +220,34 @@ Source: [`backend/app/api/v1/inventory.py`](../../backend/app/api/v1/inventory.p
 
 | Method | Path | Auth | Request | Response | Notes |
 |---|---|---|---|---|---|
-| GET | `/api/v1/inventory/admin/dashboard` | roles ADMIN/HUB_STAFF/OPERATIONS; perm inventory.read | - | 200: InventoryDashboardResponse | Real-time inventory operational summary [L328](../../backend/app/api/v1/inventory.py#L328) |
-| GET | `/api/v1/inventory/admin/lots` | roles ADMIN/HUB_STAFF/OPERATIONS; perm inventory.read | page(q), page_size(q), location_id(q), category_id(q), status(q), operational_status(q), batch_id(q), q(q) | 200: AdminInventoryLotListResponse | List/search/filter inventory lots with product/warehouse/batch context [L340](../../backend/app/api/v1/inventory.py#L340) |
-| GET | `/api/v1/inventory/admin/lots/{lot_id}` | roles ADMIN/HUB_STAFF/OPERATIONS; perm inventory.read | lot_id(p) | 200: AdminInventoryLotDetailResponse | Complete operational detail for one inventory lot [L362](../../backend/app/api/v1/inventory.py#L362) |
-| POST | `/api/v1/inventory/admin/lots/{lot_id}/reconcile` | roles ADMIN/HUB_STAFF/OPERATIONS; perm inventory.reconcile | lot_id(p), ReconcileStockRequest | 200: AdminInventoryLotListItemResponse | Reconcile a lot against a physical count - computes and applies the difference [L421](../../backend/app/api/v1/inventory.py#L421) |
-| POST | `/api/v1/inventory/admin/lots/{lot_id}/remove` | roles ADMIN/HUB_STAFF/OPERATIONS; perm inventory.adjust | lot_id(p), RemoveStockRequest | 200: AdminInventoryLotListItemResponse | Remove stock from a lot (all available, or a quantity) with a reason [L395](../../backend/app/api/v1/inventory.py#L395) |
-| POST | `/api/v1/inventory/admin/receive` | roles ADMIN/HUB_STAFF/OPERATIONS; perm inventory.receive | ReceiveStockRequest | 200: AdminInventoryLotListItemResponse | Receive stock into a (batch, variant, location) lot - creates the lot if needed [L382](../../backend/app/api/v1/inventory.py#L382) |
-| GET | `/api/v1/inventory/admin/stock-alerts` | roles ADMIN/HUB_STAFF/OPERATIONS; perm inventory.read | - | 200: StockAlertsResponse | Items out of stock, at/below their reserve level, or close to it [L409](../../backend/app/api/v1/inventory.py#L409) |
-| POST | `/api/v1/inventory/admin/transfer` | roles ADMIN/HUB_STAFF/OPERATIONS; perm inventory.transfer | TransferStockRequest | 200: TransferStockResponse | Atomically transfer stock from one lot to a different warehouse [L435](../../backend/app/api/v1/inventory.py#L435) |
-| GET | `/api/v1/inventory/batches` | roles ADMIN/HUB_STAFF/OPERATIONS; perm inventory.read | product_id(q), status(q), page(q), page_size(q) | 200: BatchListResponse | List batches [L294](../../backend/app/api/v1/inventory.py#L294) |
-| POST | `/api/v1/inventory/batches` | roles ADMIN/HUB_STAFF/OPERATIONS; perm inventory.receive | CreateBatchRequest | 201: BatchResponse | Create a batch (harvest lot) for stock receiving [L281](../../backend/app/api/v1/inventory.py#L281) |
-| GET | `/api/v1/inventory/batches/{batch_id}` | roles ADMIN/HUB_STAFF/OPERATIONS; perm inventory.read | batch_id(p) | 200: BatchResponse | Get a batch [L310](../../backend/app/api/v1/inventory.py#L310) |
-| GET | `/api/v1/inventory/locations` | roles ADMIN/HUB_STAFF/OPERATIONS | status(q), page(q), page_size(q) | 200: InventoryLocationListResponse | List inventory locations [L78](../../backend/app/api/v1/inventory.py#L78) |
-| POST | `/api/v1/inventory/locations` | roles ADMIN/HUB_STAFF/OPERATIONS | CreateInventoryLocationRequest | 201: InventoryLocationResponse | Create an inventory location [L67](../../backend/app/api/v1/inventory.py#L67) |
-| DELETE | `/api/v1/inventory/locations/{location_id}` | roles ADMIN/HUB_STAFF/OPERATIONS; roles ADMIN | location_id(p) | 204 | Admin: delete (archive) an inventory location - refused while it holds stock [L117](../../backend/app/api/v1/inventory.py#L117) |
-| GET | `/api/v1/inventory/locations/{location_id}` | roles ADMIN/HUB_STAFF/OPERATIONS | location_id(p) | 200: InventoryLocationResponse | Get an inventory location [L92](../../backend/app/api/v1/inventory.py#L92) |
-| PATCH | `/api/v1/inventory/locations/{location_id}` | roles ADMIN/HUB_STAFF/OPERATIONS | location_id(p), UpdateInventoryLocationRequest | 200: InventoryLocationResponse | Update an inventory location (lifecycle status included) [L103](../../backend/app/api/v1/inventory.py#L103) |
-| POST | `/api/v1/inventory/locations/{location_id}/packing-point` | roles ADMIN/HUB_STAFF/OPERATIONS; roles ADMIN | location_id(p) | 200: InventoryLocationResponse | Admin: make this location the delivery-distance origin (packing point) [L127](../../backend/app/api/v1/inventory.py#L127) |
-| GET | `/api/v1/inventory/lots` | roles ADMIN/HUB_STAFF/OPERATIONS | batch_id(q), variant_id(q), location_id(q), status(q), page(q), page_size(q) | 200: InventoryLotListResponse | List inventory lots [L155](../../backend/app/api/v1/inventory.py#L155) |
-| POST | `/api/v1/inventory/lots` | roles ADMIN/HUB_STAFF/OPERATIONS | CreateInventoryLotRequest | 201: InventoryLotResponse | Create an inventory lot (batch + variant + location) [L144](../../backend/app/api/v1/inventory.py#L144) |
-| GET | `/api/v1/inventory/lots/{lot_id}` | roles ADMIN/HUB_STAFF/OPERATIONS | lot_id(p) | 200: InventoryLotResponse | Get an inventory lot [L174](../../backend/app/api/v1/inventory.py#L174) |
-| GET | `/api/v1/inventory/lots/{lot_id}/movements` | roles ADMIN/HUB_STAFF/OPERATIONS | lot_id(p), movement_type(q), performed_by_user_id(q), occurred_from(q), occurred_to(q), page(q), page_size(q) | 200: StockMovementListResponse | List stock movement history for a lot (read-only, immutable) [L203](../../backend/app/api/v1/inventory.py#L203) |
-| POST | `/api/v1/inventory/lots/{lot_id}/movements` | roles ADMIN/HUB_STAFF/OPERATIONS | lot_id(p), CreateStockMovementRequest | 201: StockMovementResponse | Record a stock movement (the only way quantity changes) [L189](../../backend/app/api/v1/inventory.py#L189) |
-| GET | `/api/v1/inventory/reservations` | roles ADMIN/HUB_STAFF/OPERATIONS | status(q), page(q), page_size(q) | 200: InventoryReservationListResponse | List inventory reservations [L234](../../backend/app/api/v1/inventory.py#L234) |
-| GET | `/api/v1/inventory/reservations/{reservation_id}` | roles ADMIN/HUB_STAFF/OPERATIONS | reservation_id(p) | 200: InventoryReservationDetailResponse | Get an inventory reservation, including its FIFO lot allocation [L250](../../backend/app/api/v1/inventory.py#L250) |
-| POST | `/api/v1/inventory/reservations/{reservation_id}/expire` | roles ADMIN/HUB_STAFF/OPERATIONS | reservation_id(p) | 200: InventoryReservationResponse | Manually expire an ACTIVE reservation (idempotent no-op if already terminal) [L263](../../backend/app/api/v1/inventory.py#L263) |
+| GET | `/api/v1/inventory/admin/dashboard` | roles ADMIN/HUB_STAFF/OPERATIONS; perm inventory.read | - | 200: InventoryDashboardResponse | Real-time inventory operational summary [L332](../../backend/app/api/v1/inventory.py#L332) |
+| GET | `/api/v1/inventory/admin/lots` | roles ADMIN/HUB_STAFF/OPERATIONS; perm inventory.read | page(q), page_size(q), location_id(q), category_id(q), status(q), operational_status(q), batch_id(q), q(q) | 200: AdminInventoryLotListResponse | List/search/filter inventory lots with product/warehouse/batch context [L388](../../backend/app/api/v1/inventory.py#L388) |
+| GET | `/api/v1/inventory/admin/lots/{lot_id}` | roles ADMIN/HUB_STAFF/OPERATIONS; perm inventory.read | lot_id(p) | 200: AdminInventoryLotDetailResponse | Complete operational detail for one inventory lot [L410](../../backend/app/api/v1/inventory.py#L410) |
+| POST | `/api/v1/inventory/admin/lots/{lot_id}/reconcile` | roles ADMIN/HUB_STAFF/OPERATIONS; perm inventory.reconcile | lot_id(p), ReconcileStockRequest | 200: AdminInventoryLotListItemResponse | Reconcile a lot against a physical count - computes and applies the difference [L469](../../backend/app/api/v1/inventory.py#L469) |
+| POST | `/api/v1/inventory/admin/lots/{lot_id}/remove` | roles ADMIN/HUB_STAFF/OPERATIONS; perm inventory.adjust | lot_id(p), RemoveStockRequest | 200: AdminInventoryLotListItemResponse | Remove stock from a lot (all available, or a quantity) with a reason [L443](../../backend/app/api/v1/inventory.py#L443) |
+| GET | `/api/v1/inventory/admin/products` | roles ADMIN/HUB_STAFF/OPERATIONS; perm inventory.read | page(q), page_size(q), category_id(q), q(q) | 200: ProductStockListResponse | Stock per product (shared pool total) with each size's packs and weight [L344](../../backend/app/api/v1/inventory.py#L344) |
+| POST | `/api/v1/inventory/admin/products/{product_id}/divide-stock` | roles ADMIN/HUB_STAFF/OPERATIONS; perm inventory.adjust | product_id(p), DivideStockRequest | 200: ProductStockItemResponse | Divide a product's stock between its sizes (each size then sells only its share) [L360](../../backend/app/api/v1/inventory.py#L360) |
+| POST | `/api/v1/inventory/admin/products/{product_id}/share-stock` | roles ADMIN/HUB_STAFF/OPERATIONS; perm inventory.adjust | product_id(p), ShareStockRequest | 200: ProductStockItemResponse | Put a divided product's sizes back into one shared stock pool [L374](../../backend/app/api/v1/inventory.py#L374) |
+| POST | `/api/v1/inventory/admin/receive` | roles ADMIN/HUB_STAFF/OPERATIONS; perm inventory.receive | ReceiveStockRequest | 200: AdminInventoryLotListItemResponse | Receive stock into a (batch, variant, location) lot - creates the lot if needed [L430](../../backend/app/api/v1/inventory.py#L430) |
+| GET | `/api/v1/inventory/admin/stock-alerts` | roles ADMIN/HUB_STAFF/OPERATIONS; perm inventory.read | - | 200: StockAlertsResponse | Items out of stock, at/below their reserve level, or close to it [L457](../../backend/app/api/v1/inventory.py#L457) |
+| POST | `/api/v1/inventory/admin/transfer` | roles ADMIN/HUB_STAFF/OPERATIONS; perm inventory.transfer | TransferStockRequest | 200: TransferStockResponse | Atomically transfer stock from one lot to a different warehouse [L483](../../backend/app/api/v1/inventory.py#L483) |
+| GET | `/api/v1/inventory/batches` | roles ADMIN/HUB_STAFF/OPERATIONS; perm inventory.read | product_id(q), status(q), page(q), page_size(q) | 200: BatchListResponse | List batches [L298](../../backend/app/api/v1/inventory.py#L298) |
+| POST | `/api/v1/inventory/batches` | roles ADMIN/HUB_STAFF/OPERATIONS; perm inventory.receive | CreateBatchRequest | 201: BatchResponse | Create a batch (harvest lot) for stock receiving [L285](../../backend/app/api/v1/inventory.py#L285) |
+| GET | `/api/v1/inventory/batches/{batch_id}` | roles ADMIN/HUB_STAFF/OPERATIONS; perm inventory.read | batch_id(p) | 200: BatchResponse | Get a batch [L314](../../backend/app/api/v1/inventory.py#L314) |
+| GET | `/api/v1/inventory/locations` | roles ADMIN/HUB_STAFF/OPERATIONS | status(q), page(q), page_size(q) | 200: InventoryLocationListResponse | List inventory locations [L82](../../backend/app/api/v1/inventory.py#L82) |
+| POST | `/api/v1/inventory/locations` | roles ADMIN/HUB_STAFF/OPERATIONS | CreateInventoryLocationRequest | 201: InventoryLocationResponse | Create an inventory location [L71](../../backend/app/api/v1/inventory.py#L71) |
+| DELETE | `/api/v1/inventory/locations/{location_id}` | roles ADMIN/HUB_STAFF/OPERATIONS; roles ADMIN | location_id(p) | 204 | Admin: delete (archive) an inventory location - refused while it holds stock [L121](../../backend/app/api/v1/inventory.py#L121) |
+| GET | `/api/v1/inventory/locations/{location_id}` | roles ADMIN/HUB_STAFF/OPERATIONS | location_id(p) | 200: InventoryLocationResponse | Get an inventory location [L96](../../backend/app/api/v1/inventory.py#L96) |
+| PATCH | `/api/v1/inventory/locations/{location_id}` | roles ADMIN/HUB_STAFF/OPERATIONS | location_id(p), UpdateInventoryLocationRequest | 200: InventoryLocationResponse | Update an inventory location (lifecycle status included) [L107](../../backend/app/api/v1/inventory.py#L107) |
+| POST | `/api/v1/inventory/locations/{location_id}/packing-point` | roles ADMIN/HUB_STAFF/OPERATIONS; roles ADMIN | location_id(p) | 200: InventoryLocationResponse | Admin: make this location the delivery-distance origin (packing point) [L131](../../backend/app/api/v1/inventory.py#L131) |
+| GET | `/api/v1/inventory/lots` | roles ADMIN/HUB_STAFF/OPERATIONS | batch_id(q), variant_id(q), location_id(q), status(q), page(q), page_size(q) | 200: InventoryLotListResponse | List inventory lots [L159](../../backend/app/api/v1/inventory.py#L159) |
+| POST | `/api/v1/inventory/lots` | roles ADMIN/HUB_STAFF/OPERATIONS | CreateInventoryLotRequest | 201: InventoryLotResponse | Create an inventory lot (batch + variant + location) [L148](../../backend/app/api/v1/inventory.py#L148) |
+| GET | `/api/v1/inventory/lots/{lot_id}` | roles ADMIN/HUB_STAFF/OPERATIONS | lot_id(p) | 200: InventoryLotResponse | Get an inventory lot [L178](../../backend/app/api/v1/inventory.py#L178) |
+| GET | `/api/v1/inventory/lots/{lot_id}/movements` | roles ADMIN/HUB_STAFF/OPERATIONS | lot_id(p), movement_type(q), performed_by_user_id(q), occurred_from(q), occurred_to(q), page(q), page_size(q) | 200: StockMovementListResponse | List stock movement history for a lot (read-only, immutable) [L207](../../backend/app/api/v1/inventory.py#L207) |
+| POST | `/api/v1/inventory/lots/{lot_id}/movements` | roles ADMIN/HUB_STAFF/OPERATIONS | lot_id(p), CreateStockMovementRequest | 201: StockMovementResponse | Record a stock movement (the only way quantity changes) [L193](../../backend/app/api/v1/inventory.py#L193) |
+| GET | `/api/v1/inventory/reservations` | roles ADMIN/HUB_STAFF/OPERATIONS | status(q), page(q), page_size(q) | 200: InventoryReservationListResponse | List inventory reservations [L238](../../backend/app/api/v1/inventory.py#L238) |
+| GET | `/api/v1/inventory/reservations/{reservation_id}` | roles ADMIN/HUB_STAFF/OPERATIONS | reservation_id(p) | 200: InventoryReservationDetailResponse | Get an inventory reservation, including its FIFO lot allocation [L254](../../backend/app/api/v1/inventory.py#L254) |
+| POST | `/api/v1/inventory/reservations/{reservation_id}/expire` | roles ADMIN/HUB_STAFF/OPERATIONS | reservation_id(p) | 200: InventoryReservationResponse | Manually expire an ACTIVE reservation (idempotent no-op if already terminal) [L267](../../backend/app/api/v1/inventory.py#L267) |
 
 ## offers
 

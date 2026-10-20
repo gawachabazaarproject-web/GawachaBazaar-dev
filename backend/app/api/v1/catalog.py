@@ -32,6 +32,7 @@ from app.schemas.catalog import (
     ProductListResponse,
     ProductResponse,
     ProductVariantResponse,
+    ReorderCategoriesRequest,
     UpdateCategoryRequest,
     UpdatePriceRequest,
     UpdateProductImageRequest,
@@ -236,6 +237,19 @@ def create_category(
     db: Session = Depends(get_db),
 ) -> CategoryResponse:
     return CatalogService(db).create_category(payload, current_user.id)
+
+
+@router.put(
+    "/categories/reorder",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Set the display order of sibling categories/subcategories",
+)
+def reorder_categories(
+    payload: ReorderCategoriesRequest,
+    current_user: User = Depends(require_permission("categories.update")),
+    db: Session = Depends(get_db),
+) -> None:
+    CatalogService(db).reorder_categories(payload, current_user.id)
 
 
 @router.patch(

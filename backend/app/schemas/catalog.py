@@ -45,6 +45,12 @@ class UpdateCategoryRequest(BaseSchema):
     image_url: str | None = Field(default=None, max_length=2048)
 
 
+class ReorderCategoriesRequest(BaseSchema):
+    """Sibling categories (same parent) in the order they should display."""
+
+    ids: list[int] = Field(..., min_length=1, max_length=500)
+
+
 class CategoryResponse(BaseSchema):
     id: int
     name: str
@@ -53,6 +59,7 @@ class CategoryResponse(BaseSchema):
     image_url: str | None
     parent_id: int | None
     status: str
+    sort_order: int = 0
     created_at: datetime
     # Active subcategories - filled in by the public list/detail reads;
     # 0 wherever a category is merely embedded (e.g. on a product).

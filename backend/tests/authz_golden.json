@@ -327,6 +327,14 @@
    "HUB_STAFF",
    "OPERATIONS"
   ],
+  "POST /api/v1/inventory/admin/products/{product_id}/divide-stock": [
+   "HUB_STAFF",
+   "OPERATIONS"
+  ],
+  "POST /api/v1/inventory/admin/products/{product_id}/share-stock": [
+   "HUB_STAFF",
+   "OPERATIONS"
+  ],
   "POST /api/v1/inventory/admin/receive": [
    "HUB_STAFF",
    "OPERATIONS"

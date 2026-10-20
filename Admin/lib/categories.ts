@@ -2,7 +2,7 @@
  * Types mirror backend/app/schemas/admin_catalog.py's category schemas
  * field-for-field. `image_url` is Cloudinary-backed (see
  * uploadCategoryImage/deleteCategoryImage below) - there is still no
- * sort_order/is_featured/SEO column on Category in the backend, so those
+ * is_featured/SEO column on Category in the backend, so those
  * stay absent here rather than a fabricated default, matching the
  * honest-gap pattern already used in Products (Merchandising/Reviews).
  */
@@ -16,6 +16,7 @@ export interface AdminCategoryListItem {
   parent_id: number | null;
   parent_name: string | null;
   status: string;
+  sort_order: number;
   product_count: number;
   child_count: number;
   created_at: string;
@@ -190,5 +191,19 @@ export async function deleteCategory(accessToken: string, id: number): Promise<v
   if (!response.ok) {
     const body = await response.json().catch(() => null);
     throw new CategoryApiError(response.status, body?.message ?? "Unable to delete this category.");
+  }
+}
+
+/** Saves the display order of one group of siblings (same parent), first
+ * item shown first. The backend rejects ids from different parents. */
+export async function reorderCategories(accessToken: string, ids: number[]): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/catalog/categories/reorder`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
+    body: JSON.stringify({ ids }),
+  });
+  if (!response.ok) {
+    const body = await response.json().catch(() => null);
+    throw new CategoryApiError(response.status, body?.message ?? "Unable to save the order.");
   }
 }

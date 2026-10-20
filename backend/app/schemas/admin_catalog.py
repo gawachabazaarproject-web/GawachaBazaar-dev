@@ -111,6 +111,7 @@ class AdminCategoryListItemResponse(BaseSchema):
     parent_id: int | None
     parent_name: str | None
     status: str
+    sort_order: int = 0
     product_count: int
     child_count: int
     created_at: datetime
