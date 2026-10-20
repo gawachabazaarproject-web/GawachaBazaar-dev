@@ -34,6 +34,7 @@ import { ImageDropzone } from "@/components/ImageDropzone";
 import { packCount } from "@/lib/inventory";
 import { CategoryChecklist } from "@/components/CategoryChecklist";
 import { ReserveLevelEditor } from "@/components/ReserveLevelEditor";
+import { ReceiveStockForm } from "@/components/ReceiveStockForm";
 import { Icon } from "@/components/icons";
 import { BusyLabel, PageLoader } from "@/components/Spinner";
 
@@ -62,6 +63,8 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const canReceive = !!(user && hasPermission(user.roles, "inventory.receive"));
+  const [addStockOpen, setAddStockOpen] = useState(false);
   const canManageMedia = user && hasPermission(user.roles, "products.manage_media");
   const canManagePricing = user && hasPermission(user.roles, "products.manage_pricing");
 
@@ -344,6 +347,23 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
             );
           })}
         </div>
+        {canReceive && (
+          <div className="mt-4 border-t border-neutral-100 pt-4">
+            {!addStockOpen ? (
+              <button
+                onClick={() => setAddStockOpen(true)}
+                className="rounded border border-primary-700 px-3 py-1.5 text-sm font-semibold text-primary-800 hover:bg-primary-50"
+              >
+                + Add stock to sizes
+              </button>
+            ) : (
+              <div className="rounded border border-neutral-200 p-3">
+                <h3 className="mb-3 font-display text-sm font-semibold text-primary-900">Add stock to sizes</h3>
+                <ReceiveStockForm variants={product.variants} onReceived={load} onCancel={() => setAddStockOpen(false)} />
+              </div>
+            )}
+          </div>
+        )}
         <a href="/inventory" className="mt-3 inline-block text-sm font-semibold text-primary-700 hover:underline">
           View inventory →
         </a>
@@ -471,6 +491,14 @@ function MediaSection({
   );
 }
 
+interface NewSize {
+  unit: string;
+  quantity: string;
+  /** Price of one whole pack. */
+  price: string;
+}
+const emptySize = (): NewSize => ({ unit: "KG", quantity: "", price: "" });
+
 function VariantsSection({
   product,
   canManagePricing,
@@ -484,7 +512,8 @@ function VariantsSection({
 }) {
   const { getAccessToken } = useAuth();
   const [showAddVariant, setShowAddVariant] = useState(false);
-  const [newVariant, setNewVariant] = useState({ unit: "KG", quantity: "", price: "" });
+  const [newSizes, setNewSizes] = useState<NewSize[]>([emptySize()]);
+  const [sizesSaved, setSizesSaved] = useState<string | null>(null);
   const [addingVariant, setAddingVariant] = useState(false);
   const [priceDialogVariant, setPriceDialogVariant] = useState<number | null>(null);
   const [newPrice, setNewPrice] = useState("");
@@ -496,27 +525,47 @@ function VariantsSection({
   const [deleteVariantId, setDeleteVariantId] = useState<number | null>(null);
   const [deleting, setDeleting] = useState(false);
 
-  const handleAddVariant = async () => {
+  const filledSizes = newSizes.filter((n) => n.quantity.trim() || n.price.trim());
+  const sizeProblems = filledSizes.map((n, i) => {
+    if (!(Number(n.quantity) > 0) || !(Number(n.price) > 0)) return "Needs a pack size and a price above 0.";
+    const dupExisting = product.variants.some((v) => v.unit === n.unit && Number(v.quantity) === Number(n.quantity));
+    const dupInForm = filledSizes.some((m, j) => j < i && m.unit === n.unit && Number(m.quantity) === Number(n.quantity));
+    if (dupExisting) return "This size already exists.";
+    if (dupInForm) return "This size is listed twice.";
+    return null;
+  });
+  const canSaveSizes = filledSizes.length > 0 && sizeProblems.every((p) => p === null);
+
+  const handleAddSizes = async () => {
     const token = getAccessToken();
-    if (!token) return;
+    if (!token || !canSaveSizes) return;
     setAddingVariant(true);
     setError(null);
+    setSizesSaved(null);
+    const done: string[] = [];
     try {
-      const label = sizeLabel(newVariant.quantity, newVariant.unit);
-      const sku = `${product.slug}-${label.replace(/[^a-z0-9]+/gi, "-")}`.toUpperCase();
-      const created = await createVariant(token, product.id, {
-        name: label,
-        sku,
-        unit: newVariant.unit,
-        quantity: newVariant.quantity,
-        status: "ACTIVE",
-      });
-      if (Number(newVariant.price) > 0) await createPrice(token, created.id, newVariant.price);
+      for (const n of filledSizes) {
+        const label = sizeLabel(n.quantity, n.unit);
+        const sku = `${product.slug}-${label.replace(/[^a-z0-9]+/gi, "-")}`.toUpperCase();
+        const created = await createVariant(token, product.id, {
+          name: label,
+          sku,
+          unit: n.unit,
+          quantity: n.quantity,
+          status: "ACTIVE",
+        });
+        await createPrice(token, created.id, Number(n.price).toFixed(2));
+        done.push(label);
+        setNewSizes((rows) => rows.filter((r) => r !== n)); // saved ones leave the form
+      }
+      setSizesSaved(`Saved ${done.join(", ")}.`);
+      setNewSizes([emptySize()]);
       setShowAddVariant(false);
-      setNewVariant({ unit: "KG", quantity: "", price: "" });
       onChange();
     } catch (err) {
-      setError(err instanceof CatalogApiError ? err.message : "Unable to add this variant.");
+      const msg = err instanceof CatalogApiError ? err.message : "Unable to add these sizes.";
+      setError(done.length > 0 ? `Saved ${done.join(", ")}. Then: ${msg}` : msg);
+      if (done.length > 0) onChange();
     } finally {
       setAddingVariant(false);
     }
@@ -648,50 +697,104 @@ function VariantsSection({
 
       {error && <p className="mt-2 text-sm text-status-danger">{error}</p>}
 
+      {sizesSaved && <p className="mt-2 text-sm text-primary-800">{sizesSaved}</p>}
+
       {canEdit && (
         <div className="mt-3">
           {!showAddVariant ? (
             <button onClick={() => setShowAddVariant(true)} className="text-sm font-semibold text-primary-700 hover:underline">
-              + Add variant
+              + Add new sizes
             </button>
           ) : (
-            <div className="mt-2 grid grid-cols-3 gap-2 rounded border border-neutral-200 p-3">
-              <input
-                type="number"
-                min="0"
-                step="any"
-                placeholder="Amount (e.g. 250)"
-                value={newVariant.quantity}
-                onChange={(e) => setNewVariant((v) => ({ ...v, quantity: e.target.value }))}
-                className="rounded border border-neutral-300 px-2 py-1.5 text-sm"
-              />
-              <select
-                value={newVariant.unit}
-                onChange={(e) => setNewVariant((v) => ({ ...v, unit: e.target.value }))}
-                className="rounded border border-neutral-300 bg-white px-2 py-1.5 text-sm"
-              >
-                {VARIANT_UNITS.map((u) => (
-                  <option key={u} value={u}>{u}</option>
+            <div className="mt-2 rounded border border-neutral-200 p-3">
+              <h3 className="mb-2 font-display text-sm font-semibold text-primary-900">Add new sizes</h3>
+              <div className="space-y-2">
+                {newSizes.map((n, i) => (
+                  <div key={i} className="grid grid-cols-12 items-center gap-2">
+                    <input
+                      type="number"
+                      min="0"
+                      step="any"
+                      placeholder="Pack size"
+                      aria-label="Pack size"
+                      value={n.quantity}
+                      onChange={(e) => setNewSizes((rows) => rows.map((r, j) => (j === i ? { ...r, quantity: e.target.value } : r)))}
+                      className="col-span-3 rounded border border-neutral-300 px-2 py-1.5 text-sm"
+                    />
+                    <select
+                      value={n.unit}
+                      aria-label="Unit"
+                      onChange={(e) => setNewSizes((rows) => rows.map((r, j) => (j === i ? { ...r, unit: e.target.value } : r)))}
+                      className="col-span-3 rounded border border-neutral-300 bg-white px-2 py-1.5 text-sm"
+                    >
+                      {VARIANT_UNITS.map((u) => (
+                        <option key={u} value={u}>{u}</option>
+                      ))}
+                    </select>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      placeholder="₹ Price of this pack"
+                      aria-label="Price of this pack"
+                      value={n.price}
+                      onChange={(e) => setNewSizes((rows) => rows.map((r, j) => (j === i ? { ...r, price: e.target.value } : r)))}
+                      className="col-span-5 rounded border border-neutral-300 px-2 py-1.5 text-sm"
+                    />
+                    <button
+                      type="button"
+                      disabled={newSizes.length === 1}
+                      onClick={() => setNewSizes((rows) => rows.filter((_, j) => j !== i))}
+                      aria-label="Remove this row"
+                      className="col-span-1 text-lg text-neutral-400 hover:text-status-danger disabled:opacity-30"
+                    >
+                      ×
+                    </button>
+                  </div>
                 ))}
-              </select>
-              <input
-                type="number"
-                min="0"
-                step="0.01"
-                placeholder="₹ Price"
-                value={newVariant.price}
-                onChange={(e) => setNewVariant((v) => ({ ...v, price: e.target.value }))}
-                className="rounded border border-neutral-300 px-2 py-1.5 text-sm"
-              />
-              <div className="col-span-3 flex gap-2">
+              </div>
+              <button
+                type="button"
+                onClick={() => setNewSizes((rows) => [...rows, emptySize()])}
+                className="mt-2 text-sm font-medium text-primary-700 hover:underline"
+              >
+                + Add another size
+              </button>
+
+              {filledSizes.length > 0 && (
+                <div className="mt-3 rounded border border-primary-200 bg-primary-50/40 p-3 text-sm">
+                  <p className="mb-1 font-semibold text-primary-900">Review before saving</p>
+                  <ul className="space-y-0.5">
+                    {filledSizes.map((n, i) => (
+                      <li key={i} className={sizeProblems[i] ? "text-status-danger" : "text-neutral-700"}>
+                        {sizeProblems[i] ? (
+                          <>
+                            {Number(n.quantity) > 0 ? sizeLabel(n.quantity, n.unit) : "New size"} - {sizeProblems[i]}
+                          </>
+                        ) : (
+                          <>
+                            {sizeLabel(n.quantity, n.unit)} sells for ₹{Number(n.price).toFixed(2)}
+                            {ratePerBaseUnit(n.price, n.quantity, n.unit) ? ` · ${ratePerBaseUnit(n.price, n.quantity, n.unit)}` : ""}
+                          </>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              <div className="mt-3 flex gap-2">
                 <button
-                  onClick={handleAddVariant}
-                  disabled={addingVariant || !(Number(newVariant.quantity) > 0)}
+                  onClick={handleAddSizes}
+                  disabled={addingVariant || !canSaveSizes}
                   className="rounded bg-primary-800 px-3 py-1.5 text-sm font-semibold text-white disabled:opacity-40"
                 >
-                  {addingVariant ? <BusyLabel>Adding...</BusyLabel> : "Add"}
+                  {addingVariant ? <BusyLabel>Saving...</BusyLabel> : filledSizes.length > 1 ? `Save ${filledSizes.length} sizes` : "Save size"}
                 </button>
-                <button onClick={() => setShowAddVariant(false)} className="rounded border border-neutral-300 px-3 py-1.5 text-sm">
+                <button
+                  onClick={() => { setShowAddVariant(false); setNewSizes([emptySize()]); }}
+                  className="rounded border border-neutral-300 px-3 py-1.5 text-sm"
+                >
                   Cancel
                 </button>
               </div>
