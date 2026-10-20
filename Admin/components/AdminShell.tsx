@@ -366,8 +366,8 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
                       ))}
                     </ul>
                   )}
-                  <Link href="/inventory" className="mt-2 block text-xs font-semibold text-primary-700 hover:underline">
-                    Open inventory →
+                  <Link href="/inventory/alerts" className="mt-2 block text-xs font-semibold text-primary-700 hover:underline">
+                    See all stock alerts →
                   </Link>
                 </div>
               )}
@@ -398,7 +398,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
               {" - "}
               {[
                 stockAlerts.out_count > 0 ? `${stockAlerts.out_count} out of stock` : null,
-                stockAlerts.below_count > 0 ? `${stockAlerts.below_count} at or below reserve` : null,
+                stockAlerts.below_count > 0 ? `${stockAlerts.below_count} low on stock` : null,
                 stockAlerts.near_count > 0 ? `${stockAlerts.near_count} close to reserve` : null,
               ]
                 .filter(Boolean)
@@ -406,7 +406,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
               .
             </p>
             <div className="flex shrink-0 items-center gap-3">
-              <Link href="/dashboard" className="font-semibold text-primary-800 hover:underline">
+              <Link href="/inventory/alerts" className="font-semibold text-primary-800 hover:underline">
                 See which
               </Link>
               <Link href="/inventory" className="font-semibold text-primary-800 hover:underline">
