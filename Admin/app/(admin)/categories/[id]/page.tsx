@@ -38,6 +38,11 @@ export default function CategoryDetailPage({ params }: { params: Promise<{ id: s
   const [allCategories, setAllCategories] = useState<CategoryRef[]>([]);
   const [activity, setActivity] = useState<CategoryActivityEntry[]>([]);
   const [products, setProducts] = useState<AdminProductListItem[] | null>(null);
+  const [addMode, setAddMode] = useState<"existing" | null>(null);
+  const [addQuery, setAddQuery] = useState("");
+  const [addError, setAddError] = useState<string | null>(null);
+  const searchSeq = useRef(0);
+  const [addResults, setAddResults] = useState<AdminProductListItem[]>([]);
   const [loading, setLoading] = useState(true);
   // After the first load, refreshes are silent so the page does not blank out.
   const loadedOnce = useRef(false);
@@ -56,6 +61,7 @@ export default function CategoryDetailPage({ params }: { params: Promise<{ id: s
   const canEdit = user && hasPermission(user.roles, "categories.update");
   const canCreate = user && hasPermission(user.roles, "categories.create");
   const canDelete = user && hasPermission(user.roles, "categories.delete");
+  const canAddProduct = user && hasPermission(user.roles, "products.create");
 
   const load = useCallback(async () => {
     const token = getAccessToken();
@@ -198,6 +204,48 @@ export default function CategoryDetailPage({ params }: { params: Promise<{ id: s
     // (shown in the header and in the archive-confirmation dialog), not
     // just which rows the Products section lists - reload the whole
     // detail so that count never goes stale after a move.
+    await load();
+  };
+
+  // Products can be listed under several categories: "Add existing product"
+  // keeps the product's main category and adds this one as an extra.
+  const searchProducts = async (query: string) => {
+    setAddQuery(query);
+    setAddError(null);
+    const token = getAccessToken();
+    if (!token || query.trim().length < 2) { setAddResults([]); return; }
+    const seq = ++searchSeq.current;
+    try {
+      const r = await fetchAdminProducts(token, { q: query.trim(), page_size: 20 });
+      if (searchSeq.current !== seq) return;
+      setAddResults(
+        r.items.filter((p) => p.category_id !== categoryId && !(p.extra_category_ids ?? []).includes(categoryId)),
+      );
+    } catch (err) {
+      if (searchSeq.current !== seq) return;
+      setAddResults([]);
+      setAddError(err instanceof Error ? err.message : "Search failed.");
+    }
+  };
+
+  const handleAddExisting = async (p: AdminProductListItem) => {
+    const token = getAccessToken();
+    if (!token) return;
+    try {
+      await updateProduct(token, p.id, { extra_category_ids: [...(p.extra_category_ids ?? []), categoryId] });
+    } catch (err) {
+      setAddError(err instanceof Error ? err.message : "Unable to add this product.");
+      return;
+    }
+    setAddQuery("");
+    setAddResults([]);
+    await load();
+  };
+
+  const handleRemoveFromCategory = async (p: AdminProductListItem) => {
+    const token = getAccessToken();
+    if (!token) return;
+    await updateProduct(token, p.id, { extra_category_ids: (p.extra_category_ids ?? []).filter((id) => id !== categoryId) }).catch(() => undefined);
     await load();
   };
 
@@ -366,7 +414,7 @@ export default function CategoryDetailPage({ params }: { params: Promise<{ id: s
 
       <Section title={`Products (${products?.length ?? 0})`}>
         {!products || products.length === 0 ? (
-          <EmptyState icon="tag" title="No products in this category" message="Assign products from the Products module or move them here." />
+          <EmptyState icon="tag" title="No products in this category" message="Use an existing product or make a new one with the buttons below." />
         ) : (
           <div className="divide-y divide-neutral-100">
             {products.map((p) => (
@@ -376,7 +424,16 @@ export default function CategoryDetailPage({ params }: { params: Promise<{ id: s
                 </a>
                 <span className="mx-3 text-neutral-600">{p.price ? formatMoney(p.price, p.currency ?? "INR") : "—"}</span>
                 <StatusBadge status={p.status} />
-                {canEdit && (
+                {canEdit && p.category_id !== categoryId && (
+                  <button
+                    onClick={() => handleRemoveFromCategory(p)}
+                    className="ml-3 rounded border border-neutral-300 px-2 py-1 text-xs text-neutral-600 hover:bg-neutral-50"
+                    title={`Main category: ${p.category_name}. This only removes it from here.`}
+                  >
+                    Remove from here
+                  </button>
+                )}
+                {canEdit && p.category_id === categoryId && (
                   <select
                     defaultValue=""
                     onChange={(e) => handleMoveProduct(p.id, e.target.value)}
@@ -384,12 +441,67 @@ export default function CategoryDetailPage({ params }: { params: Promise<{ id: s
                   >
                     <option value="" disabled>Move to...</option>
                     {allCategories.filter((c) => c.id !== categoryId).map((c) => (
-                      <option key={c.id} value={c.id}>{c.name}</option>
+                      <option key={c.id} value={c.id} style={{ fontWeight: c.parent_id ? 400 : 700 }}>{c.name}</option>
                     ))}
                   </select>
                 )}
               </div>
             ))}
+          </div>
+        )}
+        {(canAddProduct || canEdit) && (
+          <div className="mt-4 border-t border-neutral-100 pt-4">
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-neutral-500">Showcase a product here</p>
+            <div className="flex flex-wrap gap-2">
+              {canEdit && (
+                <button
+                  onClick={() => setAddMode(addMode === "existing" ? null : "existing")}
+                  className={`rounded border px-3 py-1.5 text-sm font-semibold ${
+                    addMode === "existing" ? "border-primary-800 bg-primary-800 text-white" : "border-primary-700 text-primary-800 hover:bg-primary-50"
+                  }`}
+                >
+                  Use existing product
+                </button>
+              )}
+              {canAddProduct && (
+                <button
+                  onClick={() => router.push(`/products/new?category=${category.id}`)}
+                  className="rounded border border-primary-700 px-3 py-1.5 text-sm font-semibold text-primary-800 hover:bg-primary-50"
+                >
+                  Make new product
+                </button>
+              )}
+            </div>
+            {addMode === "existing" && canEdit && (
+              <div className="mt-3">
+                <input
+                  autoFocus
+                  value={addQuery}
+                  onChange={(e) => searchProducts(e.target.value)}
+                  placeholder="Search products by name (2+ letters)..."
+                  className="w-full rounded border border-neutral-300 px-3 py-2 text-sm"
+                />
+                <p className="mt-1 text-xs text-neutral-400">
+                  The product keeps its own main category and is also shown in this one.
+                </p>
+                {addError && <p className="mt-2 text-sm text-status-danger">{addError}</p>}
+                {!addError && addQuery.trim().length >= 2 && addResults.length === 0 && (
+                  <p className="mt-2 text-sm text-neutral-400">No matching products outside this category.</p>
+                )}
+                {addResults.length > 0 && (
+                  <div className="mt-2 divide-y divide-neutral-100 rounded border border-neutral-200">
+                    {addResults.map((p) => (
+                      <div key={p.id} className="flex items-center justify-between px-3 py-2 text-sm">
+                        <span className="truncate">{p.name} <span className="text-neutral-400">· {p.category_name}</span></span>
+                        <button onClick={() => handleAddExisting(p)} className="ml-3 shrink-0 font-semibold text-primary-800 hover:underline">
+                          Add to this category
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
       </Section>

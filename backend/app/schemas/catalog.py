@@ -180,10 +180,14 @@ class CreateProductRequest(BaseSchema):
     slug: str = Field(..., min_length=1, max_length=180)
     description: str | None = Field(default=None)
     status: ProductStatus = Field(default="DRAFT")
+    # Also list the product under these categories (besides the main one).
+    extra_category_ids: list[int] = Field(default_factory=list)
 
 
 class UpdateProductRequest(BaseSchema):
     category_id: int | None = Field(default=None)
+    # Replaces the whole list of additional categories when sent.
+    extra_category_ids: list[int] | None = Field(default=None)
     name: str | None = Field(default=None, min_length=1, max_length=150)
     slug: str | None = Field(default=None, min_length=1, max_length=180)
     description: str | None = Field(default=None)
@@ -216,6 +220,7 @@ class ProductResponse(BaseSchema):
     description: str | None
     status: str
     category: CategoryResponse
+    extra_categories: list[CategoryResponse] = Field(default_factory=list)
     images: list[ProductImageResponse]
     variants: list[ProductVariantResponse]
 

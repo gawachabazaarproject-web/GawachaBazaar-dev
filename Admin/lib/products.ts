@@ -21,6 +21,7 @@ export interface AdminProductListItem {
   slug: string;
   category_id: number;
   category_name: string;
+  extra_category_ids: number[];
   status: string;
   primary_image_url: string | null;
   price: string | null;
@@ -87,6 +88,7 @@ export interface AdminProductDetail {
   created_at: string;
   updated_at: string;
   category: Category;
+  extra_categories: Category[];
   images: ProductImage[];
   variants: ProductVariant[];
   variant_stock: VariantStock[];
@@ -194,6 +196,7 @@ export interface CreateProductPayload {
   slug: string;
   description?: string | null;
   status: string;
+  extra_category_ids?: number[];
 }
 
 export async function createProduct(accessToken: string, payload: CreateProductPayload) {
@@ -205,6 +208,7 @@ export async function createProduct(accessToken: string, payload: CreateProductP
 
 export interface UpdateProductPayload {
   category_id?: number;
+  extra_category_ids?: number[];
   name?: string;
   slug?: string;
   description?: string | null;

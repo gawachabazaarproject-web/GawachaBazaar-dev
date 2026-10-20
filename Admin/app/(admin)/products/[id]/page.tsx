@@ -32,6 +32,7 @@ import { StatusBadge } from "@/components/StatusBadge";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { ImageDropzone } from "@/components/ImageDropzone";
 import { packCount } from "@/lib/inventory";
+import { CategoryChecklist } from "@/components/CategoryChecklist";
 import { ReserveLevelEditor } from "@/components/ReserveLevelEditor";
 import { Icon } from "@/components/icons";
 import { BusyLabel, PageLoader } from "@/components/Spinner";
@@ -50,6 +51,7 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
   const loadedOnce = useRef(false);
   const [error, setError] = useState<string | null>(null);
 
+  const [extraIds, setExtraIds] = useState<number[]>([]);
   const [general, setGeneral] = useState({ name: "", slug: "", category_id: "", description: "", status: "" });
   const [savingGeneral, setSavingGeneral] = useState(false);
   const [generalError, setGeneralError] = useState<string | null>(null);
@@ -78,6 +80,7 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
         description: detail.description ?? "",
         status: detail.status,
       });
+      setExtraIds(detail.extra_categories.map((c) => c.id));
       setIsDirty(false);
       fetchProductActivity(token, productId).then(setActivity).catch(() => undefined);
     } catch (err) {
@@ -141,6 +144,7 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
         name: general.name,
         slug: general.slug,
         category_id: Number(general.category_id),
+        extra_category_ids: extraIds.filter((id) => String(id) !== general.category_id),
         description: general.description || null,
         status: general.status,
       });
@@ -225,9 +229,18 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
               className="w-full rounded border border-neutral-300 bg-white px-3 py-2 text-sm disabled:bg-neutral-50"
             >
               {categories.map((c) => (
-                <option key={c.id} value={c.id}>{c.name}</option>
+                <option key={c.id} value={c.id} style={{ fontWeight: c.parent_id ? 400 : 700 }}>{c.name}</option>
               ))}
             </select>
+          </Field>
+          <Field label="Also show in" hint="The product appears in these categories and subcategories too.">
+            <CategoryChecklist
+              categories={categories}
+              mainCategoryId={general.category_id}
+              selected={extraIds}
+              onChange={(ids) => { setExtraIds(ids); setIsDirty(true); }}
+              disabled={!canEdit}
+            />
           </Field>
           <Field label="Status" hint={general.status === "ARCHIVED" ? "Archived products are hidden from customers." : undefined}>
             <select
@@ -321,7 +334,8 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
                     variantId={vs.variant_id}
                     reserveLevel={vs.reserve_level}
                     effectiveReserve={vs.effective_reserve}
-                    unit="packs"
+                    variantUnit={product.variants.find((v) => v.id === vs.variant_id)?.unit ?? "PACK"}
+                    variantQuantity={product.variants.find((v) => v.id === vs.variant_id)?.quantity ?? "1"}
                     canEdit={!!canEdit}
                     onSaved={load}
                   />

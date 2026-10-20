@@ -8,7 +8,7 @@ convention already established by AuthService), so routes stay one-liners.
 from datetime import UTC, datetime
 from decimal import Decimal
 
-from sqlalchemy import func, or_
+from sqlalchemy import func, or_, select, union
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, aliased, joinedload, selectinload
 
@@ -25,6 +25,7 @@ from app.models.packaging_input import PackagingInput
 from app.models.packaging_output import PackagingOutput
 from app.models.price import Price
 from app.models.product import Product
+from app.models.product_category import ProductCategory
 from app.models.product_image import ProductImage
 from app.models.product_variant import ProductVariant
 from app.models.quality_check import QualityCheck
@@ -113,9 +114,12 @@ class CatalogService:
         )
         # Product totals roll up: a shelf counts its subcategories' products.
         shelf = func.coalesce(Category.parent_id, Category.id)
+        placements = self._placements().subquery()
         product_counts = dict(
-            self.db.query(shelf, func.count(Product.id))
-            .join(Product, Product.category_id == Category.id)
+            self.db.query(shelf, func.count(func.distinct(Product.id)))
+            .select_from(placements)
+            .join(Category, Category.id == placements.c.category_id)
+            .join(Product, Product.id == placements.c.product_id)
             .filter(Product.status == _ACTIVE, Category.status == _ACTIVE, shelf.in_([c.id for c in items]))
             .group_by(shelf)
             .all()
@@ -228,7 +232,7 @@ class CatalogService:
                     Category.parent_id == category_id, Category.status == _ACTIVE
                 )
             ]
-            query = query.filter(Product.category_id.in_(ids))
+            query = query.filter(self._in_categories(ids))
         if q is not None:
             # Phase 20 addition: the smallest possible backend change to
             # support the mobile search screen - no full-text search
@@ -421,10 +425,11 @@ class CatalogService:
             return AdminCategoryListResponse(items=[], page=page, page_size=page_size, total=total)
 
         category_ids = [c.id for c, _ in rows]
+        placements = self._placements().subquery()
         product_counts = dict(
-            self.db.query(Product.category_id, func.count(Product.id))
-            .filter(Product.category_id.in_(category_ids))
-            .group_by(Product.category_id)
+            self.db.query(placements.c.category_id, func.count(placements.c.product_id))
+            .filter(placements.c.category_id.in_(category_ids))
+            .group_by(placements.c.category_id)
             .all()
         )
         child_counts = dict(
@@ -466,9 +471,7 @@ class CatalogService:
             .order_by(Category.name)
             .all()
         )
-        product_count = (
-            self.db.query(func.count(Product.id)).filter(Product.category_id == category_id).scalar() or 0
-        )
+        product_count = self._category_product_count(category_id)
 
         return AdminCategoryDetailResponse(
             id=category.id,
@@ -535,6 +538,7 @@ class CatalogService:
         self, data: CreateProductRequest, admin_user_id: int
     ) -> ProductResponse:
         self.get_category_or_404(data.category_id)
+        extra_ids = self._clean_extra_category_ids(data.category_id, data.extra_category_ids)
 
         product = Product(
             category_id=data.category_id,
@@ -545,6 +549,7 @@ class CatalogService:
         )
         self.db.add(product)
         self.db.flush()
+        self._set_extra_categories(product.id, extra_ids)
         AdminAuditService(self.db).record(
             admin_user_id=admin_user_id,
             action="product.create",
@@ -572,8 +577,15 @@ class CatalogService:
         if "category_id" in update_data:
             self.get_category_or_404(update_data["category_id"])
 
+        extra_ids = update_data.pop("extra_category_ids", None)
         for field, value in update_data.items():
             setattr(product, field, value)
+        if extra_ids is not None or "category_id" in update_data:
+            if extra_ids is None:
+                extra_ids = [c.category_id for c in product.extra_category_links]
+            self._set_extra_categories(
+                product.id, self._clean_extra_category_ids(product.category_id, extra_ids)
+            )
 
         AdminAuditService(self.db).record(
             admin_user_id=admin_user_id,
@@ -620,7 +632,7 @@ class CatalogService:
         if status:
             query = query.filter(Product.status == status)
         if category_id:
-            query = query.filter(Product.category_id == category_id)
+            query = query.filter(self._in_categories([category_id]))
         if q:
             like = f"%{q}%"
             query = query.filter(or_(Product.name.ilike(like), Product.slug.ilike(like)))
@@ -679,6 +691,14 @@ class CatalogService:
         if not products:
             return AdminProductListResponse(items=[], page=page, page_size=page_size, total=total)
 
+        extra_ids_by_product: dict[int, list[int]] = {}
+        for pid, cid in (
+            self.db.query(ProductCategory.product_id, ProductCategory.category_id)
+            .filter(ProductCategory.product_id.in_([p.id for p in products]))
+            .order_by(ProductCategory.category_id)
+        ):
+            extra_ids_by_product.setdefault(pid, []).append(cid)
+
         all_variant_ids = [v.id for p in products for v in p.variants]
         current_prices = self._get_current_prices_for_variants(all_variant_ids)
         active_variant_ids = [v.id for p in products for v in p.variants if v.status == _ACTIVE]
@@ -709,6 +729,7 @@ class CatalogService:
                     slug=p.slug,
                     category_id=p.category_id,
                     category_name=p.category.name,
+                    extra_category_ids=extra_ids_by_product.get(p.id, []),
                     status=p.status,
                     primary_image_url=primary.image_url if primary else None,
                     price=price_row.price if price_row else None,
@@ -750,6 +771,7 @@ class CatalogService:
             created_at=product.created_at,
             updated_at=product.updated_at,
             category=base.category,
+            extra_categories=base.extra_categories,
             images=base.images,
             variants=base.variants,
             variant_stock=variant_stock,
@@ -1029,7 +1051,7 @@ class CatalogService:
         """Permanently removes a category - only when nothing depends on it.
         Never silently takes products with it."""
         category = self.get_category_or_404(category_id)
-        product_count = self.db.query(Product.id).filter(Product.category_id == category.id).count()
+        product_count = self._category_product_count(category.id)
         if product_count:
             raise ConflictError(
                 f"This category still has {product_count} product(s). Move or delete them first."
@@ -1248,6 +1270,44 @@ class CatalogService:
             in_stock=in_stock,
         )
 
+    @staticmethod
+    def _placements():
+        """Every (product_id, category_id) a product is listed under: its
+        main category plus any extra ones."""
+        return union(
+            select(Product.id.label("product_id"), Product.category_id.label("category_id")),
+            select(ProductCategory.product_id, ProductCategory.category_id),
+        )
+
+    @staticmethod
+    def _in_categories(category_ids: list[int]):
+        return or_(
+            Product.category_id.in_(category_ids),
+            Product.id.in_(
+                select(ProductCategory.product_id).where(ProductCategory.category_id.in_(category_ids))
+            ),
+        )
+
+    def _category_product_count(self, category_id: int) -> int:
+        return self.db.query(Product.id).filter(self._in_categories([category_id])).count()
+
+    def _clean_extra_category_ids(self, main_category_id: int, ids: list[int]) -> list[int]:
+        wanted = sorted({i for i in ids if i != main_category_id})
+        if wanted:
+            found = {cid for (cid,) in self.db.query(Category.id).filter(Category.id.in_(wanted))}
+            missing = [i for i in wanted if i not in found]
+            if missing:
+                raise NotFoundError(f"Category not found: {missing[0]}.")
+        return wanted
+
+    def _set_extra_categories(self, product_id: int, ids: list[int]) -> None:
+        self.db.query(ProductCategory).filter(ProductCategory.product_id == product_id).delete(
+            synchronize_session=False
+        )
+        self.db.add_all(ProductCategory(product_id=product_id, category_id=i) for i in ids)
+        self.db.flush()
+        self.db.expire_all()
+
     def _to_product_response(
         self, product: Product, *, public_only_variants: bool
     ) -> ProductResponse:
@@ -1277,6 +1337,13 @@ class CatalogService:
             description=product.description,
             status=product.status,
             category=CategoryResponse.model_validate(product.category),
+            extra_categories=[
+                CategoryResponse.model_validate(c)
+                for c in self.db.query(Category)
+                .join(ProductCategory, ProductCategory.category_id == Category.id)
+                .filter(ProductCategory.product_id == product.id)
+                .order_by(Category.name)
+            ],
             images=[ProductImageResponse.model_validate(i) for i in images],
             variants=variant_responses,
         )
