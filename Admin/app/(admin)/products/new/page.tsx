@@ -20,6 +20,7 @@ import { CategoryChecklist } from "@/components/CategoryChecklist";
 import { PageHeader } from "@/components/PageHeader";
 import { Icon } from "@/components/icons";
 import { BusyLabel } from "@/components/Spinner";
+import { SearchableSelect, categoryOptions } from "@/components/SearchableSelect";
 
 function slugify(value: string): string {
   return value
@@ -165,12 +166,13 @@ export default function NewProductPage() {
         </Field>
 
         <Field label="Category" required>
-          <select required value={categoryId} onChange={(e) => setCategoryId(e.target.value)} className={`${inputCls} bg-white`}>
-            <option value="">Choose a category</option>
-            {categories.map((c) => (
-              <option key={c.id} value={c.id} style={{ fontWeight: c.parent_id ? 400 : 700 }}>{c.name}</option>
-            ))}
-          </select>
+          <SearchableSelect
+            required
+            value={categoryId}
+            onChange={setCategoryId}
+            placeholder="Choose a category"
+            options={categoryOptions(categories)}
+          />
         </Field>
 
         <Field label="Also show in" hint="Optional - the product will appear in these categories and subcategories too.">

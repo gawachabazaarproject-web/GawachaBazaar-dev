@@ -14,6 +14,7 @@ import {
 import { PageHeader } from "@/components/PageHeader";
 import { Icon } from "@/components/icons";
 import { BusyLabel } from "@/components/Spinner";
+import { SearchableSelect } from "@/components/SearchableSelect";
 
 function slugify(value: string): string {
   return value.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
@@ -116,16 +117,12 @@ function NewCategoryForm() {
         </Field>
 
         <Field label="Parent category" hint="Leave empty for a top-level category (a shelf on the app). Pick one to make this a subcategory.">
-          <select
+          <SearchableSelect
             value={parentId}
-            onChange={(e) => setParentId(e.target.value)}
-            className="w-full rounded border border-neutral-300 bg-white px-3 py-2 text-sm"
-          >
-            <option value="">No parent (top-level)</option>
-            {categories.map((c) => (
-              <option key={c.id} value={c.id}>{c.name}</option>
-            ))}
-          </select>
+            onChange={setParentId}
+            placeholder="No parent (top-level)"
+            options={categories.map((c) => ({ value: String(c.id), label: c.name }))}
+          />
         </Field>
 
         <Field label="Description">
