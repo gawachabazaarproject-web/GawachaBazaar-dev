@@ -219,3 +219,39 @@ class StockAlertsResponse(BaseSchema):
     below_count: int
     near_count: int
     items: list[StockAlertItemResponse]
+
+
+class ProductStockVariantResponse(BaseSchema):
+    variant_id: int
+    variant_name: str
+    sku: str
+    status: str
+    pack_quantity: Decimal
+    pack_unit: str
+    # Whole packs sellable from the product's shared pool.
+    available_packs: Decimal
+    # What those packs add up to, in kg / L / pcs (`amount_unit`).
+    available_amount: Decimal
+    amount_unit: str
+
+
+class ProductStockTotalResponse(BaseSchema):
+    """Stock of one unit family of a product ("100 kg")."""
+
+    amount: Decimal
+    amount_unit: str
+
+
+class ProductStockItemResponse(BaseSchema):
+    product_id: int
+    product_name: str
+    category_name: str
+    totals: list[ProductStockTotalResponse]
+    variants: list[ProductStockVariantResponse]
+
+
+class ProductStockListResponse(BaseSchema):
+    items: list[ProductStockItemResponse]
+    page: int
+    page_size: int
+    total: int

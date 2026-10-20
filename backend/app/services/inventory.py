@@ -18,7 +18,7 @@ not whether the transaction was opened explicitly or implicitly.
 
 import secrets
 from datetime import UTC, date, datetime
-from decimal import Decimal
+from decimal import ROUND_DOWN, Decimal
 
 from sqlalchemy import func, or_
 from sqlalchemy.exc import IntegrityError
@@ -31,6 +31,7 @@ from app.models.inventory_lot import InventoryLot
 from app.models.inventory_reservation import InventoryReservation
 from app.models.inventory_reservation_item import InventoryReservationItem
 from app.models.order import Order
+from app.models.category import Category
 from app.models.product import Product
 from app.models.product_variant import ProductVariant
 from app.models.stock_movement import StockMovement
@@ -40,6 +41,10 @@ from app.schemas.admin_inventory import (
     AdminInventoryLotListItemResponse,
     AdminInventoryLotListResponse,
     InventoryDashboardResponse,
+    ProductStockItemResponse,
+    ProductStockListResponse,
+    ProductStockTotalResponse,
+    ProductStockVariantResponse,
     ReceiveStockRequest,
     ReconcileStockRequest,
     RelatedOrderResponse,
@@ -73,7 +78,7 @@ from app.services.stock_levels import (
     effective_reserve,
     stock_level,
 )
-from app.services.stock_pool import weight_to_packs
+from app.services.stock_pool import display_amount, pool_base_amounts, to_packs, variant_size, weight_to_packs
 
 _ACTIVE = "ACTIVE"
 _INACTIVE = "INACTIVE"
@@ -690,6 +695,72 @@ class InventoryService:
             last_movement_at=last_movement,
             updated_at=lot.updated_at,
         )
+
+    def admin_list_product_stock(
+        self,
+        page: int,
+        page_size: int,
+        category_id: int | None = None,
+        q: str | None = None,
+    ) -> ProductStockListResponse:
+        """Stock per product: the shared pool total ("100 kg") with each
+        size's whole packs and weight underneath. Sizes of one unit family
+        draw from the same pool, see app.services.stock_pool."""
+        query = (
+            self.db.query(Product, Category.name)
+            .join(Category, Product.category_id == Category.id)
+            .filter(Product.status != "ARCHIVED", Product.variants.any())
+        )
+        if category_id is not None:
+            query = query.filter(Product.category_id == category_id)
+        if q:
+            escaped = q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+            query = query.filter(Product.name.ilike(f"%{escaped}%", escape="\\"))
+        total = query.count()
+        rows = query.order_by(Product.name).offset((page - 1) * page_size).limit(page_size).all()
+
+        pool, variants = pool_base_amounts(self.db, {p.id for p, _ in rows})
+        variants_by_product: dict[int, list[ProductVariant]] = {}
+        for v in sorted(variants, key=lambda v: v.id):
+            variants_by_product.setdefault(v.product_id, []).append(v)
+
+        items = []
+        for product, category_name in rows:
+            families: list[str] = []
+            variant_items = []
+            for v in variants_by_product.get(product.id, []):
+                family, size = variant_size(v)
+                if family not in families:
+                    families.append(family)
+                packs = to_packs(pool[(product.id, family)], size).to_integral_value(rounding=ROUND_DOWN)
+                amount, amount_unit = display_amount(family, packs * size)
+                variant_items.append(
+                    ProductStockVariantResponse(
+                        variant_id=v.id,
+                        variant_name=v.name,
+                        sku=v.sku,
+                        status=v.status,
+                        pack_quantity=v.quantity,
+                        pack_unit=v.unit,
+                        available_packs=packs,
+                        available_amount=amount,
+                        amount_unit=amount_unit,
+                    )
+                )
+            totals = []
+            for family in families:
+                amount, amount_unit = display_amount(family, pool[(product.id, family)])
+                totals.append(ProductStockTotalResponse(amount=amount, amount_unit=amount_unit))
+            items.append(
+                ProductStockItemResponse(
+                    product_id=product.id,
+                    product_name=product.name,
+                    category_name=category_name,
+                    totals=totals,
+                    variants=variant_items,
+                )
+            )
+        return ProductStockListResponse(items=items, page=page, page_size=page_size, total=total)
 
     def admin_list_lots(
         self,
