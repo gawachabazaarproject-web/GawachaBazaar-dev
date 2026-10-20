@@ -28,6 +28,7 @@ import { RemoveStockDialog } from "@/components/RemoveStockDialog";
 import { ReserveLevelEditor } from "@/components/ReserveLevelEditor";
 import { Icon } from "@/components/icons";
 import { BusyLabel, PageLoader } from "@/components/Spinner";
+import { SearchableSelect } from "@/components/SearchableSelect";
 
 type ActiveDialog = "adjust" | "reconcile" | "transfer" | "remove" | null;
 
@@ -428,10 +429,13 @@ function TransferDialog({
         <h2 className="mb-1 font-display text-lg font-semibold text-primary-900">Transfer stock</h2>
         <p className="mb-4 text-sm text-neutral-500">From {lot.location_name} · Available: {packCount(lot.available)}</p>
 
-        <select value={destinationId} onChange={(e) => setDestinationId(e.target.value)} className="mb-3 w-full rounded border border-neutral-300 bg-white px-3 py-2 text-sm">
-          <option value="">Destination warehouse</option>
-          {otherLocations.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
-        </select>
+        <SearchableSelect
+          className="mb-3"
+          value={destinationId}
+          onChange={setDestinationId}
+          placeholder="Destination warehouse"
+          options={otherLocations.map((l) => ({ value: String(l.id), label: l.name }))}
+        />
 
         <input type="number" value={quantity} onChange={(e) => setQuantity(e.target.value)} placeholder="Quantity" className="mb-3 w-full rounded border border-neutral-300 px-3 py-2 text-sm" />
 

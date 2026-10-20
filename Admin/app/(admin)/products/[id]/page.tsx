@@ -37,6 +37,7 @@ import { ReserveLevelEditor } from "@/components/ReserveLevelEditor";
 import { ReceiveStockForm } from "@/components/ReceiveStockForm";
 import { Icon } from "@/components/icons";
 import { BusyLabel, PageLoader } from "@/components/Spinner";
+import { SearchableSelect, categoryOptions } from "@/components/SearchableSelect";
 
 export default function ProductDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -225,16 +226,13 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
             />
           </Field>
           <Field label="Category">
-            <select
+            <SearchableSelect
               value={general.category_id}
-              onChange={(e) => updateGeneralField("category_id", e.target.value)}
+              onChange={(v) => v && updateGeneralField("category_id", v)}
               disabled={!canEdit}
-              className="w-full rounded border border-neutral-300 bg-white px-3 py-2 text-sm disabled:bg-neutral-50"
-            >
-              {categories.map((c) => (
-                <option key={c.id} value={c.id} style={{ fontWeight: c.parent_id ? 400 : 700 }}>{c.name}</option>
-              ))}
-            </select>
+              placeholder="Choose a category"
+              options={categoryOptions(categories)}
+            />
           </Field>
           <Field label="Also show in" hint="The product appears in these categories and subcategories too.">
             <CategoryChecklist

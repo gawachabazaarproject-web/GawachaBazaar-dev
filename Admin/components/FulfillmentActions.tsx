@@ -14,6 +14,7 @@ import {
   markOutForDelivery,
   WarehouseStep,
 } from "@/lib/fulfillment";
+import { SearchableSelect } from "@/components/SearchableSelect";
 
 const WAREHOUSE_NEXT: Record<string, { status: WarehouseStep; label: string }> = {
   PENDING: { status: "PICKING", label: "Start picking" },
@@ -96,10 +97,13 @@ export function FulfillmentActions({
         </p>
       ) : (
         <div className="flex flex-wrap items-center gap-2">
-          <select value={partnerId} onChange={(e) => setPartnerId(e.target.value)} className="rounded border border-neutral-300 bg-white px-3 py-2 text-sm">
-            <option value="">Choose a delivery partner</option>
-            {partners.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-          </select>
+          <SearchableSelect
+            className="w-64"
+            value={partnerId}
+            onChange={setPartnerId}
+            placeholder="Choose a delivery partner"
+            options={partners.map((p) => ({ value: String(p.id), label: p.name }))}
+          />
           <button
             disabled={busy || !partnerId}
             onClick={() => run((t) => assignDeliveryPartner(t, fulfillment.id, Number(partnerId)))}
