@@ -206,6 +206,7 @@ class StockAlertItemResponse(BaseSchema):
     product_name: str
     variant_name: str
     unit: str
+    pack_quantity: Decimal = Decimal("1")
     available: Decimal
     reserve_level: Decimal
     level: str  # OUT / BELOW / NEAR

@@ -393,6 +393,7 @@ export interface StockAlertItem {
   product_name: string;
   variant_name: string;
   unit: string;
+  pack_quantity: string;
   available: string;
   reserve_level: string;
   level: "OUT" | "BELOW" | "NEAR";

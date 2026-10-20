@@ -7,6 +7,7 @@ import { hasPermission } from "@/lib/permissions";
 import { useOrderEvents } from "@/lib/realtime-context";
 import { DashboardApiError, DashboardSummary, fetchDashboard } from "@/lib/dashboard";
 import { formatDateTime, formatMoney } from "@/lib/format";
+import { packCount, packTotal } from "@/lib/inventory";
 import { PageHeader } from "@/components/PageHeader";
 import { EmptyState } from "@/components/EmptyState";
 import { ErrorState } from "@/components/ErrorState";
@@ -147,7 +148,9 @@ export default function DashboardPage() {
               <div className="min-w-0">
                 <p className="truncate font-medium text-primary-900">{item.product_name}</p>
                 <p className="text-xs text-neutral-500">
-                  {item.variant_name} · reserve {Number(item.reserve_level)} {item.unit}
+                  {item.variant_name} · {packCount(item.available)} left
+                  {packTotal(item.available, item.pack_quantity, item.unit) && ` (${packTotal(item.available, item.pack_quantity, item.unit)})`}
+                  {" "}· reserve {packCount(item.reserve_level)}
                 </p>
               </div>
               <div className="shrink-0 text-right">
@@ -160,13 +163,8 @@ export default function DashboardPage() {
                         : "bg-neutral-100 text-neutral-600"
                   }`}
                 >
-                  {item.level === "OUT" ? "Out of stock" : item.level === "BELOW" ? "Below reserve" : "Close to reserve"}
+                  {item.level === "OUT" ? "Out of stock" : item.level === "BELOW" ? "Low on stock" : "Close to reserve"}
                 </span>
-                {item.level !== "OUT" && (
-                  <p className="mt-0.5 text-xs text-neutral-500">
-                    {Number(item.available)} {item.unit} left
-                  </p>
-                )}
               </div>
             </Link>
           ))}

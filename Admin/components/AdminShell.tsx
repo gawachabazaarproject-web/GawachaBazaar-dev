@@ -6,7 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { hasPermission, Permission } from "@/lib/permissions";
 import { fetchAdminOrders } from "@/lib/orders";
-import { fetchStockAlerts, StockAlerts } from "@/lib/inventory";
+import { fetchStockAlerts, packCount, StockAlerts } from "@/lib/inventory";
 import { useOrderEvents } from "@/lib/realtime-context";
 import { Icon, IconName } from "./icons";
 import { GlobalSearch } from "./GlobalSearch";
@@ -347,7 +347,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
                             <span className="min-w-0">
                               <span className="block truncate font-medium text-primary-900">{a.product_name}</span>
                               <span className="block text-xs text-neutral-500">
-                                {a.variant_name} · reserve {Number(a.reserve_level)} {a.unit}
+                                {a.variant_name} · reserve {packCount(a.reserve_level)}
                               </span>
                             </span>
                             <span
@@ -359,7 +359,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
                                     : "bg-neutral-100 text-neutral-600"
                               }`}
                             >
-                              {a.level === "OUT" ? "Out" : `${Number(a.available)} left`}
+                              {a.level === "OUT" ? "Out of stock" : `${packCount(a.available)} left`}
                             </span>
                           </Link>
                         </li>
