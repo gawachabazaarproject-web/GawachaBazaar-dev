@@ -217,6 +217,10 @@ export interface ProductStockVariant {
   /** What those packs add up to, in `amount_unit` (kg / L / pcs). */
   available_amount: string;
   amount_unit: string;
+  /** True once the product's stock was divided between its sizes. */
+  dedicated: boolean;
+  /** What this size's own lots hold (in `amount_unit`). */
+  held_amount: string;
 }
 
 export interface ProductStockItem {
@@ -244,6 +248,28 @@ export async function fetchProductStock(
     if (value !== undefined && value !== "") search.set(key, String(value));
   });
   return request(accessToken, `/inventory/admin/products?${search.toString()}`);
+}
+
+export async function divideProductStock(
+  accessToken: string,
+  productId: number,
+  payload: { shares: { variant_id: number; amount: string; amount_unit: string }[] },
+): Promise<ProductStockItem> {
+  return request(accessToken, `/inventory/admin/products/${productId}/divide-stock`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function shareProductStock(
+  accessToken: string,
+  productId: number,
+  variantId: number,
+): Promise<ProductStockItem> {
+  return request(accessToken, `/inventory/admin/products/${productId}/share-stock`, {
+    method: "POST",
+    body: JSON.stringify({ variant_id: variantId }),
+  });
 }
 
 export async function fetchLotDetail(accessToken: string, id: number): Promise<AdminInventoryLotDetail> {

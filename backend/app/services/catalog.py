@@ -59,6 +59,7 @@ from app.schemas.catalog import (
     ProductResponse,
     ProductSummaryResponse,
     ProductVariantResponse,
+    ReorderCategoriesRequest,
     UpdateCategoryRequest,
     UpdatePriceRequest,
     UpdateProductImageRequest,
@@ -98,7 +99,7 @@ class CatalogService:
 
         total = query.count()
         items = (
-            query.order_by(Category.name)
+            query.order_by(Category.sort_order, Category.name)
             .offset((page - 1) * page_size)
             .limit(page_size)
             .all()
@@ -151,7 +152,7 @@ class CatalogService:
         children = (
             self.db.query(Category)
             .filter(Category.parent_id == category_id, Category.status == _ACTIVE)
-            .order_by(Category.name)
+            .order_by(Category.sort_order, Category.name)
             .all()
         )
         return CategoryDetailResponse(
@@ -162,6 +163,7 @@ class CatalogService:
             image_url=category.image_url,
             parent_id=category.parent_id,
             status=category.status,
+            sort_order=category.sort_order,
             created_at=category.created_at,
             child_count=len(children),
             children=[CategoryResponse.model_validate(c) for c in children],
@@ -285,6 +287,12 @@ class CatalogService:
     ) -> CategoryResponse:
         self._validate_parent(data.parent_id)
 
+        # New categories go to the end of their siblings; admins reorder later.
+        last_order = (
+            self.db.query(func.max(Category.sort_order))
+            .filter(Category.parent_id == data.parent_id)
+            .scalar()
+        )
         category = Category(
             parent_id=data.parent_id,
             name=data.name,
@@ -292,6 +300,7 @@ class CatalogService:
             description=data.description,
             image_url=data.image_url,
             status=data.status,
+            sort_order=0 if last_order is None else last_order + 1,
         )
         self.db.add(category)
         try:
@@ -361,6 +370,45 @@ class CatalogService:
         self.db.refresh(category)
         return CategoryResponse.model_validate(category)
 
+    def reorder_categories(
+        self, data: ReorderCategoriesRequest, admin_user_id: int
+    ) -> None:
+        """Set the display order of one sibling group (same parent).
+
+        `ids` must be unique and share a single parent; positions become the
+        new sort_order values. Siblings left out of `ids` keep their order
+        relative to each other but sort after the listed ones.
+        """
+        ids = data.ids
+        if len(set(ids)) != len(ids):
+            raise BusinessValidationError("Each category can appear only once.")
+        categories = self.db.query(Category).filter(Category.id.in_(ids)).all()
+        if len(categories) != len(ids):
+            raise NotFoundError("Category not found.")
+        if len({c.parent_id for c in categories}) != 1:
+            raise BusinessValidationError(
+                "Only categories with the same parent can be ordered together."
+            )
+        parent_id = categories[0].parent_id
+        by_id = {c.id: c for c in categories}
+        for position, category_id in enumerate(ids):
+            by_id[category_id].sort_order = position
+        leftovers = (
+            self.db.query(Category)
+            .filter(Category.parent_id == parent_id, Category.id.notin_(ids))
+            .order_by(Category.sort_order, Category.name)
+            .all()
+        )
+        for offset, category in enumerate(leftovers):
+            category.sort_order = len(ids) + offset
+        AdminAuditService(self.db).record(
+            admin_user_id=admin_user_id,
+            action="category.reorder",
+            resource_type="category",
+            resource_id=parent_id or ids[0],
+        )
+        self.db.commit()
+
     def _validate_parent(
         self, parent_id: int | None, category_id: int | None = None
     ) -> None:
@@ -415,7 +463,7 @@ class CatalogService:
 
         total = query.count()
         rows = (
-            query.order_by(Category.name)
+            query.order_by(Category.sort_order, Category.name)
             .offset((page - 1) * page_size)
             .limit(page_size)
             .all()
@@ -449,6 +497,7 @@ class CatalogService:
                 parent_id=c.parent_id,
                 parent_name=parent_name,
                 status=c.status,
+                sort_order=c.sort_order,
                 product_count=product_counts.get(c.id, 0),
                 child_count=child_counts.get(c.id, 0),
                 created_at=c.created_at,
@@ -468,7 +517,7 @@ class CatalogService:
         children = (
             self.db.query(Category)
             .filter(Category.parent_id == category_id)
-            .order_by(Category.name)
+            .order_by(Category.sort_order, Category.name)
             .all()
         )
         product_count = self._category_product_count(category_id)

@@ -149,14 +149,24 @@ export default function CategoriesPage() {
         title="Categories"
         description="Organize and control how customers discover products across Gawacha Bazaar."
         actions={
-          canCreate && (
-            <button
-              onClick={() => router.push("/categories/new")}
-              className="rounded bg-primary-800 px-4 py-2 text-sm font-semibold text-white hover:bg-primary-700"
-            >
-              Create category
-            </button>
-          )
+          <>
+            {canEdit && (
+              <button
+                onClick={() => router.push("/categories/order")}
+                className="rounded border border-neutral-300 px-4 py-2 text-sm font-semibold text-neutral-700 hover:bg-neutral-50"
+              >
+                Arrange order
+              </button>
+            )}
+            {canCreate && (
+              <button
+                onClick={() => router.push("/categories/new")}
+                className="rounded bg-primary-800 px-4 py-2 text-sm font-semibold text-white hover:bg-primary-700"
+              >
+                Create category
+              </button>
+            )}
+          </>
         }
       />
 

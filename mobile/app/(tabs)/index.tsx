@@ -15,6 +15,7 @@ import { CategoryPanel } from "@/components/home/CategoryPanel";
 import { SectionHeading } from "@/components/home/SectionHeading";
 import { ProductRail } from "@/components/home/ProductRail";
 import { BazaarSection } from "@/components/home/BazaarSection";
+import { SubcategoryBento } from "@/components/home/SubcategoryBento";
 import { VillageStory } from "@/components/home/VillageStory";
 import { ClosingCTA } from "@/components/home/ClosingCTA";
 import { HomeFooter } from "@/components/home/HomeFooter";
@@ -192,6 +193,14 @@ export default function HomeScreen() {
           }
         />
 
+        {/* Subcategory bento - order is set from Admin > Categories > Arrange order */}
+        {mode === "regular" && (categories ?? []).length > 0 ? (
+          <View style={styles.bento}>
+            <SectionHeading eyebrow="DISCOVER" title="Browse by" scriptSuffix="aisle." onSeeAll={() => router.push("/(tabs)/categories")} />
+            <SubcategoryBento categories={categories ?? []} onPress={(sub) => router.push(`/category/${sub.id}`)} />
+          </View>
+        ) : null}
+
         {/* Bazaar offer: 15+ items = free delivery, 6 Bazaars/week = Bazaar+ */}
         {mode === "regular" ? <BazaarSection onStartPress={() => router.push("/bazaar" as never)} /> : null}
 
@@ -247,6 +256,7 @@ const styles = StyleSheet.create({
   categoryRow: { paddingHorizontal: spacing.base, gap: spacing.sm, flexDirection: "row" },
   skeletonRail: { flexDirection: "row", gap: spacing.md, paddingHorizontal: spacing.base, marginTop: spacing.xl },
   specialties: { marginTop: spacing.xl },
+  bento: { marginTop: spacing.xl },
   wholesaleIntro: { paddingHorizontal: spacing.base, marginTop: spacing["2xl"], marginBottom: spacing["2xl"] },
   wholesaleLink: { flexDirection: "row", alignItems: "center", marginTop: spacing.xl },
   wholesaleSpecialtyItem: { paddingHorizontal: spacing.base, marginBottom: spacing.base, maxWidth: 220 },
