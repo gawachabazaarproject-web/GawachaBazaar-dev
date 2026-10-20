@@ -18,10 +18,9 @@ from app.schemas.admin_inventory import (
     AdminInventoryLotDetailResponse,
     AdminInventoryLotListItemResponse,
     AdminInventoryLotListResponse,
-    DivideStockRequest,
     ProductStockItemResponse,
     ProductStockListResponse,
-    ShareStockRequest,
+    SetStockSharesRequest,
     InventoryDashboardResponse,
     ReceiveStockRequest,
     ReconcileStockRequest,
@@ -352,32 +351,18 @@ def admin_list_product_stock(
     return InventoryService(db).admin_list_product_stock(page, page_size, category_id, q)
 
 
-@router.post(
-    "/admin/products/{product_id}/divide-stock",
+@router.put(
+    "/admin/products/{product_id}/stock-shares",
     response_model=ProductStockItemResponse,
-    summary="Divide a product's stock between its sizes (each size then sells only its share)",
+    summary="Assign stock of a product to specific sizes (each size's share), rest stays unassigned",
 )
-def admin_divide_product_stock(
+def admin_set_stock_shares(
     product_id: int,
-    payload: DivideStockRequest,
+    payload: SetStockSharesRequest,
     current_user: User = Depends(require_permission("inventory.adjust")),
     db: Session = Depends(get_db),
 ) -> ProductStockItemResponse:
-    return InventoryService(db).divide_product_stock(product_id, payload, current_user.id)
-
-
-@router.post(
-    "/admin/products/{product_id}/share-stock",
-    response_model=ProductStockItemResponse,
-    summary="Put a divided product's sizes back into one shared stock pool",
-)
-def admin_share_product_stock(
-    product_id: int,
-    payload: ShareStockRequest,
-    current_user: User = Depends(require_permission("inventory.adjust")),
-    db: Session = Depends(get_db),
-) -> ProductStockItemResponse:
-    return InventoryService(db).share_product_stock(product_id, payload, current_user.id)
+    return InventoryService(db).set_stock_shares(product_id, payload, current_user.id)
 
 
 @router.get(

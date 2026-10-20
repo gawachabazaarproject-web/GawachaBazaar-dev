@@ -228,23 +228,25 @@ class ProductStockVariantResponse(BaseSchema):
     status: str
     pack_quantity: Decimal
     pack_unit: str
-    # Whole packs sellable from the product's shared pool.
+    # Whole packs this size can sell: its own share plus the unassigned stock.
     available_packs: Decimal
     # What those packs add up to, in kg / L / pcs (`amount_unit`).
     available_amount: Decimal
     amount_unit: str
-    # True once the stock was divided between sizes: this size then sells
-    # only its own `held_amount` instead of sharing the product's pool.
-    dedicated: bool = False
-    # What this size's own lots hold (in `amount_unit`), shared or not.
-    held_amount: Decimal = Decimal("0")
+    # Stock assigned to this size alone (in `amount_unit`) and the whole packs
+    # that makes.
+    share_amount: Decimal = Decimal("0")
+    share_packs: Decimal = Decimal("0")
 
 
 class ProductStockTotalResponse(BaseSchema):
-    """Stock of one unit family of a product ("100 kg")."""
+    """Stock of one unit family of a product ("34 kg", of which 10 kg is
+    still unassigned and shared by every size)."""
 
+    family: str
     amount: Decimal
     amount_unit: str
+    unassigned_amount: Decimal
 
 
 class ProductStockItemResponse(BaseSchema):
@@ -255,25 +257,18 @@ class ProductStockItemResponse(BaseSchema):
     variants: list[ProductStockVariantResponse]
 
 
-class DivideStockShare(BaseSchema):
+class StockShare(BaseSchema):
     variant_id: int = Field(..., gt=0)
+    # The size's TOTAL assigned share (not an increment); 0 releases it.
     amount: Decimal = Field(..., ge=0, max_digits=12, decimal_places=3)
     amount_unit: AmountUnit
 
 
-class DivideStockRequest(BaseSchema):
-    """How a product's stock is split between its sizes. Must list EVERY size
-    of one unit family (kg/g, L/ml or pieces/dozen) and add up to all the
-    stock currently available in that family."""
+class SetStockSharesRequest(BaseSchema):
+    """Assign stock of a product to specific sizes. Each entry sets that
+    size's whole share; sizes not listed keep theirs."""
 
-    shares: list[DivideStockShare] = Field(..., min_length=2, max_length=50)
-
-
-class ShareStockRequest(BaseSchema):
-    """Put a divided family back into one shared pool. `variant_id` is any
-    size of that family."""
-
-    variant_id: int = Field(..., gt=0)
+    shares: list[StockShare] = Field(..., min_length=1, max_length=50)
 
 
 class ProductStockListResponse(BaseSchema):

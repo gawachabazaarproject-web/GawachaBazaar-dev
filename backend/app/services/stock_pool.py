@@ -47,14 +47,6 @@ def amount_in_base(amount: Decimal, unit: str) -> tuple[str, Decimal]:
     return family, amount * factor
 
 
-def pool_key(variant: ProductVariant) -> tuple[int, str, int]:
-    """Which stock pool a variant sells from: the product's shared pool of
-    its unit family (last element 0), or - once an admin divided the stock -
-    its own dedicated pool (last element = the variant id)."""
-    family, _ = variant_size(variant)
-    return (variant.product_id, family, variant.id if variant.dedicated_stock else 0)
-
-
 def to_packs(base_amount: Decimal, pack_size: Decimal) -> Decimal:
     """Whole-thousandth number of packs of `pack_size` inside `base_amount`.
 
@@ -82,25 +74,28 @@ def weight_to_packs(variant: ProductVariant, amount: Decimal, amount_unit: str) 
 def pool_siblings(db: Session, variant: ProductVariant) -> list[ProductVariant]:
     """Variants of the same product in the same unit family (incl. itself)."""
     family, _ = variant_size(variant)
-    if variant.dedicated_stock:
-        return [variant]  # sells only from its own lots
     return [
         v
         for v in db.query(ProductVariant)
         .filter(ProductVariant.product_id == variant.product_id)
         .order_by(ProductVariant.id.asc())
         .all()
-        if variant_size(v)[0] == family and not v.dedicated_stock
+        if variant_size(v)[0] == family
     ]
 
 
 def pool_base_amounts(
     db: Session, product_ids: set[int] | list[int]
-) -> tuple[dict[tuple[int, str, int], Decimal], list[ProductVariant], dict[int, Decimal]]:
-    """Sellable stock per pool (see `pool_key`) in the family's base unit
-    (g / ml / pieces), pooled across the sharing siblings' ACTIVE lots minus
-    reservations. Also returns the products' variants so callers do not
-    have to re-query them, and what each variant's own lots hold."""
+) -> tuple[dict[tuple[int, str], Decimal], list[ProductVariant], dict[int, Decimal]]:
+    """Sellable stock in the family's base unit (g / ml / pieces), minus
+    reservations, from ACTIVE lots:
+
+    * the shared pool per (product, unit family) - every ordinary lot, which
+      all sizes of the family draw from, and
+    * what each variant has been assigned (its share lots), which only that
+      size can sell.
+
+    Also returns the products' variants so callers do not have to re-query."""
     variants = (
         db.query(ProductVariant).filter(ProductVariant.product_id.in_(list(product_ids))).all()
         if product_ids
@@ -114,16 +109,18 @@ def pool_base_amounts(
         if by_id
         else []
     )
-    pool: dict[tuple[int, str, int], Decimal] = defaultdict(lambda: _ZERO)
-    held: dict[int, Decimal] = defaultdict(lambda: _ZERO)
+    pool: dict[tuple[int, str], Decimal] = defaultdict(lambda: _ZERO)
+    shares: dict[int, Decimal] = defaultdict(lambda: _ZERO)
     for lot in lots:
         owner = by_id[lot.variant_id]
-        _, size = variant_size(owner)
+        family, size = variant_size(owner)
         available = lot.quantity - lot.reserved_quantity
         if available > 0:
-            pool[pool_key(owner)] += available * size
-            held[owner.id] += available * size
-    return pool, variants, held
+            if lot.is_share:
+                shares[owner.id] += available * size
+            else:
+                pool[(owner.product_id, family)] += available * size
+    return pool, variants, shares
 
 
 def display_amount(family: str, base_amount: Decimal) -> tuple[Decimal, str]:
@@ -148,11 +145,11 @@ def available_packs_by_variant(
     if not variant_ids:
         return {}
     wanted = db.query(ProductVariant).filter(ProductVariant.id.in_(variant_ids)).all()
-    pool, _, _ = pool_base_amounts(db, {v.product_id for v in wanted})
+    pool, _, shares = pool_base_amounts(db, {v.product_id for v in wanted})
 
     result: dict[int, Decimal] = {}
     for v in wanted:
         family, size = variant_size(v)
         # Customers can only buy whole packs: 1.1 kg of 250 g packs is 4 packs.
-        result[v.id] = to_packs(pool[pool_key(v)], size).to_integral_value(rounding=ROUND_DOWN)
+        result[v.id] = to_packs(pool[(v.product_id, family)] + shares[v.id], size).to_integral_value(rounding=ROUND_DOWN)
     return result

@@ -40,7 +40,6 @@ from app.schemas.admin_inventory import (
     AdminInventoryLotDetailResponse,
     AdminInventoryLotListItemResponse,
     AdminInventoryLotListResponse,
-    DivideStockRequest,
     InventoryDashboardResponse,
     ProductStockItemResponse,
     ProductStockListResponse,
@@ -50,7 +49,7 @@ from app.schemas.admin_inventory import (
     ReconcileStockRequest,
     RelatedOrderResponse,
     RemoveStockRequest,
-    ShareStockRequest,
+    SetStockSharesRequest,
     StockAlertItemResponse,
     StockAlertsResponse,
     TransferStockRequest,
@@ -84,7 +83,6 @@ from app.services.stock_pool import (
     amount_in_base,
     display_amount,
     pool_base_amounts,
-    pool_key,
     to_packs,
     variant_size,
     weight_to_packs,
@@ -506,7 +504,7 @@ class InventoryService:
         return movement
 
     def get_or_create_lot_no_commit(
-        self, batch_id: int, variant_id: int, location_id: int
+        self, batch_id: int, variant_id: int, location_id: int, *, is_share: bool = False
     ) -> InventoryLot:
         """Get-or-create the lot for (batch, variant, location) without committing.
 
@@ -521,6 +519,7 @@ class InventoryService:
                 InventoryLot.batch_id == batch_id,
                 InventoryLot.variant_id == variant_id,
                 InventoryLot.location_id == location_id,
+                InventoryLot.is_share == is_share,
             )
             .first()
         )
@@ -548,6 +547,7 @@ class InventoryService:
             location_id=location_id,
             quantity=Decimal("0"),
             status=_DEPLETED,
+            is_share=is_share,
         )
         self.db.add(lot)
         self.db.flush()
@@ -732,7 +732,7 @@ class InventoryService:
         return ProductStockListResponse(items=items, page=page, page_size=page_size, total=total)
 
     def _product_stock_items(self, rows: list[tuple[Product, str]]) -> list[ProductStockItemResponse]:
-        pool, variants, held = pool_base_amounts(self.db, {p.id for p, _ in rows})
+        pool, variants, shares = pool_base_amounts(self.db, {p.id for p, _ in rows})
         variants_by_product: dict[int, list[ProductVariant]] = {}
         for v in sorted(variants, key=lambda v: v.id):
             variants_by_product.setdefault(v.product_id, []).append(v)
@@ -745,9 +745,10 @@ class InventoryService:
                 family, size = variant_size(v)
                 if family not in families:
                     families.append(family)
-                packs = to_packs(pool[pool_key(v)], size).to_integral_value(rounding=ROUND_DOWN)
+                share_base = shares.get(v.id, Decimal("0"))
+                packs = to_packs(pool[(product.id, family)] + share_base, size).to_integral_value(rounding=ROUND_DOWN)
                 amount, amount_unit = display_amount(family, packs * size)
-                held_amount, _ = display_amount(family, held.get(v.id, Decimal("0")))
+                share_amount, _ = display_amount(family, share_base)
                 variant_items.append(
                     ProductStockVariantResponse(
                         variant_id=v.id,
@@ -759,19 +760,26 @@ class InventoryService:
                         available_packs=packs,
                         available_amount=amount,
                         amount_unit=amount_unit,
-                        dedicated=v.dedicated_stock,
-                        held_amount=held_amount,
+                        share_amount=share_amount,
+                        share_packs=to_packs(share_base, size).to_integral_value(rounding=ROUND_DOWN),
                     )
                 )
             totals = []
             for family in families:
-                # The family's stock = its shared pool plus every dedicated pool.
-                base = sum(
-                    (amt for (pid, fam, _), amt in pool.items() if pid == product.id and fam == family),
+                unassigned = pool[(product.id, family)]
+                assigned = sum(
+                    (shares.get(v.id, Decimal("0")) for v in variants_by_product[product.id] if variant_size(v)[0] == family),
                     Decimal("0"),
                 )
-                amount, amount_unit = display_amount(family, base)
-                totals.append(ProductStockTotalResponse(amount=amount, amount_unit=amount_unit))
+                amount, amount_unit = display_amount(family, unassigned + assigned)
+                totals.append(
+                    ProductStockTotalResponse(
+                        family=family,
+                        amount=amount,
+                        amount_unit=amount_unit,
+                        unassigned_amount=display_amount(family, unassigned)[0],
+                    )
+                )
             items.append(
                 ProductStockItemResponse(
                     product_id=product.id,
@@ -792,15 +800,16 @@ class InventoryService:
         )
         return self._product_stock_items([row])[0]
 
-    def divide_product_stock(
-        self, product_id: int, data: DivideStockRequest, admin_user_id: int
+    def set_stock_shares(
+        self, product_id: int, data: SetStockSharesRequest, admin_user_id: int
     ) -> ProductStockItemResponse:
-        """Split one unit family's stock between its sizes exactly as the admin
-        typed it ("1 kg: 10 kg, 500 g: 12 kg, 250 g: 12 kg"). Stock is moved
-        between the sizes' lots with TRANSFER_OUT / TRANSFER_IN movements (same
-        batch and warehouse; only AVAILABLE stock moves, reserved stock stays
-        put), then every size of the family is marked dedicated so each sells
-        only its own share. All or nothing."""
+        """Assign stock of a product to specific sizes ("10 kg to the 1 kg
+        size"). A share lives in a share lot of that size (`is_share`): only
+        that size sells from it, while the unassigned rest stays in the
+        ordinary lots every size of the unit family draws from. Raising a share
+        moves free stock (same batch and warehouse) into the size's share lot
+        with TRANSFER_OUT / TRANSFER_IN; lowering it moves stock back. Only
+        AVAILABLE stock moves - reserved stock stays where it is. All or nothing."""
         product = self.db.query(Product).filter(Product.id == product_id).first()
         if not product:
             raise NotFoundError("Product not found.")
@@ -822,109 +831,108 @@ class InventoryService:
                 raise BusinessValidationError("Each size can only appear once.")
             fam, base = amount_in_base(share.amount, share.amount_unit)
             if fam != variant_size(variant)[0]:
-                raise BusinessValidationError(
-                    f"{share.amount_unit} cannot be used for the {variant.name} size."
-                )
+                raise BusinessValidationError(f"{share.amount_unit} cannot be used for the {variant.name} size.")
             if family is None:
                 family = fam
             elif fam != family:
                 raise BusinessValidationError("All sizes must be in the same unit family.")
             wanted[variant.id] = base
         if family not in {"MASS", "VOLUME", "COUNT"}:
-            raise BusinessValidationError("Only weight, volume or piece-counted sizes can be divided.")
+            raise BusinessValidationError("Only weight, volume or piece-counted sizes can be assigned.")
         family_variants = [v for v in variants if variant_size(v)[0] == family]
-        if {v.id for v in family_variants} != set(wanted):
-            raise BusinessValidationError("List every size of this product in the same unit family.")
+        size_of = {v.id: variant_size(v)[1] for v in family_variants}
 
         # Lock every lot of the family up front, ascending id.
         lots = (
             self.db.query(InventoryLot)
             .filter(
-                InventoryLot.variant_id.in_([v.id for v in family_variants]),
+                InventoryLot.variant_id.in_(list(size_of)),
                 InventoryLot.status != _INACTIVE,
             )
             .order_by(InventoryLot.id.asc())
             .with_for_update()
             .all()
         )
-        size_of = {v.id: variant_size(v)[1] for v in family_variants}
 
         def avail(lot: InventoryLot) -> Decimal:
             return lot.quantity - lot.reserved_quantity if lot.status == _ACTIVE else Decimal("0")
 
-        holding = {v.id: Decimal("0") for v in family_variants}
-        for lot in lots:
-            if avail(lot) > 0:
-                holding[lot.variant_id] += avail(lot) * size_of[lot.variant_id]
-        total_stock = sum(holding.values(), Decimal("0"))
-        total_wanted = sum(wanted.values(), Decimal("0"))
-        if abs(total_stock - total_wanted) > Decimal("0.5"):
-            unit_amount, unit_label = display_amount(family, total_stock)
+        def locked(lot: InventoryLot) -> InventoryLot:
+            return self.db.query(InventoryLot).filter(InventoryLot.id == lot.id).with_for_update().first()
+
+        def free_lots() -> list[InventoryLot]:
+            return sorted((l for l in lots if not l.is_share and avail(l) > 0), key=lambda l: (l.created_at, l.id))
+
+        current = {
+            vid: sum((avail(l) * size_of[vid] for l in lots if l.variant_id == vid and l.is_share), Decimal("0"))
+            for vid in wanted
+        }
+        free_base = sum((avail(l) * size_of[l.variant_id] for l in free_lots()), Decimal("0"))
+        release = {vid: current[vid] - wanted[vid] for vid in wanted if current[vid] > wanted[vid]}
+        need = {vid: wanted[vid] - current[vid] for vid in wanted if wanted[vid] > current[vid]}
+        if sum(need.values(), Decimal("0")) > free_base + sum(release.values(), Decimal("0")) + Decimal("0.5"):
+            free_amount, unit_label = display_amount(family, free_base + sum(release.values(), Decimal("0")))
             raise BusinessValidationError(
-                f"The shares add up to {display_amount(family, total_wanted)[0]} {unit_label} "
-                f"but {unit_amount} {unit_label} is in stock - they must match."
+                f"Only {free_amount} {unit_label} is unassigned, which is not enough for those shares."
             )
 
-        surplus = {vid: holding[vid] - wanted[vid] for vid in wanted if holding[vid] > wanted[vid]}
-        deficit = {vid: wanted[vid] - holding[vid] for vid in wanted if wanted[vid] > holding[vid]}
-        tolerance = Decimal("0.5")
-        for dest_id in sorted(deficit):
-            dest_size = size_of[dest_id]
-            for src_id in sorted(surplus):
-                if deficit[dest_id] <= 0:
+        # 1) Lowered shares go back to the size's ordinary lots (same batch, warehouse).
+        for vid, amount in sorted(release.items()):
+            for share_lot in sorted((l for l in lots if l.variant_id == vid and l.is_share and avail(l) > 0), key=lambda l: l.id):
+                if amount <= 0:
                     break
-                src_size = size_of[src_id]
-                src_lots = sorted(
-                    (l for l in lots if l.variant_id == src_id and avail(l) > 0),
-                    key=lambda l: (l.created_at, l.id),
+                packs = min(avail(share_lot), (amount / size_of[vid]).quantize(Decimal("0.001"), rounding=ROUND_DOWN))
+                if packs <= 0:
+                    continue
+                back = locked(self.get_or_create_lot_no_commit(share_lot.batch_id, vid, share_lot.location_id))
+                if back not in lots:
+                    lots.append(back)
+                self.apply_movement(
+                    share_lot, "TRANSFER_OUT", packs, admin_user_id,
+                    reference_type="stock_share", reference_id=back.id, remarks="Stock share released",
                 )
-                for src_lot in src_lots:
-                    move_base = min(avail(src_lot) * src_size, surplus[src_id], deficit[dest_id])
-                    dest_packs = to_packs(move_base, dest_size)
-                    if dest_packs <= 0:
-                        continue
-                    moved_base = dest_packs * dest_size
-                    src_packs = min(
-                        avail(src_lot),
-                        (moved_base / src_size).quantize(Decimal("0.001"), rounding=ROUND_UP),
-                    )
-                    dest_lot = self.get_or_create_lot_no_commit(
-                        src_lot.batch_id, dest_id, src_lot.location_id
-                    )
-                    dest_lot = (
-                        self.db.query(InventoryLot)
-                        .filter(InventoryLot.id == dest_lot.id)
-                        .with_for_update()
-                        .first()
-                    )
-                    self.apply_movement(
-                        src_lot, "TRANSFER_OUT", src_packs, admin_user_id,
-                        reference_type="divide_stock", reference_id=dest_lot.id,
-                        remarks="Stock divided between sizes",
-                    )
-                    self.apply_movement(
-                        dest_lot, "TRANSFER_IN", dest_packs, admin_user_id,
-                        reference_type="divide_stock", reference_id=src_lot.id,
-                        remarks="Stock divided between sizes",
-                    )
-                    surplus[src_id] -= moved_base
-                    deficit[dest_id] -= moved_base
-                    if surplus[src_id] <= 0 or deficit[dest_id] <= 0:
-                        break
+                self.apply_movement(
+                    back, "TRANSFER_IN", packs, admin_user_id,
+                    reference_type="stock_share", reference_id=share_lot.id, remarks="Stock share released",
+                )
+                amount -= packs * size_of[vid]
 
-        leftover = max((d for d in deficit.values()), default=Decimal("0"))
-        if leftover > max(tolerance, min(size_of.values()) * Decimal("0.001")):
+        # 2) Raised shares are filled from the unassigned stock - the size's own
+        #    ordinary lots first, then the siblings' (FIFO).
+        for vid, amount in sorted(need.items()):
+            dest_size = size_of[vid]
+            for src in sorted(free_lots(), key=lambda l: (l.variant_id != vid, l.created_at, l.id)):
+                if amount <= 0:
+                    break
+                src_size = size_of[src.variant_id]
+                dest_packs = to_packs(min(avail(src) * src_size, amount), dest_size)
+                if dest_packs <= 0:
+                    continue
+                moved = dest_packs * dest_size
+                src_packs = min(avail(src), (moved / src_size).quantize(Decimal("0.001"), rounding=ROUND_UP))
+                dest = locked(self.get_or_create_lot_no_commit(src.batch_id, vid, src.location_id, is_share=True))
+                if dest not in lots:
+                    lots.append(dest)
+                self.apply_movement(
+                    src, "TRANSFER_OUT", src_packs, admin_user_id,
+                    reference_type="stock_share", reference_id=dest.id, remarks="Stock assigned to a size",
+                )
+                self.apply_movement(
+                    dest, "TRANSFER_IN", dest_packs, admin_user_id,
+                    reference_type="stock_share", reference_id=src.id, remarks="Stock assigned to a size",
+                )
+                amount -= moved
+            need[vid] = amount
+        if any(left > max(Decimal("0.5"), size_of[vid] * Decimal("0.001")) for vid, left in need.items()):
             self.db.rollback()
             raise ConflictError(
-                "The stock could not be divided exactly as asked (reserved stock cannot be moved). "
-                "Try different amounts."
+                "That much stock could not be assigned (stock reserved for customer orders cannot be moved). "
+                "Try a smaller amount."
             )
 
-        for v in family_variants:
-            v.dedicated_stock = True
         AdminAuditService(self.db).record(
             admin_user_id=admin_user_id,
-            action="inventory.divide",
+            action="inventory.assign_share",
             resource_type="product",
             resource_id=product.id,
             reason="shares=" + ", ".join(f"{vid}:{amt}" for vid, amt in sorted(wanted.items())) + f" ({family} base units)",
@@ -933,34 +941,7 @@ class InventoryService:
             self.db.commit()
         except IntegrityError as exc:
             self.db.rollback()
-            raise ConflictError("Could not divide stock due to a conflicting update.") from exc
-        return self._product_stock_item(product_id)
-
-    def share_product_stock(
-        self, product_id: int, data: ShareStockRequest, admin_user_id: int
-    ) -> ProductStockItemResponse:
-        """Undo a division for one unit family: its sizes sell from one shared
-        pool again. Stock stays in the lots it is in; only the flag changes."""
-        variants = self.db.query(ProductVariant).filter(ProductVariant.product_id == product_id).all()
-        target = next((v for v in variants if v.id == data.variant_id), None)
-        if target is None:
-            raise NotFoundError("Product variant not found.")
-        family = variant_size(target)[0]
-        for v in variants:
-            if variant_size(v)[0] == family:
-                v.dedicated_stock = False
-        AdminAuditService(self.db).record(
-            admin_user_id=admin_user_id,
-            action="inventory.share",
-            resource_type="product",
-            resource_id=product_id,
-            reason=f"family={family}",
-        )
-        try:
-            self.db.commit()
-        except IntegrityError as exc:
-            self.db.rollback()
-            raise ConflictError("Could not update the stock sharing.") from exc
+            raise ConflictError("Could not assign stock due to a conflicting update.") from exc
         return self._product_stock_item(product_id)
 
     def admin_list_lots(
@@ -1372,7 +1353,7 @@ class InventoryService:
         self.get_location_or_404(data.destination_location_id)
 
         destination = self.get_or_create_lot_no_commit(
-            source.batch_id, source.variant_id, data.destination_location_id
+            source.batch_id, source.variant_id, data.destination_location_id, is_share=source.is_share
         )
         # Lock destination too (it may already have existed with concurrent
         # activity) - fixed id-ascending order across the two lots avoids a

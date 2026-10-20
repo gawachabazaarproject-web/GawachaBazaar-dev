@@ -327,14 +327,6 @@
    "HUB_STAFF",
    "OPERATIONS"
   ],
-  "POST /api/v1/inventory/admin/products/{product_id}/divide-stock": [
-   "HUB_STAFF",
-   "OPERATIONS"
-  ],
-  "POST /api/v1/inventory/admin/products/{product_id}/share-stock": [
-   "HUB_STAFF",
-   "OPERATIONS"
-  ],
   "POST /api/v1/inventory/admin/receive": [
    "HUB_STAFF",
    "OPERATIONS"
@@ -439,6 +431,10 @@
   ],
   "PUT /api/v1/bulk-orders/profile": [
    "CUSTOMER"
+  ],
+  "PUT /api/v1/inventory/admin/products/{product_id}/stock-shares": [
+   "HUB_STAFF",
+   "OPERATIONS"
   ],
   "PUT /api/v1/wishlist/{product_id}": [
    "CUSTOMER"
