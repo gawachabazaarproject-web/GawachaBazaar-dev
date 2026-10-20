@@ -109,6 +109,7 @@ function ProductCard({
 }) {
   const { getAccessToken, user } = useAuth();
   const canAdjust = !!(user && hasPermission(user.roles, "inventory.adjust"));
+  const [expanded, setExpanded] = useState(false);
   const [inputs, setInputs] = useState<Record<number, string>>({});
   const [savingId, setSavingId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -148,10 +149,40 @@ function ProductCard({
 
   return (
     <div className="rounded border border-neutral-200 bg-white">
-      <div className="flex items-start justify-between gap-4 border-b border-neutral-100 px-4 py-3">
-        <div className="min-w-0">
-          <a href={`/products/${p.product_id}`} className="font-medium text-primary-900 hover:underline">{p.product_name}</a>
-          <p className="text-xs text-neutral-500">{p.category_name}</p>
+      <div
+        role="button"
+        tabIndex={0}
+        aria-expanded={expanded}
+        onClick={() => setExpanded((e) => !e)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            setExpanded((x) => !x);
+          }
+        }}
+        className={`flex cursor-pointer items-start justify-between gap-4 px-4 py-3 hover:bg-neutral-50 ${expanded ? "border-b border-neutral-100" : ""}`}
+      >
+        <div className="flex min-w-0 items-start gap-2">
+          <svg
+            className={`mt-1 h-4 w-4 shrink-0 text-neutral-500 transition-transform ${expanded ? "rotate-90" : ""}`}
+            viewBox="0 0 20 20"
+            fill="currentColor"
+            aria-hidden
+          >
+            <path fillRule="evenodd" d="M7.21 14.77a.75.75 0 01.02-1.06L11.17 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z" clipRule="evenodd" />
+          </svg>
+          <div className="min-w-0">
+            <a
+              href={`/products/${p.product_id}`}
+              onClick={(e) => e.stopPropagation()}
+              className="font-medium text-primary-900 hover:underline"
+            >
+              {p.product_name}
+            </a>
+            <p className="text-xs text-neutral-500">
+              {p.category_name} · {p.variants.length} size{p.variants.length === 1 ? "" : "s"}
+            </p>
+          </div>
         </div>
         <div className="text-right">
           <p className="text-xs uppercase tracking-wide text-neutral-500">Total in stock</p>
@@ -168,6 +199,7 @@ function ProductCard({
             ))}
         </div>
       </div>
+      {expanded && (
       <table className="w-full text-left text-sm">
         <thead className="text-xs uppercase tracking-wide text-neutral-400">
           <tr>
@@ -240,7 +272,8 @@ function ProductCard({
           })}
         </tbody>
       </table>
-      {error && (
+      )}
+      {expanded && error && (
         <p className="mx-4 mb-3 rounded border border-status-danger/30 bg-status-dangerLight px-3 py-2 text-sm text-status-danger">{error}</p>
       )}
     </div>
