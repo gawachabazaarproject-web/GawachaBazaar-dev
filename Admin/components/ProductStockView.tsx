@@ -3,7 +3,9 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
-import { fetchProductStock, InventoryApiError, packCount, packSize, ProductStockListResponse } from "@/lib/inventory";
+import { hasPermission } from "@/lib/permissions";
+import { DivideStockDialog, dividableFamily } from "@/components/DivideStockDialog";
+import { fetchProductStock, InventoryApiError, packCount, packSize, ProductStockItem, ProductStockListResponse } from "@/lib/inventory";
 import { EmptyState } from "@/components/EmptyState";
 import { ErrorState } from "@/components/ErrorState";
 import { Pagination } from "@/components/Pagination";
@@ -15,7 +17,9 @@ const num = (v: string | number) => String(Number(Number(v).toFixed(3)));
 /** Inventory by product: the shared stock total ("100 kg") with each size's
  * packs left and weight underneath. */
 export function ProductStockView({ q, categoryId }: { q: string; categoryId: string }) {
-  const { getAccessToken } = useAuth();
+  const { getAccessToken, user } = useAuth();
+  const canAdjust = user && hasPermission(user.roles, "inventory.adjust");
+  const [dividing, setDividing] = useState<ProductStockItem | null>(null);
   const router = useRouter();
   const [page, setPage] = useState(1);
   const [data, setData] = useState<ProductStockListResponse | null>(null);
@@ -67,6 +71,17 @@ export function ProductStockView({ q, categoryId }: { q: string; categoryId: str
             <div className="min-w-0">
               <a href={`/products/${p.product_id}`} className="font-medium text-primary-900 hover:underline">{p.product_name}</a>
               <p className="text-xs text-neutral-500">{p.category_name}</p>
+              {canAdjust && dividableFamily(p) && (
+                <button
+                  onClick={() => setDividing(p)}
+                  className="mt-1 text-xs font-semibold text-primary-700 hover:underline"
+                >
+                  {p.variants.some((v) => v.dedicated) ? "Change division" : "Divide stock between sizes"}
+                </button>
+              )}
+              {p.variants.some((v) => v.dedicated) && (
+                <p className="text-xs text-status-warning">Divided - each size sells only its own share</p>
+              )}
             </div>
             <div className="text-right">
               <p className="text-xs uppercase tracking-wide text-neutral-500">Total in stock</p>
@@ -105,6 +120,7 @@ export function ProductStockView({ q, categoryId }: { q: string; categoryId: str
       <div className="rounded border border-neutral-200 bg-white">
         <Pagination page={data.page} pageSize={data.page_size} total={data.total} onPageChange={setPage} />
       </div>
+      <DivideStockDialog product={dividing} onClose={() => setDividing(null)} onDone={load} />
     </div>
   );
 }

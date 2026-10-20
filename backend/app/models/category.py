@@ -8,6 +8,7 @@ from sqlalchemy import (
     ForeignKey,
     Identity,
     Index,
+    Integer,
     String,
     Text,
     UniqueConstraint,
@@ -68,6 +69,12 @@ class Category(Base):
     status: Mapped[str] = mapped_column(
         String(30),
         nullable=False,
+    )
+    # Admin-controlled display order among siblings (lower shows first).
+    sort_order: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        server_default="0",
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

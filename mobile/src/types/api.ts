@@ -89,6 +89,8 @@ export interface CategoryResponse {
   image_url: string | null;
   parent_id: number | null;
   status: string;
+  /** Admin-chosen display order among siblings (lower first). */
+  sort_order?: number;
   created_at: string;
   /** Active subcategories (public list/detail reads only). */
   child_count?: number;

@@ -1,7 +1,7 @@
 # Database Schema
 
-> **Status:** Verified (generated from the ORM models). **Generated:** 2026-10-18 by [`docs/_tools/gen_schema_reference.py`](../_tools/gen_schema_reference.py).
-> **Evidence:** [`backend/app/models/`](../../backend/app/models) (SQLAlchemy 2 declarative models, 51 tables) and the migration history in [`backend/alembic/versions/`](../../backend/alembic/versions). The models were compared with a database migrated to head using `alembic check` (see [MIGRATIONS.md](MIGRATIONS.md)). `alembic_version` is Alembic's own table and is not listed.
+> **Status:** Verified (generated from the ORM models). **Generated:** 2026-10-20 by [`docs/_tools/gen_schema_reference.py`](../_tools/gen_schema_reference.py).
+> **Evidence:** [`backend/app/models/`](../../backend/app/models) (SQLAlchemy 2 declarative models, 52 tables) and the migration history in [`backend/alembic/versions/`](../../backend/alembic/versions). The models were compared with a database migrated to head using `alembic check` (see [MIGRATIONS.md](MIGRATIONS.md)). `alembic_version` is Alembic's own table and is not listed.
 
 Relationships between tables: [ENTITY_RELATIONSHIPS.md](ENTITY_RELATIONSHIPS.md). Retention and lifecycle: [DATA_RETENTION.md](DATA_RETENTION.md). Business meaning of statuses: the domain documents in [`../05-domains/`](../05-domains).
 
@@ -21,7 +21,7 @@ Timestamps show as `DATETIME` here (the ORM type) but are `timestamp with time z
 | Promotions | [`promotions`](#promotions), [`promotion_targets`](#promotion_targets), [`promotion_eligible_customers`](#promotion_eligible_customers), [`promotion_redemptions`](#promotion_redemptions) |
 | Bulk commerce | [`bulk_customer_profiles`](#bulk_customer_profiles), [`bulk_order_requests`](#bulk_order_requests), [`bulk_order_request_items`](#bulk_order_request_items), [`quotes`](#quotes), [`quote_versions`](#quote_versions), [`quote_items`](#quote_items) |
 | Audit | [`admin_action_logs`](#admin_action_logs) |
-| Other (not grouped) | [`notification_events`](#notification_events) |
+| Other (not grouped) | [`notification_events`](#notification_events), [`product_categories`](#product_categories) |
 
 ## Identity and access
 
@@ -159,6 +159,7 @@ Constraints and indexes:
 | `description` | TEXT | yes |  |  |
 | `image_url` | TEXT | yes |  |  |
 | `status` | VARCHAR(30) | no |  |  |
+| `sort_order` | INTEGER | no | 0 |  |
 | `created_at` | DATETIME | no | now() |  |
 | `updated_at` | DATETIME | no | now() |  |
 
@@ -201,6 +202,7 @@ Constraints and indexes:
 | `unit` | VARCHAR(20) | no |  |  |
 | `quantity` | NUMERIC(12, 3) | no |  |  |
 | `reserve_level` | NUMERIC(12, 3) | yes |  |  |
+| `dedicated_stock` | BOOLEAN | no | false |  |
 | `status` | VARCHAR(30) | no |  |  |
 | `created_at` | DATETIME | no | now() |  |
 | `updated_at` | DATETIME | no | now() |  |
@@ -1162,4 +1164,15 @@ Constraints and indexes:
 
 - UNIQUE `(unnamed)`: (dedupe_key)
 - INDEX `ix_notification_events_user_id`: (user_id)
+
+### product_categories
+
+| Column | Type | Null | Default | Key / reference |
+|---|---|---|---|---|
+| `product_id` | BIGINT | no |  | PK; FK -> products.id (ON DELETE CASCADE) |
+| `category_id` | BIGINT | no |  | PK; FK -> categories.id (ON DELETE RESTRICT) |
+
+Constraints and indexes:
+
+- INDEX `ix_product_categories_category_id`: (category_id)
 

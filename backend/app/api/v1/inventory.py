@@ -18,7 +18,10 @@ from app.schemas.admin_inventory import (
     AdminInventoryLotDetailResponse,
     AdminInventoryLotListItemResponse,
     AdminInventoryLotListResponse,
+    DivideStockRequest,
+    ProductStockItemResponse,
     ProductStockListResponse,
+    ShareStockRequest,
     InventoryDashboardResponse,
     ReceiveStockRequest,
     ReconcileStockRequest,
@@ -347,6 +350,34 @@ def admin_list_product_stock(
     db: Session = Depends(get_db),
 ) -> ProductStockListResponse:
     return InventoryService(db).admin_list_product_stock(page, page_size, category_id, q)
+
+
+@router.post(
+    "/admin/products/{product_id}/divide-stock",
+    response_model=ProductStockItemResponse,
+    summary="Divide a product's stock between its sizes (each size then sells only its share)",
+)
+def admin_divide_product_stock(
+    product_id: int,
+    payload: DivideStockRequest,
+    current_user: User = Depends(require_permission("inventory.adjust")),
+    db: Session = Depends(get_db),
+) -> ProductStockItemResponse:
+    return InventoryService(db).divide_product_stock(product_id, payload, current_user.id)
+
+
+@router.post(
+    "/admin/products/{product_id}/share-stock",
+    response_model=ProductStockItemResponse,
+    summary="Put a divided product's sizes back into one shared stock pool",
+)
+def admin_share_product_stock(
+    product_id: int,
+    payload: ShareStockRequest,
+    current_user: User = Depends(require_permission("inventory.adjust")),
+    db: Session = Depends(get_db),
+) -> ProductStockItemResponse:
+    return InventoryService(db).share_product_stock(product_id, payload, current_user.id)
 
 
 @router.get(

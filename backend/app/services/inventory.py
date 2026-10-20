@@ -18,7 +18,7 @@ not whether the transaction was opened explicitly or implicitly.
 
 import secrets
 from datetime import UTC, date, datetime
-from decimal import ROUND_DOWN, Decimal
+from decimal import ROUND_DOWN, ROUND_UP, Decimal
 
 from sqlalchemy import func, or_
 from sqlalchemy.exc import IntegrityError
@@ -40,6 +40,7 @@ from app.schemas.admin_inventory import (
     AdminInventoryLotDetailResponse,
     AdminInventoryLotListItemResponse,
     AdminInventoryLotListResponse,
+    DivideStockRequest,
     InventoryDashboardResponse,
     ProductStockItemResponse,
     ProductStockListResponse,
@@ -49,6 +50,7 @@ from app.schemas.admin_inventory import (
     ReconcileStockRequest,
     RelatedOrderResponse,
     RemoveStockRequest,
+    ShareStockRequest,
     StockAlertItemResponse,
     StockAlertsResponse,
     TransferStockRequest,
@@ -78,7 +80,15 @@ from app.services.stock_levels import (
     effective_reserve,
     stock_level,
 )
-from app.services.stock_pool import display_amount, pool_base_amounts, to_packs, variant_size, weight_to_packs
+from app.services.stock_pool import (
+    amount_in_base,
+    display_amount,
+    pool_base_amounts,
+    pool_key,
+    to_packs,
+    variant_size,
+    weight_to_packs,
+)
 
 _ACTIVE = "ACTIVE"
 _INACTIVE = "INACTIVE"
@@ -703,9 +713,9 @@ class InventoryService:
         category_id: int | None = None,
         q: str | None = None,
     ) -> ProductStockListResponse:
-        """Stock per product: the shared pool total ("100 kg") with each
-        size's whole packs and weight underneath. Sizes of one unit family
-        draw from the same pool, see app.services.stock_pool."""
+        """Stock per product: the stock total ("100 kg") with each size's
+        whole packs and weight underneath. Sizes of one unit family draw from
+        the same pool unless the stock was divided, see app.services.stock_pool."""
         query = (
             self.db.query(Product, Category.name)
             .join(Category, Product.category_id == Category.id)
@@ -718,8 +728,11 @@ class InventoryService:
             query = query.filter(Product.name.ilike(f"%{escaped}%", escape="\\"))
         total = query.count()
         rows = query.order_by(Product.name).offset((page - 1) * page_size).limit(page_size).all()
+        items = self._product_stock_items(rows)
+        return ProductStockListResponse(items=items, page=page, page_size=page_size, total=total)
 
-        pool, variants = pool_base_amounts(self.db, {p.id for p, _ in rows})
+    def _product_stock_items(self, rows: list[tuple[Product, str]]) -> list[ProductStockItemResponse]:
+        pool, variants, held = pool_base_amounts(self.db, {p.id for p, _ in rows})
         variants_by_product: dict[int, list[ProductVariant]] = {}
         for v in sorted(variants, key=lambda v: v.id):
             variants_by_product.setdefault(v.product_id, []).append(v)
@@ -732,8 +745,9 @@ class InventoryService:
                 family, size = variant_size(v)
                 if family not in families:
                     families.append(family)
-                packs = to_packs(pool[(product.id, family)], size).to_integral_value(rounding=ROUND_DOWN)
+                packs = to_packs(pool[pool_key(v)], size).to_integral_value(rounding=ROUND_DOWN)
                 amount, amount_unit = display_amount(family, packs * size)
+                held_amount, _ = display_amount(family, held.get(v.id, Decimal("0")))
                 variant_items.append(
                     ProductStockVariantResponse(
                         variant_id=v.id,
@@ -745,11 +759,18 @@ class InventoryService:
                         available_packs=packs,
                         available_amount=amount,
                         amount_unit=amount_unit,
+                        dedicated=v.dedicated_stock,
+                        held_amount=held_amount,
                     )
                 )
             totals = []
             for family in families:
-                amount, amount_unit = display_amount(family, pool[(product.id, family)])
+                # The family's stock = its shared pool plus every dedicated pool.
+                base = sum(
+                    (amt for (pid, fam, _), amt in pool.items() if pid == product.id and fam == family),
+                    Decimal("0"),
+                )
+                amount, amount_unit = display_amount(family, base)
                 totals.append(ProductStockTotalResponse(amount=amount, amount_unit=amount_unit))
             items.append(
                 ProductStockItemResponse(
@@ -760,7 +781,187 @@ class InventoryService:
                     variants=variant_items,
                 )
             )
-        return ProductStockListResponse(items=items, page=page, page_size=page_size, total=total)
+        return items
+
+    def _product_stock_item(self, product_id: int) -> ProductStockItemResponse:
+        row = (
+            self.db.query(Product, Category.name)
+            .join(Category, Product.category_id == Category.id)
+            .filter(Product.id == product_id)
+            .first()
+        )
+        return self._product_stock_items([row])[0]
+
+    def divide_product_stock(
+        self, product_id: int, data: DivideStockRequest, admin_user_id: int
+    ) -> ProductStockItemResponse:
+        """Split one unit family's stock between its sizes exactly as the admin
+        typed it ("1 kg: 10 kg, 500 g: 12 kg, 250 g: 12 kg"). Stock is moved
+        between the sizes' lots with TRANSFER_OUT / TRANSFER_IN movements (same
+        batch and warehouse; only AVAILABLE stock moves, reserved stock stays
+        put), then every size of the family is marked dedicated so each sells
+        only its own share. All or nothing."""
+        product = self.db.query(Product).filter(Product.id == product_id).first()
+        if not product:
+            raise NotFoundError("Product not found.")
+        variants = (
+            self.db.query(ProductVariant)
+            .filter(ProductVariant.product_id == product_id)
+            .order_by(ProductVariant.id)
+            .all()
+        )
+        by_id = {v.id: v for v in variants}
+
+        wanted: dict[int, Decimal] = {}
+        family: str | None = None
+        for share in data.shares:
+            variant = by_id.get(share.variant_id)
+            if variant is None:
+                raise NotFoundError("Product variant not found.")
+            if share.variant_id in wanted:
+                raise BusinessValidationError("Each size can only appear once.")
+            fam, base = amount_in_base(share.amount, share.amount_unit)
+            if fam != variant_size(variant)[0]:
+                raise BusinessValidationError(
+                    f"{share.amount_unit} cannot be used for the {variant.name} size."
+                )
+            if family is None:
+                family = fam
+            elif fam != family:
+                raise BusinessValidationError("All sizes must be in the same unit family.")
+            wanted[variant.id] = base
+        if family not in {"MASS", "VOLUME", "COUNT"}:
+            raise BusinessValidationError("Only weight, volume or piece-counted sizes can be divided.")
+        family_variants = [v for v in variants if variant_size(v)[0] == family]
+        if {v.id for v in family_variants} != set(wanted):
+            raise BusinessValidationError("List every size of this product in the same unit family.")
+
+        # Lock every lot of the family up front, ascending id.
+        lots = (
+            self.db.query(InventoryLot)
+            .filter(
+                InventoryLot.variant_id.in_([v.id for v in family_variants]),
+                InventoryLot.status != _INACTIVE,
+            )
+            .order_by(InventoryLot.id.asc())
+            .with_for_update()
+            .all()
+        )
+        size_of = {v.id: variant_size(v)[1] for v in family_variants}
+
+        def avail(lot: InventoryLot) -> Decimal:
+            return lot.quantity - lot.reserved_quantity if lot.status == _ACTIVE else Decimal("0")
+
+        holding = {v.id: Decimal("0") for v in family_variants}
+        for lot in lots:
+            if avail(lot) > 0:
+                holding[lot.variant_id] += avail(lot) * size_of[lot.variant_id]
+        total_stock = sum(holding.values(), Decimal("0"))
+        total_wanted = sum(wanted.values(), Decimal("0"))
+        if abs(total_stock - total_wanted) > Decimal("0.5"):
+            unit_amount, unit_label = display_amount(family, total_stock)
+            raise BusinessValidationError(
+                f"The shares add up to {display_amount(family, total_wanted)[0]} {unit_label} "
+                f"but {unit_amount} {unit_label} is in stock - they must match."
+            )
+
+        surplus = {vid: holding[vid] - wanted[vid] for vid in wanted if holding[vid] > wanted[vid]}
+        deficit = {vid: wanted[vid] - holding[vid] for vid in wanted if wanted[vid] > holding[vid]}
+        tolerance = Decimal("0.5")
+        for dest_id in sorted(deficit):
+            dest_size = size_of[dest_id]
+            for src_id in sorted(surplus):
+                if deficit[dest_id] <= 0:
+                    break
+                src_size = size_of[src_id]
+                src_lots = sorted(
+                    (l for l in lots if l.variant_id == src_id and avail(l) > 0),
+                    key=lambda l: (l.created_at, l.id),
+                )
+                for src_lot in src_lots:
+                    move_base = min(avail(src_lot) * src_size, surplus[src_id], deficit[dest_id])
+                    dest_packs = to_packs(move_base, dest_size)
+                    if dest_packs <= 0:
+                        continue
+                    moved_base = dest_packs * dest_size
+                    src_packs = min(
+                        avail(src_lot),
+                        (moved_base / src_size).quantize(Decimal("0.001"), rounding=ROUND_UP),
+                    )
+                    dest_lot = self.get_or_create_lot_no_commit(
+                        src_lot.batch_id, dest_id, src_lot.location_id
+                    )
+                    dest_lot = (
+                        self.db.query(InventoryLot)
+                        .filter(InventoryLot.id == dest_lot.id)
+                        .with_for_update()
+                        .first()
+                    )
+                    self.apply_movement(
+                        src_lot, "TRANSFER_OUT", src_packs, admin_user_id,
+                        reference_type="divide_stock", reference_id=dest_lot.id,
+                        remarks="Stock divided between sizes",
+                    )
+                    self.apply_movement(
+                        dest_lot, "TRANSFER_IN", dest_packs, admin_user_id,
+                        reference_type="divide_stock", reference_id=src_lot.id,
+                        remarks="Stock divided between sizes",
+                    )
+                    surplus[src_id] -= moved_base
+                    deficit[dest_id] -= moved_base
+                    if surplus[src_id] <= 0 or deficit[dest_id] <= 0:
+                        break
+
+        leftover = max((d for d in deficit.values()), default=Decimal("0"))
+        if leftover > max(tolerance, min(size_of.values()) * Decimal("0.001")):
+            self.db.rollback()
+            raise ConflictError(
+                "The stock could not be divided exactly as asked (reserved stock cannot be moved). "
+                "Try different amounts."
+            )
+
+        for v in family_variants:
+            v.dedicated_stock = True
+        AdminAuditService(self.db).record(
+            admin_user_id=admin_user_id,
+            action="inventory.divide",
+            resource_type="product",
+            resource_id=product.id,
+            reason="shares=" + ", ".join(f"{vid}:{amt}" for vid, amt in sorted(wanted.items())) + f" ({family} base units)",
+        )
+        try:
+            self.db.commit()
+        except IntegrityError as exc:
+            self.db.rollback()
+            raise ConflictError("Could not divide stock due to a conflicting update.") from exc
+        return self._product_stock_item(product_id)
+
+    def share_product_stock(
+        self, product_id: int, data: ShareStockRequest, admin_user_id: int
+    ) -> ProductStockItemResponse:
+        """Undo a division for one unit family: its sizes sell from one shared
+        pool again. Stock stays in the lots it is in; only the flag changes."""
+        variants = self.db.query(ProductVariant).filter(ProductVariant.product_id == product_id).all()
+        target = next((v for v in variants if v.id == data.variant_id), None)
+        if target is None:
+            raise NotFoundError("Product variant not found.")
+        family = variant_size(target)[0]
+        for v in variants:
+            if variant_size(v)[0] == family:
+                v.dedicated_stock = False
+        AdminAuditService(self.db).record(
+            admin_user_id=admin_user_id,
+            action="inventory.share",
+            resource_type="product",
+            resource_id=product_id,
+            reason=f"family={family}",
+        )
+        try:
+            self.db.commit()
+        except IntegrityError as exc:
+            self.db.rollback()
+            raise ConflictError("Could not update the stock sharing.") from exc
+        return self._product_stock_item(product_id)
 
     def admin_list_lots(
         self,
