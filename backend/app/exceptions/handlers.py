@@ -14,6 +14,7 @@ from fastapi import FastAPI, Request, status
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from sqlalchemy.exc import DataError
 
 from app.core.logging import logger
 from app.exceptions.base import AppException
@@ -96,6 +97,16 @@ def register_exception_handlers(app: FastAPI) -> None:
                 # from a `gt=0` constraint) that json.dumps cannot serialize directly.
                 "details": jsonable_encoder(exc.errors()),
             },
+        )
+
+    @app.exception_handler(DataError)
+    async def data_error_handler(request: Request, exc: DataError) -> JSONResponse:
+        """A value the database cannot store (e.g. an id beyond BIGINT in the
+        URL) is the caller's mistake, not a server failure."""
+        logger.info("Out-of-range value on %s %s [%s]", request.method, request.url.path, type(exc.orig).__name__)
+        return JSONResponse(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            content={"code": "REQUEST_VALIDATION_ERROR", "message": "A value in the request is out of range", "details": None},
         )
 
     @app.exception_handler(Exception)
