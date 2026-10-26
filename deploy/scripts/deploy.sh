@@ -11,8 +11,10 @@
 set -euo pipefail
 
 cd "$(dirname "$0")/../.."
-ENV_FILE=.env.production
-COMPOSE=(docker compose --env-file "$ENV_FILE" -f docker-compose.prod.yml)
+# AWS: ENV_FILE=.env.aws COMPOSE_FILE_NAME=docker-compose.aws.yml deploy/scripts/deploy.sh
+ENV_FILE="${ENV_FILE:-.env.production}"
+COMPOSE_FILE_NAME="${COMPOSE_FILE_NAME:-docker-compose.prod.yml}"
+COMPOSE=(docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE_NAME")
 
 [ -f "$ENV_FILE" ] || { echo "Missing $ENV_FILE - copy .env.production.example and fill it in." >&2; exit 1; }
 if grep -q "CHANGE_ME" "$ENV_FILE"; then

@@ -1,0 +1,173 @@
+# Gawacha Bazaar - AWS single-instance stack (EC2 + RDS PostgreSQL).
+#
+#   docker compose --env-file .env.aws -f docker-compose.aws.yml up -d
+#
+# Same containers as docker-compose.prod.yml EXCEPT:
+#   * no `db`/`db-backup`: PostgreSQL is Amazon RDS (private subnet), reached
+#     through DATABASE_URL (use ?sslmode=require); backups are RDS's job;
+#   * a private `osrm` service serves the self-built Nagpur routing data
+#     (deploy/osrm/build.sh) from a read-only volume - never published, never
+#     built or downloaded at start;
+#   * measured memory limits (see docs/09-deployment-operations/AWS_PRODUCTION_PLAN.md).
+# Only Caddy publishes ports (80/443). redis, osrm and backend are reachable
+# only on the internal `backend` network.
+
+x-backend-env: &backend-env
+  APP_NAME: GawachaBazaar
+  APP_ENV: production
+  DEBUG: "False"
+  DATABASE_URL: ${DATABASE_URL:?DATABASE_URL (the RDS endpoint, with ?sslmode=require) is required}
+  FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID:?FIREBASE_PROJECT_ID is required}
+  FIREBASE_SERVICE_ACCOUNT_JSON: ${FIREBASE_SERVICE_ACCOUNT_JSON:-}
+  # Razorpay - empty key id = online payments off (COD only). If the key id
+  # is set, the backend refuses to start without the secret + webhook secret.
+  RAZORPAY_KEY_ID: ${RAZORPAY_KEY_ID:-}
+  RAZORPAY_KEY_SECRET: ${RAZORPAY_KEY_SECRET:-}
+  RAZORPAY_WEBHOOK_SECRET: ${RAZORPAY_WEBHOOK_SECRET:-}
+  ALLOWED_ORIGINS: '["https://${ADMIN_DOMAIN}","https://${SITE_DOMAIN}"]'
+  CLOUDINARY_CLOUD_NAME: ${CLOUDINARY_CLOUD_NAME:-}
+  CLOUDINARY_API_KEY: ${CLOUDINARY_API_KEY:-}
+  CLOUDINARY_API_SECRET: ${CLOUDINARY_API_SECRET:-}
+  # Delivery pricing + routing. Defaults equal the code defaults, so leaving
+  # these unset in .env.production changes nothing. Redis is the route cache
+  # (optional: if it is down, delivery still works, just without caching).
+  FREE_DELIVERY_MIN_ITEMS: ${FREE_DELIVERY_MIN_ITEMS:-15}
+  DELIVERY_BASE_FEE: ${DELIVERY_BASE_FEE:-40}
+  DELIVERY_PER_KM: ${DELIVERY_PER_KM:-10}
+  DELIVERY_MAX_CHARGED_KM: ${DELIVERY_MAX_CHARGED_KM:-30}
+  DELIVERY_MAX_DISTANCE_KM: ${DELIVERY_MAX_DISTANCE_KM:-0}
+  DELIVERY_MIN_ORDER_VALUE: ${DELIVERY_MIN_ORDER_VALUE:-0}
+  PACKING_POINT_LATITUDE: ${PACKING_POINT_LATITUDE:-}
+  PACKING_POINT_LONGITUDE: ${PACKING_POINT_LONGITUDE:-}
+  ROUTING_PROVIDER: ${ROUTING_PROVIDER:-osrm}
+  OSRM_BASE_URL: ${OSRM_BASE_URL:-http://osrm:5000}
+  ROUTING_TIMEOUT_SECONDS: ${ROUTING_TIMEOUT_SECONDS:-3}
+  REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+  ROUTE_CACHE_TTL_SECONDS: ${ROUTE_CACHE_TTL_SECONDS:-604800}
+  NOMINATIM_BASE_URL: ${NOMINATIM_BASE_URL:-https://nominatim.openstreetmap.org}
+  NOMINATIM_USER_AGENT: ${NOMINATIM_USER_AGENT:-GawachaBazaar/1.0 (gawachabazaar.project@gmail.com)}
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
+services:
+  # Route-distance cache only (no persistence needed; losing it just means a
+  # few extra OSRM calls). Not published; reachable on the backend network only.
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--save", "", "--appendonly", "no", "--maxmemory", "64mb", "--maxmemory-policy", "allkeys-lru"]
+    mem_limit: 128m
+    networks: [backend]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    logging: *default-logging
+
+  # Self-hosted routing (OpenStreetMap, car profile). Data is built ahead of
+  # time by deploy/osrm/build.sh into ${OSRM_DATA_DIR}; this container only
+  # serves it. Measured: ~90 MB RAM resident under 100 concurrent route
+  # requests, 98 MB of data, ~340-560 req/s on 1 CPU (docs: AWS_PRODUCTION_PLAN.md).
+  osrm:
+    image: ghcr.io/project-osrm/osrm-backend@sha256:55dbfd47d984c2cacd64e32901b4321c86b5ec761438e69aa053dc78698a786f
+    restart: unless-stopped
+    command: ["osrm-routed", "--algorithm", "mld", "--max-table-size", "10", "/data/nagpur.osrm"]
+    volumes:
+      - ${OSRM_DATA_DIR:-./osrm-data}:/data:ro
+    networks: [backend]
+    mem_limit: 384m
+    cpus: 1.0
+    logging: *default-logging
+
+  migrate:
+    build:
+      context: ./backend
+    image: gawachabazaar/backend:latest
+    command: ["alembic", "upgrade", "head"]
+    environment: *backend-env
+    networks: [backend]
+    restart: "no"
+    logging: *default-logging
+
+  backend:
+    # Same build as `migrate` (cached, so it's built once) - declared on
+    # both so compose never tries to *pull* this local-only tag.
+    build:
+      context: ./backend
+    image: gawachabazaar/backend:latest
+    restart: unless-stopped
+    environment: *backend-env
+    networks: [backend]
+    # No `ports:` on purpose - see backend/Dockerfile's note on
+    # --forwarded-allow-ips. Caddy is the only way in.
+    mem_limit: 640m
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_started
+      osrm:
+        condition: service_started
+    logging: *default-logging
+
+  admin:
+    build:
+      context: ./Admin
+      args:
+        NEXT_PUBLIC_API_BASE_URL: https://${API_DOMAIN:?API_DOMAIN is required}/api/v1
+        NEXT_PUBLIC_FIREBASE_API_KEY: ${NEXT_PUBLIC_FIREBASE_API_KEY:?NEXT_PUBLIC_FIREBASE_API_KEY is required}
+        NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: ${NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN:?NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN is required}
+        NEXT_PUBLIC_FIREBASE_PROJECT_ID: ${NEXT_PUBLIC_FIREBASE_PROJECT_ID:?NEXT_PUBLIC_FIREBASE_PROJECT_ID is required}
+        NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: ${NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET:?NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET is required}
+        NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: ${NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID:?NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID is required}
+        NEXT_PUBLIC_FIREBASE_APP_ID: ${NEXT_PUBLIC_FIREBASE_APP_ID:?NEXT_PUBLIC_FIREBASE_APP_ID is required}
+    image: gawachabazaar/admin:latest
+    restart: unless-stopped
+    networks: [web]
+    logging: *default-logging
+
+  website:
+    build:
+      context: ./website
+    image: gawachabazaar/website:latest
+    restart: unless-stopped
+    networks: [web]
+    logging: *default-logging
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      ACME_EMAIL: ${ACME_EMAIL:?ACME_EMAIL is required}
+      SITE_DOMAIN: ${SITE_DOMAIN:?SITE_DOMAIN is required}
+      ADMIN_DOMAIN: ${ADMIN_DOMAIN:?ADMIN_DOMAIN is required}
+      API_DOMAIN: ${API_DOMAIN:?API_DOMAIN is required}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks: [web, backend]
+    depends_on:
+      - backend
+      - admin
+      - website
+    logging: *default-logging
+
+networks:
+  backend:
+  web:
+
+volumes:
+  caddy_data:
+    name: gawachabazaar_prod_caddy_data
+  caddy_config:
+    name: gawachabazaar_prod_caddy_config

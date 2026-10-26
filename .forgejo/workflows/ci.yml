@@ -1,0 +1,74 @@
+# Continuous integration: runs on every pull request and on pushes to non-main
+# branches. NOT YET RUN on a Forgejo runner (written 2026-10-27; the commands
+# are the ones verified locally - see docs/09-deployment-operations/AWS_PRODUCTION_PLAN.md).
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches-ignore: [main]
+
+jobs:
+  backend:
+    runs-on: ubuntu
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: gb_ci_test
+        ports: ["15432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgresql+psycopg://postgres:ci@127.0.0.1:15432/gb_ci_test
+      DATABASE_URL: postgresql+psycopg://postgres:ci@127.0.0.1:15432/gb_ci_test
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -r requirements.txt -r requirements-dev.txt
+      - name: Mark the CI database as disposable (tests refuse any other database)
+        run: |
+          PGPASSWORD=ci psql -h 127.0.0.1 -p 15432 -U postgres -c "COMMENT ON DATABASE gb_ci_test IS 'gb-disposable-test-db'"
+      - run: python -m ruff check .
+      - run: alembic upgrade head
+      - run: alembic check
+      - run: python -m pytest -p no:cacheprovider -q
+
+  frontends:
+    runs-on: ubuntu
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: cd mobile && npm ci && npx tsc --noEmit
+      - run: cd Admin && npm ci && npx tsc --noEmit
+
+  compose:
+    runs-on: ubuntu
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compose files render with dummy values
+        env:
+          ADMIN_DOMAIN: a.example
+          SITE_DOMAIN: s.example
+          API_DOMAIN: api.example
+          ACME_EMAIL: ops@example.com
+          POSTGRES_PASSWORD: dummy
+          DATABASE_URL: postgresql+psycopg://u:p@rds.example:5432/db?sslmode=require
+          FIREBASE_PROJECT_ID: dummy
+          NEXT_PUBLIC_FIREBASE_API_KEY: x
+          NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: x
+          NEXT_PUBLIC_FIREBASE_PROJECT_ID: x
+          NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: x
+          NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: x
+          NEXT_PUBLIC_FIREBASE_APP_ID: x
+        run: |
+          docker compose -f docker-compose.prod.yml config -q
+          docker compose -f docker-compose.aws.yml config -q
