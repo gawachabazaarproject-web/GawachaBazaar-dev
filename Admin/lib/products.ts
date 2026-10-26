@@ -15,6 +15,8 @@ export interface Category {
   created_at: string;
 }
 
+import type { ProductStockItem } from "@/lib/inventory";
+
 export interface AdminProductListItem {
   id: number;
   name: string;
@@ -27,7 +29,13 @@ export interface AdminProductListItem {
   price: string | null;
   currency: string | null;
   variant_count: number;
+  /** Sizes customers can buy / of those, how many have a price. */
+  active_variant_count: number;
+  priced_variant_count: number;
   total_available_stock: string;
+  /** "118 kg" and OK / LOW / OUT - the same rule the Inventory page uses. */
+  stock_text: string;
+  stock_status: "OK" | "LOW" | "OUT";
   created_at: string;
   updated_at: string;
 }
@@ -92,6 +100,8 @@ export interface AdminProductDetail {
   images: ProductImage[];
   variants: ProductVariant[];
   variant_stock: VariantStock[];
+  /** Stock the way staff read it (kg, warehouses, expiry). */
+  stock: ProductStockItem | null;
 }
 
 export interface ProductActivityEntry {
@@ -201,6 +211,33 @@ export interface CreateProductPayload {
 
 export async function createProduct(accessToken: string, payload: CreateProductPayload) {
   return request<AdminProductDetail>(accessToken, "/catalog/products", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export interface QuickCreatePayload {
+  category_id: number;
+  name: string;
+  slug?: string;
+  description?: string | null;
+  /** DRAFT = saved, not shown to customers; ACTIVE = published. */
+  status: "DRAFT" | "ACTIVE";
+  extra_category_ids?: number[];
+  sizes: { quantity: string; unit: string; price: string; sku?: string }[];
+  stock?: {
+    location_id: number;
+    amount?: string;
+    amount_unit?: string;
+    quantity?: string;
+    expiry_date?: string;
+  };
+}
+
+/** The whole product - sizes, prices, opening stock - saved in ONE transaction:
+ * if anything fails, nothing is saved. */
+export async function quickCreateProduct(accessToken: string, payload: QuickCreatePayload) {
+  return request<{ id: number; name: string; slug: string; status: string }>(accessToken, "/catalog/products/quick-create", {
     method: "POST",
     body: JSON.stringify(payload),
   });

@@ -58,6 +58,7 @@ All variables with their purpose, requiredness and build/runtime timing: [ENVIRO
 | Check | What it proves |
 |---|---|
 | `GET /health` | The process serves HTTP (no DB). Used by the container `HEALTHCHECK` (15 s), K8s liveness/readiness, compose `depends_on` for dev |
+| `GET /readiness` | **Public on purpose** (orchestrator/uptime probe, same class as `/health/db`). Returns 200/503 with `{status, checks}` where `checks` holds only short strings for `database`, `redis` (ok / degraded / not configured) and `origin` (configured / unset). No product, stock, user, order, URL or credential data, and it never calls external providers (test: `test_the_public_readiness_probe_shares_no_business_data`). Added by the delivery work, not by the Admin UX work |
 | `GET /health/db` | Database connectivity (503 otherwise); used by `smoke-test.sh` |
 | Admin `/login`, website `/` | Frontend containers up (their `HEALTHCHECK`s) |
 | Note | Under pool starvation `/health` queues behind the same thread pool (PERF-001), so probes can fail during overload |

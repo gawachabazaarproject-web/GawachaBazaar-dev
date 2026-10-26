@@ -12,19 +12,27 @@ from sqlalchemy.orm import Session
 from app.core.roles import ADMIN, HUB_STAFF, OPERATIONS
 from app.dependencies.auth import get_current_user, require_permission, require_roles
 from app.dependencies.database import get_db
+from app.exceptions.base import NotFoundError
+from app.models.role import Role
 from app.models.user import User
+from app.models.user_role import UserRole
 from app.schemas.admin_inventory import MAX_PAGE_SIZE as ADMIN_MAX_PAGE_SIZE
 from app.schemas.admin_inventory import (
     AdminInventoryLotDetailResponse,
     AdminInventoryLotListItemResponse,
     AdminInventoryLotListResponse,
+    InventoryDashboardResponse,
+    ProductCorrectStockRequest,
+    ProductMoveStockRequest,
+    ProductRemoveStockRequest,
     ProductStockItemResponse,
     ProductStockListResponse,
-    SetStockSharesRequest,
-    InventoryDashboardResponse,
+    ProductStockOperationResponse,
+    ProductStockSummaryResponse,
     ReceiveStockRequest,
     ReconcileStockRequest,
     RemoveStockRequest,
+    SetStockSharesRequest,
     StockAlertsResponse,
     TransferStockRequest,
     TransferStockResponse,
@@ -52,6 +60,7 @@ from app.schemas.inventory_reservation import (
 )
 from app.services.inventory import InventoryService
 from app.services.inventory_reservation import InventoryReservationService
+from app.services.product_stock import ProductStockService
 
 router = APIRouter(dependencies=[Depends(require_roles(ADMIN, HUB_STAFF, OPERATIONS))])
 
@@ -345,10 +354,105 @@ def admin_list_product_stock(
     page_size: int = Query(default=20, ge=1, le=ADMIN_MAX_PAGE_SIZE),
     category_id: int | None = Query(default=None),
     q: str | None = Query(default=None, max_length=150, description="Product name"),
+    stock_status: str | None = Query(
+        default=None, alias="status", pattern="^(all|low|out|expiring)$", description="Keep only products that need attention"
+    ),
     current_user: User = Depends(require_permission("inventory.read")),
     db: Session = Depends(get_db),
 ) -> ProductStockListResponse:
-    return InventoryService(db).admin_list_product_stock(page, page_size, category_id, q)
+    return InventoryService(db).admin_list_product_stock(page, page_size, category_id, q, stock_status)
+
+
+@router.get(
+    "/admin/products/summary",
+    response_model=ProductStockSummaryResponse,
+    summary="How many products are low, out of stock or expiring (the Inventory filter chips)",
+)
+def admin_product_stock_summary(
+    category_id: int | None = Query(default=None),
+    q: str | None = Query(default=None, max_length=150, description="Product name"),
+    current_user: User = Depends(require_permission("inventory.read")),
+    db: Session = Depends(get_db),
+) -> ProductStockSummaryResponse:
+    return InventoryService(db).admin_product_stock_summary(category_id, q)
+
+
+@router.get(
+    "/admin/products/{product_id}",
+    response_model=ProductStockItemResponse,
+    summary="One product's current stock (kg, warehouses, expiry) - used to refresh a card before a stock action",
+)
+def admin_get_product_stock(
+    product_id: int,
+    current_user: User = Depends(require_permission("inventory.read")),
+    db: Session = Depends(get_db),
+) -> ProductStockItemResponse:
+    card = InventoryService(db).product_stock_card(product_id)
+    if card is None:
+        raise NotFoundError("Product not found.")
+    return card
+
+
+@router.post(
+    "/admin/products/{product_id}/correct",
+    response_model=ProductStockOperationResponse,
+    summary="Correct a product's stock to a physical count - the server works out the difference (oldest stock first)",
+)
+def admin_correct_product_stock(
+    product_id: int,
+    payload: ProductCorrectStockRequest,
+    current_user: User = Depends(require_permission("inventory.reconcile")),
+    db: Session = Depends(get_db),
+) -> ProductStockOperationResponse:
+    return ProductStockService(db).correct_stock(product_id, payload, current_user.id)
+
+
+@router.post(
+    "/admin/products/{product_id}/remove",
+    response_model=ProductStockOperationResponse,
+    summary="Remove an amount of a product's stock with a reason (oldest first, never reserved stock)",
+)
+def admin_remove_product_stock(
+    product_id: int,
+    payload: ProductRemoveStockRequest,
+    current_user: User = Depends(require_permission("inventory.adjust")),
+    db: Session = Depends(get_db),
+) -> ProductStockOperationResponse:
+    return ProductStockService(db).remove_stock(product_id, payload, current_user.id)
+
+
+@router.post(
+    "/admin/products/{product_id}/move",
+    response_model=ProductStockOperationResponse,
+    summary="Move an amount of a product's stock to another warehouse in one atomic action",
+)
+def admin_move_product_stock(
+    product_id: int,
+    payload: ProductMoveStockRequest,
+    current_user: User = Depends(require_permission("inventory.transfer")),
+    db: Session = Depends(get_db),
+) -> ProductStockOperationResponse:
+    return ProductStockService(db).move_stock(product_id, payload, current_user.id)
+
+
+@router.post(
+    "/admin/stock-actions/{operation_id}/undo",
+    response_model=ProductStockOperationResponse,
+    summary="Undo a recent correct/remove/move with compensating movements (refused when unsafe)",
+)
+def admin_undo_stock_action(
+    operation_id: int,
+    current_user: User = Depends(require_permission("inventory.read")),
+    db: Session = Depends(get_db),
+) -> ProductStockOperationResponse:
+    role_names = [
+        name
+        for (name,) in db.query(Role.name)
+        .join(UserRole, UserRole.role_id == Role.id)
+        .filter(UserRole.user_id == current_user.id)
+        .all()
+    ]
+    return ProductStockService(db).undo(operation_id, current_user, role_names)
 
 
 @router.put(

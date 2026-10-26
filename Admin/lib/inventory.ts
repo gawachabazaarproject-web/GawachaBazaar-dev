@@ -222,13 +222,80 @@ export interface ProductStockVariant {
   share_packs: string;
 }
 
+export interface ProductStockTotal {
+  family: string;
+  /** Available to sell: what is there minus what is promised to orders. */
+  amount: string;
+  amount_unit: string;
+  unassigned_amount: string;
+  /** Everything physically there (including the reserved part). */
+  on_hand_amount: string;
+  /** Promised to customer orders. */
+  reserved_amount: string;
+}
+
+export interface ProductWarehouseStock {
+  location_id: number;
+  location_name: string;
+  family: string;
+  /** Available to sell here. */
+  amount: string;
+  amount_unit: string;
+  /** Everything physically here (reserved included). */
+  on_hand_amount: string;
+}
+
+export interface ProductExpiry {
+  expiry_date: string;
+  /** Negative once it has expired. */
+  days_left: number;
+  amount: string;
+  amount_unit: string;
+}
+
+export type StockStatus = "OK" | "LOW" | "OUT";
+
 export interface ProductStockItem {
   product_id: number;
   product_name: string;
   category_name: string;
   /** Stock per unit family, e.g. "34 kg" of which "10 kg" is still unassigned. */
-  totals: { family: string; amount: string; amount_unit: string; unassigned_amount: string }[];
+  totals: ProductStockTotal[];
   variants: ProductStockVariant[];
+  stock_status: StockStatus;
+  /** Draft / hidden products never show as low or out: they cannot be bought. */
+  product_status: string;
+  warehouses: ProductWarehouseStock[];
+  expiry: ProductExpiry | null;
+}
+
+export interface ProductStockSummary {
+  all: number;
+  low: number;
+  out: number;
+  expiring: number;
+}
+
+export type StockFilter = "all" | "low" | "out" | "expiring";
+
+export interface StockChange {
+  lot_id: number;
+  location_id: number;
+  location_name: string;
+  variant_id: number;
+  movement_type: string;
+  packs: string;
+}
+
+export interface ProductStockOperation {
+  operation_id: number | null;
+  kind: "correct" | "remove" | "move" | "undo";
+  message: string;
+  difference: string;
+  amount_unit: string;
+  changes: StockChange[];
+  undo_until: string | null;
+  product: ProductStockItem;
 }
 
 export interface ProductStockListResponse {
@@ -240,13 +307,63 @@ export interface ProductStockListResponse {
 
 export async function fetchProductStock(
   accessToken: string,
-  params: { page?: number; page_size?: number; category_id?: number; q?: string },
+  params: { page?: number; page_size?: number; category_id?: number; q?: string; status?: StockFilter },
 ): Promise<ProductStockListResponse> {
   const search = new URLSearchParams();
   Object.entries(params).forEach(([key, value]) => {
     if (value !== undefined && value !== "") search.set(key, String(value));
   });
   return request(accessToken, `/inventory/admin/products?${search.toString()}`);
+}
+
+export async function fetchProductStockSummary(
+  accessToken: string,
+  params: { category_id?: number; q?: string },
+): Promise<ProductStockSummary> {
+  const search = new URLSearchParams();
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== "") search.set(key, String(value));
+  });
+  return request(accessToken, `/inventory/admin/products/summary?${search.toString()}`);
+}
+
+/** "I counted 43 kg": the server works out the difference and picks the lots. */
+export async function correctProductStock(
+  accessToken: string,
+  productId: number,
+  payload: { physical_amount: string; amount_unit: string; location_id?: number; reason: string; notes?: string },
+): Promise<ProductStockOperation> {
+  return request(accessToken, `/inventory/admin/products/${productId}/correct`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function removeProductStock(
+  accessToken: string,
+  productId: number,
+  payload: { amount: string; amount_unit: string; location_id?: number; reason: string },
+): Promise<ProductStockOperation> {
+  return request(accessToken, `/inventory/admin/products/${productId}/remove`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function moveProductStock(
+  accessToken: string,
+  productId: number,
+  payload: { amount: string; amount_unit: string; from_location_id: number; to_location_id: number },
+): Promise<ProductStockOperation> {
+  return request(accessToken, `/inventory/admin/products/${productId}/move`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+/** Reverses a recent correct / remove / move (the server refuses when unsafe). */
+export async function undoStockAction(accessToken: string, operationId: number): Promise<ProductStockOperation> {
+  return request(accessToken, `/inventory/admin/stock-actions/${operationId}/undo`, { method: "POST" });
 }
 
 /** Sets how much stock each listed size has been assigned (its whole share). */
@@ -342,6 +459,8 @@ export async function receiveStock(
     amount?: string;
     amount_unit?: string;
     remarks?: string;
+    /** Date the delivery should be used by (new delivery only). */
+    expiry_date?: string;
   },
 ): Promise<AdminInventoryLotListItem> {
   return request(accessToken, "/inventory/admin/receive", { method: "POST", body: JSON.stringify(payload) });
@@ -406,6 +525,9 @@ export interface StockAlerts {
   out_count: number;
   below_count: number;
   near_count: number;
+  /** Products (not sizes) that are out of stock / running low. */
+  products_out: number;
+  products_low: number;
   items: StockAlertItem[];
 }
 
@@ -463,4 +585,60 @@ export function amountToPacks(amount: string | number, amountUnit: string, packQ
 export function packSize(packQuantity: string | number, unit: string): string {
   const label = ({ UNIT: "pc", DOZEN: "dozen" } as Record<string, string>)[unit] ?? unit.toLowerCase();
   return `${trim(Number(packQuantity))} ${label}`;
+}
+
+// ---- Units staff talk in (kg / L / pieces), per unit family ----------------
+
+export const FAMILY_UNITS: Record<string, { value: string; label: string; factor: number }[]> = {
+  MASS: [{ value: "KG", label: "kg", factor: 1000 }, { value: "G", label: "g", factor: 1 }],
+  VOLUME: [{ value: "L", label: "L", factor: 1000 }, { value: "ML", label: "ml", factor: 1 }],
+  COUNT: [{ value: "UNIT", label: "pieces", factor: 1 }, { value: "DOZEN", label: "dozen", factor: 12 }],
+};
+
+/** Plain number without trailing zeros ("50", "2.5"). */
+export function plain(value: string | number): string {
+  return String(Number(Number(value).toFixed(3)));
+}
+
+/** "50 kg" - the way a stock figure is read out. */
+export function amountText(amount: string | number, unit: string): string {
+  return `${plain(amount)} ${unit}`;
+}
+
+/** Convert between the units of one family ("2" kg -> 2000 g). */
+export function convertAmount(amount: number, fromUnit: string, toUnit: string, family: string): number {
+  const units = FAMILY_UNITS[family] ?? [];
+  const from = units.find((u) => u.value === fromUnit)?.factor ?? 1;
+  const to = units.find((u) => u.value === toUnit)?.factor ?? 1;
+  return (amount * from) / to;
+}
+
+/** What the server will say went wrong, in words for staff. Never "something went wrong". */
+export function stockErrorMessage(err: unknown, action: string, unchanged = "Your stock was not changed."): string {
+  if (err instanceof InventoryApiError) {
+    if (err.status === 401 || err.status === 403) return `You don't have permission to ${action}.`;
+    if (err.status >= 500) return `Couldn't ${action} - the server had a problem. ${unchanged}`;
+    return `Couldn't ${action}. ${err.message} ${unchanged}`;
+  }
+  return `Couldn't ${action} - the connection failed. ${unchanged}`;
+}
+
+/** One product's current stock - read right before a stock action so nobody works from a stale number. */
+export async function fetchProductStockCard(accessToken: string, productId: number): Promise<ProductStockItem> {
+  return request(accessToken, `/inventory/admin/products/${productId}`);
+}
+
+/** "Expires today / tomorrow / in 3 days", "Expired yesterday" - never a raw date or day count. */
+export function expiryPhrase(daysLeft: number): string {
+  if (daysLeft < -1) return `Expired ${-daysLeft} days ago`;
+  if (daysLeft === -1) return "Expired yesterday";
+  if (daysLeft === 0) return "Expires today";
+  if (daysLeft === 1) return "Expires tomorrow";
+  return `Expires in ${daysLeft} days`;
+}
+
+/** The unit option ("KG") for a displayed unit label ("kg", "pcs") within a family. */
+export function unitValueForLabel(family: string, label: string): string {
+  const units = FAMILY_UNITS[family] ?? [];
+  return units.find((u) => u.label === label || (label === "pcs" && u.value === "UNIT"))?.value ?? units[0]?.value ?? "";
 }

@@ -1,10 +1,10 @@
 """Catalog domain schemas: categories, products, variants, images, prices."""
 
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Literal
 
-from pydantic import Field
+from pydantic import Field, model_validator
 
 from app.schemas.base import BaseSchema
 
@@ -237,3 +237,52 @@ class ProductListResponse(BaseSchema):
     page: int
     page_size: int
     total: int
+
+
+# ---------------------------------------------------------------------------
+# Quick create: a whole product (sizes, prices, photo, opening stock) in one
+# transaction. Either everything is saved or nothing is.
+# ---------------------------------------------------------------------------
+
+
+class QuickSizeInput(BaseSchema):
+    quantity: Decimal = Field(..., gt=0, max_digits=12, decimal_places=3)
+    unit: VariantUnit
+    # Price of ONE whole pack of this size.
+    price: Decimal = Field(..., gt=0, max_digits=12, decimal_places=2)
+    # Left out = made from the web address and the size ("TOMATO-250-G").
+    sku: str | None = Field(default=None, min_length=1, max_length=100)
+
+
+class QuickStockInput(BaseSchema):
+    """Opening stock: either an amount (kg / L / pieces) or a number of packs
+    of the first size."""
+
+    location_id: int = Field(..., gt=0)
+    amount: Decimal | None = Field(default=None, gt=0, max_digits=12, decimal_places=3)
+    amount_unit: Literal["KG", "G", "L", "ML", "UNIT", "DOZEN"] | None = None
+    quantity: Decimal | None = Field(default=None, gt=0, max_digits=12, decimal_places=3)
+    expiry_date: date | None = None
+
+    @model_validator(mode="after")
+    def _amount_or_packs(self) -> "QuickStockInput":
+        if self.quantity is not None and (self.amount is not None or self.amount_unit is not None):
+            raise ValueError("Send either quantity (packs) or amount with amount_unit, not both.")
+        if self.quantity is None and (self.amount is None or self.amount_unit is None):
+            raise ValueError("Send quantity (packs) or both amount and amount_unit.")
+        return self
+
+
+class QuickCreateProductRequest(BaseSchema):
+    category_id: int
+    name: str = Field(..., min_length=1, max_length=150)
+    # Left out = made from the name and made unique.
+    slug: str | None = Field(default=None, min_length=1, max_length=180)
+    description: str | None = Field(default=None)
+    # DRAFT = saved but not shown to customers; ACTIVE = published.
+    status: Literal["DRAFT", "ACTIVE"] = "DRAFT"
+    extra_category_ids: list[int] = Field(default_factory=list)
+    # An already uploaded photo (the upload endpoint returns one).
+    image_url: str | None = Field(default=None, min_length=1, max_length=2048)
+    sizes: list[QuickSizeInput] = Field(..., min_length=1, max_length=20)
+    stock: QuickStockInput | None = None

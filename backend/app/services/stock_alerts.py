@@ -6,19 +6,21 @@ dashboard's Low stock card and the Admin's header alerts, so both always agree.
 from dataclasses import dataclass
 from decimal import Decimal
 
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.models.product import Product
 from app.models.product_variant import ProductVariant
-from app.services.stock_pool import available_packs_by_variant
 from app.services.stock_levels import (
     ALERT_LEVELS,
     BELOW,
     NEAR,
     OUT,
     effective_reserve,
+    product_status,
     stock_level,
 )
+from app.services.stock_pool import available_packs_by_variant
 
 _SEVERITY = {OUT: 0, BELOW: 1, NEAR: 2}
 
@@ -75,3 +77,27 @@ def list_stock_alerts(db: Session) -> list[StockAlert]:
 
 def count_by_level(alerts: list[StockAlert]) -> dict[str, int]:
     return {level: sum(1 for a in alerts if a.level == level) for level in (OUT, BELOW, NEAR)}
+
+
+def count_products(db: Session, alerts: list[StockAlert]) -> dict[str, int]:
+    """Products (not sizes) that are out / low, using the same rule as the
+    Inventory page (`product_status`): "Tomato" is one product even when three
+    of its sizes are running low."""
+    sizes_per_product = dict(
+        db.query(ProductVariant.product_id, func.count(ProductVariant.id))
+        .join(Product, Product.id == ProductVariant.product_id)
+        .filter(ProductVariant.status == "ACTIVE", Product.status == "ACTIVE")
+        .group_by(ProductVariant.product_id)
+        .all()
+    )
+    levels: dict[int, list[str]] = {}
+    for alert in alerts:
+        levels.setdefault(alert.product_id, []).append(alert.level)
+    counts = {"OUT": 0, "LOW": 0}
+    for product_id, size_count in sizes_per_product.items():
+        found = levels.get(product_id, [])
+        # Sizes with no alert are comfortably stocked.
+        status = product_status(found + ["OK"] * (size_count - len(found)))
+        if status in counts:
+            counts[status] += 1
+    return counts

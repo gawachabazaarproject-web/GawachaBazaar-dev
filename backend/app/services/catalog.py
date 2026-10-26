@@ -5,6 +5,8 @@ management. Services return schema instances directly (matching the
 convention already established by AuthService), so routes stay one-liners.
 """
 
+import re
+import secrets
 from datetime import UTC, datetime
 from decimal import Decimal
 
@@ -12,7 +14,12 @@ from sqlalchemy import func, or_, select, union
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, aliased, joinedload, selectinload
 
-from app.exceptions.base import BusinessValidationError, ConflictError, NotFoundError
+from app.exceptions.base import (
+    AuthorizationError,
+    BusinessValidationError,
+    ConflictError,
+    NotFoundError,
+)
 from app.models.admin_action_log import AdminActionLog
 from app.models.batch import Batch
 from app.models.bulk_order_request_item import BulkOrderRequestItem
@@ -44,6 +51,7 @@ from app.schemas.admin_catalog import (
     ProductActivityResponse,
     VariantStockResponse,
 )
+from app.schemas.admin_inventory import ReceiveStockRequest
 from app.schemas.catalog import (
     CategoryDetailResponse,
     CategoryListResponse,
@@ -59,6 +67,8 @@ from app.schemas.catalog import (
     ProductResponse,
     ProductSummaryResponse,
     ProductVariantResponse,
+    QuickCreateProductRequest,
+    QuickSizeInput,
     ReorderCategoriesRequest,
     UpdateCategoryRequest,
     UpdatePriceRequest,
@@ -67,11 +77,17 @@ from app.schemas.catalog import (
     UpdateProductVariantRequest,
 )
 from app.services.admin_audit import AdminAuditService
+from app.services.inventory import InventoryService
 from app.services.pricing import get_current_prices_for_variants
 from app.services.stock_levels import effective_reserve, stock_level
-from app.services.stock_pool import available_packs_by_variant, variant_size
+from app.services.stock_pool import (
+    amount_in_base,
+    available_packs_by_variant,
+    variant_size,
+)
 
 _ACTIVE = "ACTIVE"
+_UNIT_LABELS = {"KG": "kg", "G": "g", "L": "L", "ML": "ml", "UNIT": "pc", "DOZEN": "dozen", "BOX": "box", "PACK": "pack"}
 
 
 class CatalogService:
@@ -616,6 +632,21 @@ class CatalogService:
         full = self.get_product_or_404(product.id)
         return self._to_product_response(full, public_only_variants=False)
 
+    def _require_publishable(self, product: Product) -> None:
+        """A product can only go live with a size customers can buy and a
+        valid price on every such size - the same thing checkout insists on,
+        so nothing customers can see is a dead end. (Stock and a photo are not
+        required: the app shows "out of stock" and a neutral picture.)"""
+        sellable = [v for v in product.variants if v.status == _ACTIVE]
+        if not sellable:
+            raise BusinessValidationError("Add a size before making this product live.")
+        prices = self._get_current_prices_for_variants([v.id for v in sellable])
+        unpriced = [v.name for v in sellable if v.id not in prices]
+        if unpriced:
+            raise BusinessValidationError(
+                f"Set a price for {', '.join(unpriced)} before making this product live."
+            )
+
     def update_product(
         self, product_id: int, data: UpdateProductRequest, admin_user_id: int
     ) -> ProductResponse:
@@ -627,6 +658,8 @@ class CatalogService:
             self.get_category_or_404(update_data["category_id"])
 
         extra_ids = update_data.pop("extra_category_ids", None)
+        if update_data.get("status") == _ACTIVE and previous_status != _ACTIVE:
+            self._require_publishable(product)
         for field, value in update_data.items():
             setattr(product, field, value)
         if extra_ids is not None or "category_id" in update_data:
@@ -752,6 +785,10 @@ class CatalogService:
         current_prices = self._get_current_prices_for_variants(all_variant_ids)
         active_variant_ids = [v.id for p in products for v in p.variants if v.status == _ACTIVE]
         stock_by_variant = self._get_available_stock_for_variants(active_variant_ids)
+        cards = {
+            card.product_id: card
+            for card in InventoryService(self.db)._product_stock_items([(p, p.category.name) for p in products])
+        }
 
         items = []
         for p in products:
@@ -784,7 +821,13 @@ class CatalogService:
                     price=price_row.price if price_row else None,
                     currency=price_row.currency if price_row else None,
                     variant_count=len(p.variants),
+                    active_variant_count=len(active_variants),
+                    priced_variant_count=sum(1 for v in active_variants if v.id in current_prices),
                     total_available_stock=total_stock,
+                    stock_text=" + ".join(
+                        f"{format(t.amount.normalize(), 'f')} {t.amount_unit}" for t in cards[p.id].totals if t.amount > 0
+                    ),
+                    stock_status=cards[p.id].stock_status,
                     created_at=p.created_at,
                     updated_at=p.updated_at,
                 )
@@ -824,6 +867,7 @@ class CatalogService:
             images=base.images,
             variants=base.variants,
             variant_stock=variant_stock,
+            stock=InventoryService(self.db).product_stock_card(product.id),
         )
 
     def admin_get_product_activity(self, product_id: int) -> ProductActivityResponse:
@@ -971,9 +1015,27 @@ class CatalogService:
             .first()
         ):
             raise ConflictError(
-                "This variant has orders, quotes or stock history and can't be "
-                "deleted. Deactivate it instead."
+                "This size has orders, quotes or stock history, so it can't be "
+                "deleted. Hide it instead."
             )
+        # Customers' carts hold it, or its price was ever changed: deleting would
+        # silently empty carts / erase price history. Hiding keeps both.
+        if self.db.query(CartItem.id).filter(CartItem.variant_id == variant_id).first():
+            raise ConflictError("A customer has this size in their cart, so it can't be deleted. Hide it instead.")
+        if self.db.query(Price).filter(Price.variant_id == variant_id).count() > 1:
+            raise ConflictError("This size's price has been changed, and price history is kept. Hide it instead.")
+        if variant.status == _ACTIVE and variant.product.status == _ACTIVE:
+            others = (
+                self.db.query(ProductVariant.id)
+                .filter(
+                    ProductVariant.product_id == variant.product_id,
+                    ProductVariant.id != variant_id,
+                    ProductVariant.status == _ACTIVE,
+                )
+                .first()
+            )
+            if others is None:
+                raise ConflictError("This is the only size of a live product. Hide the product instead.")
 
         AdminAuditService(self.db).record(
             admin_user_id=admin_user_id,
@@ -1198,6 +1260,165 @@ class CatalogService:
     # ------------------------------------------------------------------
     # Admin: Price management
     # ------------------------------------------------------------------
+
+    # ------------------------------------------------------------------
+    # Admin: quick create (a whole product in one transaction)
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _slugify(text: str) -> str:
+        slug = re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")
+        return slug[:150] or f"product-{secrets.token_hex(3)}"
+
+    def _unused(self, column, base: str, limit: int) -> str:
+        """`base`, or `base-2`, `base-3`... the first value no row of `column` has."""
+        taken = {
+            value
+            for (value,) in self.db.query(column).filter(column.like(f"{base}%")).all()
+        }
+        candidate, n = base, 1
+        while candidate in taken or len(candidate) > limit:
+            n += 1
+            candidate = f"{base[: limit - len(str(n)) - 1]}-{n}"
+        return candidate
+
+    def quick_create_product(
+        self,
+        data: QuickCreateProductRequest,
+        admin_user_id: int,
+        *,
+        can_media: bool,
+        can_receive: bool,
+    ) -> ProductResponse:
+        """Create a product with its sizes, prices, optional photo and opening
+        stock in ONE transaction: if anything fails, nothing is saved. The web
+        address and product codes are made unique here, so a repeated name can
+        never leave a half-built product behind.
+
+        Publishing (`status="ACTIVE"`) is only possible because every size has
+        a price - the schema requires one for each size."""
+        if data.image_url and not can_media:
+            raise AuthorizationError("You do not have permission to add product photos.")
+        if data.stock and not can_receive:
+            raise AuthorizationError("You do not have permission to add stock.")
+        seen: set[tuple[Decimal, str]] = set()
+        for size in data.sizes:
+            key = (size.quantity.normalize(), size.unit)
+            if key in seen:
+                raise BusinessValidationError("Each size can only be listed once.")
+            seen.add(key)
+
+        self.get_category_or_404(data.category_id)
+        extra_ids = self._clean_extra_category_ids(data.category_id, data.extra_category_ids)
+
+        slug = self._unused(Product.slug, data.slug or self._slugify(data.name), 180)
+        product = Product(
+            category_id=data.category_id,
+            name=data.name,
+            slug=slug,
+            description=data.description,
+            status=data.status,
+        )
+        self.db.add(product)
+        self.db.flush()
+        self._set_extra_categories(product.id, extra_ids)
+        audit = AdminAuditService(self.db)
+        audit.record(
+            admin_user_id=admin_user_id,
+            action="product.create",
+            resource_type="product",
+            resource_id=product.id,
+            new_state=product.status,
+            reason="quick create",
+        )
+
+        variants: list[tuple[ProductVariant, QuickSizeInput]] = []
+        for size in data.sizes:
+            label = f"{format(size.quantity.normalize(), 'f')} {_UNIT_LABELS.get(size.unit, size.unit.lower())}"
+            sku_base = (size.sku or f"{slug}-{self._slugify(label)}").upper()
+            variant = ProductVariant(
+                product_id=product.id,
+                name=label,
+                sku=self._unused(ProductVariant.sku, sku_base, 100),
+                unit=size.unit,
+                quantity=size.quantity,
+                status=_ACTIVE,
+            )
+            self.db.add(variant)
+            self.db.flush()
+            self.db.add(
+                Price(
+                    variant_id=variant.id,
+                    price=size.price,
+                    currency="INR",
+                    valid_from=datetime.now(UTC),
+                    is_active=True,
+                )
+            )
+            self.db.flush()
+            audit.record(
+                admin_user_id=admin_user_id,
+                action="product.variant.create",
+                resource_type="product_variant",
+                resource_id=variant.id,
+                new_state=variant.status,
+                reason=f"product_id={product.id}",
+            )
+            audit.record(
+                admin_user_id=admin_user_id,
+                action="product.price.create",
+                resource_type="price",
+                resource_id=variant.id,
+                new_state=f"{size.price} INR",
+                reason=f"variant_id={variant.id} sku={variant.sku}",
+            )
+            variants.append((variant, size))
+
+        if data.image_url:
+            self.db.add(
+                ProductImage(
+                    product_id=product.id,
+                    image_url=data.image_url,
+                    alt_text=data.name,
+                    is_primary=True,
+                    sort_order=0,
+                )
+            )
+            self.db.flush()
+
+        if data.stock:
+            stock = data.stock
+            if stock.amount_unit is not None:
+                family = amount_in_base(Decimal(1), stock.amount_unit)[0]
+                target = next((v for v, _ in variants if variant_size(v)[0] == family), None)
+                if target is None:
+                    raise BusinessValidationError(
+                        f"None of the sizes is measured in {stock.amount_unit}, so that stock amount cannot be used."
+                    )
+            else:
+                target = variants[0][0]
+            InventoryService(self.db).receive_stock_no_commit(
+                ReceiveStockRequest(
+                    variant_id=target.id,
+                    location_id=stock.location_id,
+                    quantity=stock.quantity,
+                    amount=stock.amount,
+                    amount_unit=stock.amount_unit,
+                    expiry_date=stock.expiry_date,
+                    remarks="Opening stock",
+                ),
+                admin_user_id,
+            )
+
+        try:
+            self.db.commit()
+        except IntegrityError as exc:
+            self.db.rollback()
+            raise ConflictError(
+                "Another product with the same web address or product code was added at the same time. "
+                "Nothing was saved - please try again."
+            ) from exc
+        full = self.get_product_or_404(product.id)
+        return self._to_product_response(full, public_only_variants=False)
 
     def get_price_or_404(self, price_id: int) -> Price:
         price = self.db.query(Price).filter(Price.id == price_id).first()

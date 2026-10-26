@@ -23,6 +23,9 @@
   "DELETE /api/v1/cart/items/{item_id}": [
    "CUSTOMER"
   ],
+  "DELETE /api/v1/catalog/images/{image_id}": [
+   "CATALOG_STAFF"
+  ],
   "DELETE /api/v1/packaging/operations/{operation_id}/inputs/{input_id}": [
    "HUB_STAFF",
    "OPERATIONS"
@@ -47,7 +50,8 @@
    "SUPPORT",
    "HUB_STAFF",
    "OPERATIONS",
-   "DELIVERY_PARTNER"
+   "DELIVERY_PARTNER",
+   "CATALOG_STAFF"
   ],
   "GET /api/v1/bazaar/delivery-quote": [
    "CUSTOMER"
@@ -81,6 +85,24 @@
   ],
   "GET /api/v1/cart": [
    "CUSTOMER"
+  ],
+  "GET /api/v1/catalog/categories/admin": [
+   "CATALOG_STAFF"
+  ],
+  "GET /api/v1/catalog/categories/admin/{category_id}": [
+   "CATALOG_STAFF"
+  ],
+  "GET /api/v1/catalog/categories/admin/{category_id}/activity": [
+   "CATALOG_STAFF"
+  ],
+  "GET /api/v1/catalog/products/admin": [
+   "CATALOG_STAFF"
+  ],
+  "GET /api/v1/catalog/products/admin/{product_id}": [
+   "CATALOG_STAFF"
+  ],
+  "GET /api/v1/catalog/products/admin/{product_id}/activity": [
+   "CATALOG_STAFF"
   ],
   "GET /api/v1/customers": [
    "SUPPORT"
@@ -134,6 +156,14 @@
    "OPERATIONS"
   ],
   "GET /api/v1/inventory/admin/products": [
+   "HUB_STAFF",
+   "OPERATIONS"
+  ],
+  "GET /api/v1/inventory/admin/products/summary": [
+   "HUB_STAFF",
+   "OPERATIONS"
+  ],
+  "GET /api/v1/inventory/admin/products/{product_id}": [
    "HUB_STAFF",
    "OPERATIONS"
   ],
@@ -242,6 +272,18 @@
   "PATCH /api/v1/cart/items/{item_id}": [
    "CUSTOMER"
   ],
+  "PATCH /api/v1/catalog/images/{image_id}": [
+   "CATALOG_STAFF"
+  ],
+  "PATCH /api/v1/catalog/prices/{price_id}": [
+   "CATALOG_STAFF"
+  ],
+  "PATCH /api/v1/catalog/products/{product_id}": [
+   "CATALOG_STAFF"
+  ],
+  "PATCH /api/v1/catalog/variants/{variant_id}": [
+   "CATALOG_STAFF"
+  ],
   "PATCH /api/v1/inventory/locations/{location_id}": [
    "HUB_STAFF",
    "OPERATIONS"
@@ -264,7 +306,8 @@
    "SUPPORT",
    "HUB_STAFF",
    "OPERATIONS",
-   "DELIVERY_PARTNER"
+   "DELIVERY_PARTNER",
+   "CATALOG_STAFF"
   ],
   "POST /api/v1/bulk-orders/admin/requests/{request_id}/convert": [
    "OPERATIONS"
@@ -305,6 +348,24 @@
   "POST /api/v1/cart/items": [
    "CUSTOMER"
   ],
+  "POST /api/v1/catalog/products": [
+   "CATALOG_STAFF"
+  ],
+  "POST /api/v1/catalog/products/quick-create": [
+   "CATALOG_STAFF"
+  ],
+  "POST /api/v1/catalog/products/{product_id}/images": [
+   "CATALOG_STAFF"
+  ],
+  "POST /api/v1/catalog/products/{product_id}/images/upload": [
+   "CATALOG_STAFF"
+  ],
+  "POST /api/v1/catalog/products/{product_id}/variants": [
+   "CATALOG_STAFF"
+  ],
+  "POST /api/v1/catalog/variants/{variant_id}/prices": [
+   "CATALOG_STAFF"
+  ],
   "POST /api/v1/fulfillments/{fulfillment_id}/assign": [
    "HUB_STAFF",
    "OPERATIONS"
@@ -327,7 +388,23 @@
    "HUB_STAFF",
    "OPERATIONS"
   ],
+  "POST /api/v1/inventory/admin/products/{product_id}/correct": [
+   "HUB_STAFF",
+   "OPERATIONS"
+  ],
+  "POST /api/v1/inventory/admin/products/{product_id}/move": [
+   "HUB_STAFF",
+   "OPERATIONS"
+  ],
+  "POST /api/v1/inventory/admin/products/{product_id}/remove": [
+   "HUB_STAFF",
+   "OPERATIONS"
+  ],
   "POST /api/v1/inventory/admin/receive": [
+   "HUB_STAFF",
+   "OPERATIONS"
+  ],
+  "POST /api/v1/inventory/admin/stock-actions/{operation_id}/undo": [
    "HUB_STAFF",
    "OPERATIONS"
   ],
@@ -410,7 +487,8 @@
    "SUPPORT",
    "HUB_STAFF",
    "OPERATIONS",
-   "DELIVERY_PARTNER"
+   "DELIVERY_PARTNER",
+   "CATALOG_STAFF"
   ],
   "POST /api/v1/push-tokens/unregister": [
    "NONE",
@@ -419,7 +497,8 @@
    "SUPPORT",
    "HUB_STAFF",
    "OPERATIONS",
-   "DELIVERY_PARTNER"
+   "DELIVERY_PARTNER",
+   "CATALOG_STAFF"
   ],
   "POST /api/v1/suppliers": [
    "HUB_STAFF",

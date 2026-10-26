@@ -14,6 +14,7 @@ value independently.
 from datetime import datetime
 from decimal import Decimal
 
+from app.schemas.admin_inventory import ProductStockItemResponse
 from app.schemas.base import BaseSchema
 from app.schemas.catalog import (
     CategoryResponse,
@@ -42,7 +43,14 @@ class AdminProductListItemResponse(BaseSchema):
     price: Decimal | None
     currency: str | None
     variant_count: int
+    # Sizes customers can currently buy / of those, how many have a price.
+    active_variant_count: int = 0
+    priced_variant_count: int = 0
     total_available_stock: Decimal
+    # Stock the way staff read it ("118 kg") and its status - the SAME rule the
+    # Inventory page uses (OK / LOW / OUT), so the two screens never disagree.
+    stock_text: str = ""
+    stock_status: str = "OK"
     created_at: datetime
     updated_at: datetime
 
@@ -158,3 +166,5 @@ class AdminProductDetailResponse(BaseSchema):
     images: list[ProductImageResponse]
     variants: list[ProductVariantResponse]
     variant_stock: list[VariantStockResponse]
+    # The product's stock the way staff read it (kg, warehouses, expiry).
+    stock: ProductStockItemResponse | None = None

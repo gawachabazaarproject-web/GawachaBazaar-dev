@@ -139,7 +139,8 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
     setBellOpen(false);
     setDrawerOpen(false);
   }, [pathname, refreshStock]);
-  const alertCount = stockAlerts?.count ?? 0;
+  // Products (not sizes), judged by the same rule as the Inventory page's Low / Out chips.
+  const alertCount = (stockAlerts?.products_out ?? 0) + (stockAlerts?.products_low ?? 0);
   useEffect(() => {
     if (alertCount < dismissedAt) setDismissedAt(alertCount);
   }, [alertCount, dismissedAt]);
@@ -164,7 +165,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
   }, []);
 
   const badgeFor = (href: string) => (href === "/orders" ? pendingOrders : href === "/inventory" ? alertCount : 0);
-  const badgeLabel = (href: string) => (href === "/inventory" ? "items need restocking" : "pending orders");
+  const badgeLabel = (href: string) => (href === "/inventory" ? "products need restocking" : "pending orders");
 
   const handleLogout = async () => {
     await logout();
@@ -321,7 +322,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
               <button
                 onClick={() => setBellOpen((o) => !o)}
                 className="relative rounded p-2 text-neutral-500 hover:bg-neutral-100"
-                aria-label={alertCount > 0 ? `Notifications - ${alertCount} stock alert${alertCount === 1 ? "" : "s"}` : "Notifications"}
+                aria-label={alertCount > 0 ? `Notifications - ${alertCount} product${alertCount === 1 ? "" : "s"} to restock` : "Notifications"}
                 aria-expanded={bellOpen}
               >
                 <Icon name="bell" size={18} />
@@ -393,13 +394,12 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
           >
             <p>
               <strong>
-                {alertCount} item{alertCount === 1 ? " needs" : "s need"} restocking
+                {alertCount} product{alertCount === 1 ? " needs" : "s need"} restocking
               </strong>
               {" - "}
               {[
-                stockAlerts.out_count > 0 ? `${stockAlerts.out_count} out of stock` : null,
-                stockAlerts.below_count > 0 ? `${stockAlerts.below_count} low on stock` : null,
-                stockAlerts.near_count > 0 ? `${stockAlerts.near_count} close to reserve` : null,
+                stockAlerts.products_out > 0 ? `${stockAlerts.products_out} out of stock` : null,
+                stockAlerts.products_low > 0 ? `${stockAlerts.products_low} running low` : null,
               ]
                 .filter(Boolean)
                 .join(", ")}

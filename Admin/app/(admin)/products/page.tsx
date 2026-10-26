@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { readInitialQuery, useDebounced, useUrlQuerySync } from "@/lib/use-list-query";
@@ -13,7 +14,7 @@ import {
   deleteProduct,
   fetchAdminProducts,
   fetchCategories,
-  PRODUCT_STATUSES,
+  updateProduct,
 } from "@/lib/products";
 import { formatDate, formatMoney } from "@/lib/format";
 import { PageHeader } from "@/components/PageHeader";
@@ -23,15 +24,21 @@ import { TableSkeleton } from "@/components/TableSkeleton";
 import { Pagination } from "@/components/Pagination";
 import { StatusBadge } from "@/components/StatusBadge";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { ReceiveStockDialog } from "@/components/ReceiveStockDialog";
+import { checkListReadiness, fixQuery } from "@/lib/readiness";
+import { statusLabel } from "@/lib/product-form";
 import { SearchableSelect, categoryOptions } from "@/components/SearchableSelect";
 
 const PAGE_SIZE = 20;
-const LOW_STOCK_THRESHOLD = 10;
 
 export default function ProductsPage() {
   const { getAccessToken, user } = useAuth();
   const router = useRouter();
   const canDelete = user && hasPermission(user.roles, "products.delete");
+  const canUpdate = !!(user && hasPermission(user.roles, "products.update"));
+  const canReceive = !!(user && hasPermission(user.roles, "inventory.receive"));
+  const [stockFor, setStockFor] = useState<number | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [toDelete, setToDelete] = useState<AdminProductListItem | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
@@ -100,6 +107,19 @@ export default function ProductsPage() {
     }
   };
 
+  // Live <-> Hidden (and Draft -> Live) straight from the list.
+  const toggleLive = async (product: AdminProductListItem) => {
+    const token = getAccessToken();
+    if (!token) return;
+    setActionError(null);
+    try {
+      await updateProduct(token, product.id, { status: product.status === "ACTIVE" ? "INACTIVE" : "ACTIVE" });
+      await load();
+    } catch (err) {
+      setActionError(err instanceof CatalogApiError ? err.message : "Unable to change this product.");
+    }
+  };
+
   const clearFilters = () => {
     setQ("");
     setStatus("");
@@ -125,6 +145,26 @@ export default function ProductsPage() {
         }
       />
 
+      <div className="mb-3 flex flex-wrap gap-1" role="tablist" aria-label="Product status">
+        {[["", "All"], ["ACTIVE", "Live"], ["DRAFT", "Drafts"], ["INACTIVE", "Hidden"], ["ARCHIVED", "Archived"]].map(([value, label]) => (
+          <button
+            key={value}
+            role="tab"
+            aria-selected={status === value}
+            onClick={() => { setPage(1); setStatus(value); }}
+            className={`rounded-full px-3 py-1 text-sm font-medium ${
+              status === value ? "bg-primary-800 text-white" : "bg-white text-neutral-600 hover:bg-neutral-100"
+            } border border-neutral-200`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {actionError && (
+        <p className="mb-3 rounded border border-status-danger/30 bg-status-dangerLight px-3 py-2 text-sm text-status-danger">{actionError}</p>
+      )}
+
       <div className="mb-4 flex flex-wrap items-center gap-2 rounded border border-neutral-200 bg-white p-3">
         <input
           value={q}
@@ -132,16 +172,6 @@ export default function ProductsPage() {
           placeholder="Product name or slug"
           className="min-w-[220px] flex-1 rounded border border-neutral-300 px-3 py-1.5 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
         />
-        <select
-          value={status}
-          onChange={(e) => { setPage(1); setStatus(e.target.value); }}
-          className="rounded border border-neutral-300 bg-white px-2 py-1.5 text-sm text-neutral-700"
-        >
-          <option value="">Status: All</option>
-          {PRODUCT_STATUSES.map((s) => (
-            <option key={s} value={s}>{s}</option>
-          ))}
-        </select>
         <SearchableSelect
           className="w-56"
           value={categoryId}
@@ -203,10 +233,10 @@ export default function ProductsPage() {
                     <th className="px-4 py-2 font-medium">Product</th>
                     <th className="px-4 py-2 font-medium">Category</th>
                     <th className="px-4 py-2 font-medium">Price</th>
-                    <th className="px-4 py-2 font-medium">Stock</th>
+                    <th className="px-4 py-2 font-medium">Available</th>
                     <th className="px-4 py-2 font-medium">Status</th>
                     <th className="px-4 py-2 font-medium">Updated</th>
-                    {canDelete && <th className="px-4 py-2" />}
+                    <th className="px-4 py-2" />
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-neutral-100">
@@ -215,6 +245,10 @@ export default function ProductsPage() {
                       key={product.id}
                       product={product}
                       onClick={() => router.push(`/products/${product.id}`)}
+                      canUpdate={canUpdate}
+                      onAddStock={canReceive ? () => setStockFor(product.id) : undefined}
+                      onToggleLive={canUpdate ? () => toggleLive(product) : undefined}
+                      onDuplicate={() => router.push(`/products/new?from=${product.id}`)}
                       onDelete={canDelete ? () => { setDeleteError(null); setToDelete(product); } : undefined}
                     />
                   ))}
@@ -225,6 +259,13 @@ export default function ProductsPage() {
           </>
         )}
       </div>
+
+      <ReceiveStockDialog
+        open={stockFor !== null}
+        initialProductId={stockFor ?? undefined}
+        onClose={() => setStockFor(null)}
+        onDone={load}
+      />
 
       <ConfirmDialog
         open={toDelete !== null}
@@ -241,8 +282,31 @@ export default function ProductsPage() {
   );
 }
 
-function ProductRow({ product, onClick, onDelete }: { product: AdminProductListItem; onClick: () => void; onDelete?: () => void }) {
-  const stock = Number.parseFloat(product.total_available_stock);
+function ProductRow({
+  product,
+  canUpdate,
+  onClick,
+  onAddStock,
+  onToggleLive,
+  onDuplicate,
+  onDelete,
+}: {
+  product: AdminProductListItem;
+  canUpdate: boolean;
+  onClick: () => void;
+  onAddStock?: () => void;
+  onToggleLive?: () => void;
+  onDuplicate: () => void;
+  onDelete?: () => void;
+}) {
+  const readiness = checkListReadiness(product);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const stop = (fn?: () => void) => (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setMenuOpen(false);
+    fn?.();
+  };
+  const liveLabel = product.status === "ACTIVE" ? "Hide" : product.status === "DRAFT" ? "Publish" : "Show";
   return (
     <tr onClick={onClick} className="cursor-pointer hover:bg-neutral-50">
       <td className="px-4 py-2">
@@ -255,38 +319,80 @@ function ProductRow({ product, onClick, onDelete }: { product: AdminProductListI
       </td>
       <td className="px-4 py-3">
         <p className="font-medium text-primary-900">{product.name}</p>
-        <p className="text-xs text-neutral-500">{product.variant_count} variant{product.variant_count === 1 ? "" : "s"}</p>
+        <p className="text-xs text-neutral-500">
+          {product.variant_count} size{product.variant_count === 1 ? "" : "s"}
+        </p>
+        {product.status !== "ARCHIVED" && (
+          readiness.ready ? (
+            <p className="text-xs font-semibold text-primary-700">Ready to sell</p>
+          ) : (
+            <p className="text-xs text-status-warning">
+              {readiness.problems.length} {readiness.problems.length === 1 ? "thing needs" : "things need"} attention:{" "}
+              {readiness.problems.map((p) => p.text).join(", ")}{" "}
+              <Link
+                href={`/products/${product.id}?${fixQuery(readiness.problems[0].fix)}`}
+                onClick={(e) => e.stopPropagation()}
+                className="font-semibold text-primary-700 underline"
+              >
+                Fix now
+              </Link>
+            </p>
+          )
+        )}
       </td>
       <td className="px-4 py-3 text-neutral-600">{product.category_name}</td>
       <td className="px-4 py-3 font-medium text-neutral-800">
         {product.price ? formatMoney(product.price, product.currency ?? "INR") : <span className="text-neutral-400">—</span>}
       </td>
       <td className="px-4 py-3">
-        {stock === 0 ? (
+        {product.status !== "ACTIVE" ? (
+          <span className="text-neutral-500">{product.stock_text || "No stock"}</span>
+        ) : product.stock_status === "OUT" ? (
           <span className="text-xs font-semibold text-status-danger">Out of stock</span>
-        ) : stock < LOW_STOCK_THRESHOLD ? (
-          <span className="text-xs font-semibold text-status-warning">Low: {stock}</span>
+        ) : product.stock_status === "LOW" ? (
+          <span className="text-xs font-semibold text-status-warning">{product.stock_text} · Low</span>
         ) : (
-          <span className="text-neutral-600">{stock}</span>
+          <span className="text-neutral-600">{product.stock_text || "—"}</span>
         )}
       </td>
       <td className="px-4 py-3">
-        <StatusBadge status={product.status} />
+        <span
+          className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${
+            product.status === "ACTIVE" ? "bg-primary-100 text-primary-800" : "bg-neutral-100 text-neutral-600"
+          }`}
+        >
+          {statusLabel(product.status)}
+        </span>
       </td>
       <td className="px-4 py-3 text-neutral-500">{formatDate(product.updated_at)}</td>
-      {onDelete && (
-        <td className="px-4 py-3 text-right">
+      <td className="relative px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-end gap-3 text-xs font-semibold">
+          {onAddStock && (
+            <button onClick={stop(onAddStock)} className="text-primary-700 hover:underline">+ Stock</button>
+          )}
+          {canUpdate && onToggleLive && product.status !== "ARCHIVED" && (product.status === "ACTIVE" || readiness.problems.every((p) => p.key === "stock")) && (
+            <button onClick={stop(onToggleLive)} className="text-neutral-600 hover:underline">{liveLabel}</button>
+          )}
           <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onDelete();
-            }}
-            className="text-xs font-semibold text-status-danger hover:underline"
+            onClick={(e) => { e.stopPropagation(); setMenuOpen((o) => !o); }}
+            aria-label="More actions"
+            aria-expanded={menuOpen}
+            className="rounded px-2 py-0.5 text-base text-neutral-500 hover:bg-neutral-100"
           >
-            Delete
+            ⋯
           </button>
-        </td>
-      )}
+        </div>
+        {menuOpen && (
+          <div className="absolute right-4 top-10 z-20 w-36 rounded border border-neutral-200 bg-white py-1 text-left text-sm shadow-lg">
+            {canUpdate && (
+              <button onClick={stop(onDuplicate)} className="block w-full px-3 py-1.5 text-left hover:bg-neutral-50">Duplicate</button>
+            )}
+            {onDelete && (
+              <button onClick={stop(onDelete)} className="block w-full px-3 py-1.5 text-left text-status-danger hover:bg-neutral-50">Delete…</button>
+            )}
+          </div>
+        )}
+      </td>
     </tr>
   );
 }

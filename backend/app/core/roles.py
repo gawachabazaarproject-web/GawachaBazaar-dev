@@ -14,6 +14,7 @@ HUB_STAFF = "HUB_STAFF"
 OPERATIONS = "OPERATIONS"
 DELIVERY_PARTNER = "DELIVERY_PARTNER"
 SUPPORT = "SUPPORT"
+CATALOG_STAFF = "CATALOG_STAFF"
 
 BASELINE_ROLES: tuple[str, ...] = (
     CUSTOMER,
@@ -23,6 +24,7 @@ BASELINE_ROLES: tuple[str, ...] = (
     OPERATIONS,
     DELIVERY_PARTNER,
     SUPPORT,
+    CATALOG_STAFF,
 )
 
 # Admin-panel roles - the staff population (StaffService manages exactly
@@ -30,5 +32,5 @@ BASELINE_ROLES: tuple[str, ...] = (
 # CUSTOMER and WHOLESALER are deliberately absent - both are open
 # self-registration account types, not staff.
 STAFF_ROLES: frozenset[str] = frozenset(
-    {ADMIN, HUB_STAFF, OPERATIONS, DELIVERY_PARTNER, SUPPORT}
+    {ADMIN, HUB_STAFF, OPERATIONS, DELIVERY_PARTNER, SUPPORT, CATALOG_STAFF}
 )

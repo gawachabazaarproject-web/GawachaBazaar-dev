@@ -21,7 +21,14 @@ DELIVERY_PARTNER, SUPPORT) - CUSTOMER and WHOLESALER never open the admin
 panel and are intentionally absent from this map.
 """
 
-from app.core.roles import ADMIN, DELIVERY_PARTNER, HUB_STAFF, OPERATIONS, SUPPORT
+from app.core.roles import (
+    ADMIN,
+    CATALOG_STAFF,
+    DELIVERY_PARTNER,
+    HUB_STAFF,
+    OPERATIONS,
+    SUPPORT,
+)
 
 # Catalog - matches catalog.py, which currently gates every mutation with
 # `require_roles(ADMIN)` only (no OPERATIONS/HUB_STAFF override exists yet).
@@ -214,6 +221,22 @@ ROLE_PERMISSIONS: dict[str, frozenset[str]] = {
     # unmasked phone number, change account status, write notes, or touch
     # email/phone (all of those stay ADMIN-only).
     SUPPORT: frozenset({"customers.view"}),
+    # Catalogue staff add and edit products, prices and photos. They see a
+    # product's stock on the product page (it is part of the product detail)
+    # but have no access to the inventory routes at all (receiving,
+    # correcting, removing and moving stock stay with the inventory roles) and
+    # never delete products or categories - deleting is destructive and stays
+    # ADMIN-only.
+    CATALOG_STAFF: frozenset(
+        {
+            "products.read",
+            "products.create",
+            "products.update",
+            "products.manage_media",
+            "products.manage_pricing",
+            "categories.read",
+        }
+    ),
 }
 
 

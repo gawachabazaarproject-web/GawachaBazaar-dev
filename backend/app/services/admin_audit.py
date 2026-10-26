@@ -28,16 +28,16 @@ class AdminAuditService:
         previous_state: str | None = None,
         new_state: str | None = None,
         reason: str | None = None,
-    ) -> None:
-        self.db.add(
-            AdminActionLog(
-                admin_user_id=admin_user_id,
-                action=action,
-                resource_type=resource_type,
-                resource_id=resource_id,
-                previous_state=previous_state,
-                new_state=new_state,
-                reason=reason,
-            )
+    ) -> AdminActionLog:
+        entry = AdminActionLog(
+            admin_user_id=admin_user_id,
+            action=action,
+            resource_type=resource_type,
+            resource_id=resource_id,
+            previous_state=previous_state,
+            new_state=new_state,
+            reason=reason,
         )
+        self.db.add(entry)
         self.db.flush()
+        return entry

@@ -158,7 +158,7 @@ export default function StockAlertsPage() {
         open={receiveFor !== null}
         initialProductId={receiveFor ?? undefined}
         onClose={() => setReceiveFor(null)}
-        onReceived={load}
+        onDone={load}
       />
     </div>
   );

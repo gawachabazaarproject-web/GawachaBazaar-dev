@@ -24,7 +24,7 @@ from tests.firebase_fake import auth_headers_for
 from tests.test_phase_9_rbac import _create_user_with_roles
 
 GOLDEN = Path(__file__).with_name("authz_golden.json")
-ROLES = ["NONE", "CUSTOMER", "WHOLESALER", "SUPPORT", "HUB_STAFF", "OPERATIONS", "DELIVERY_PARTNER"]
+ROLES = ["NONE", "CUSTOMER", "WHOLESALER", "SUPPORT", "HUB_STAFF", "OPERATIONS", "DELIVERY_PARTNER", "CATALOG_STAFF"]
 
 
 def _operations():
