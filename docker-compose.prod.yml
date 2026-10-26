@@ -31,6 +31,24 @@ x-backend-env: &backend-env
   CLOUDINARY_CLOUD_NAME: ${CLOUDINARY_CLOUD_NAME:-}
   CLOUDINARY_API_KEY: ${CLOUDINARY_API_KEY:-}
   CLOUDINARY_API_SECRET: ${CLOUDINARY_API_SECRET:-}
+  # Delivery pricing + routing. Defaults equal the code defaults, so leaving
+  # these unset in .env.production changes nothing. Redis is the route cache
+  # (optional: if it is down, delivery still works, just without caching).
+  FREE_DELIVERY_MIN_ITEMS: ${FREE_DELIVERY_MIN_ITEMS:-15}
+  DELIVERY_BASE_FEE: ${DELIVERY_BASE_FEE:-40}
+  DELIVERY_PER_KM: ${DELIVERY_PER_KM:-10}
+  DELIVERY_MAX_CHARGED_KM: ${DELIVERY_MAX_CHARGED_KM:-30}
+  DELIVERY_MAX_DISTANCE_KM: ${DELIVERY_MAX_DISTANCE_KM:-0}
+  DELIVERY_MIN_ORDER_VALUE: ${DELIVERY_MIN_ORDER_VALUE:-0}
+  PACKING_POINT_LATITUDE: ${PACKING_POINT_LATITUDE:-}
+  PACKING_POINT_LONGITUDE: ${PACKING_POINT_LONGITUDE:-}
+  ROUTING_PROVIDER: ${ROUTING_PROVIDER:-osrm}
+  OSRM_BASE_URL: ${OSRM_BASE_URL:-https://router.project-osrm.org}
+  ROUTING_TIMEOUT_SECONDS: ${ROUTING_TIMEOUT_SECONDS:-3}
+  REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+  ROUTE_CACHE_TTL_SECONDS: ${ROUTE_CACHE_TTL_SECONDS:-604800}
+  NOMINATIM_BASE_URL: ${NOMINATIM_BASE_URL:-https://nominatim.openstreetmap.org}
+  NOMINATIM_USER_AGENT: ${NOMINATIM_USER_AGENT:-GawachaBazaar/1.0 (gawachabazaar.project@gmail.com)}
 
 x-logging: &default-logging
   driver: json-file
@@ -56,6 +74,20 @@ services:
       timeout: 5s
       retries: 10
       start_period: 10s
+    logging: *default-logging
+
+  # Route-distance cache only (no persistence needed; losing it just means a
+  # few extra OSRM calls). Not published; reachable on the backend network only.
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--save", "", "--appendonly", "no", "--maxmemory", "64mb", "--maxmemory-policy", "allkeys-lru"]
+    networks: [backend]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
     logging: *default-logging
 
   migrate:
@@ -87,6 +119,8 @@ services:
         condition: service_healthy
       migrate:
         condition: service_completed_successfully
+      redis:
+        condition: service_started
     logging: *default-logging
 
   admin:

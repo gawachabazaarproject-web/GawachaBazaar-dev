@@ -3,6 +3,7 @@
 import Link from "next/link";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
+import { hasPermission } from "@/lib/permissions";
 import { useOrderEvents } from "@/lib/realtime-context";
 
 const MUTE_STORAGE_KEY = "gawacha-admin-new-order-alarm-muted";
@@ -28,7 +29,7 @@ interface Toast {
  * Mounted once in the root layout (inside RealtimeProvider) so it fires
  * regardless of which Admin page staff currently have open.
  */
-export function NewOrderAlarm() {
+function NewOrderAlarmInner() {
   const { status } = useAuth();
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [muted, setMuted] = useState(false);
@@ -180,11 +181,18 @@ export function NewOrderAlarm() {
       ))}
       <button
         onClick={toggleMuted}
-        className="pointer-events-auto ml-auto rounded-full border border-neutral-300 bg-white px-3 py-1.5 text-xs font-medium text-neutral-600 shadow hover:bg-neutral-50"
+        className="pointer-events-auto ml-auto rounded-full border border-neutral-300 bg-white px-3 py-1.5 text-xs font-medium text-neutral-600 shadow hover:bg-neutral-50 [body:has([aria-modal=true])_&]:hidden"
         title={muted ? "Unmute new-order alarm" : "Mute new-order alarm"}
       >
         {muted ? "🔇 Alarm off" : "🔔 Alarm on"}
       </button>
     </div>
   );
+}
+
+/** Only people who can see orders get the new-order alarm (catalogue staff never do). */
+export function NewOrderAlarm() {
+  const { user } = useAuth();
+  if (!user || !hasPermission(user.roles, "orders.read")) return null;
+  return <NewOrderAlarmInner />;
 }

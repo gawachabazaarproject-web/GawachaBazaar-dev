@@ -21,7 +21,21 @@ security benefit against this app's actual risk profile. Scoped only to
 the specific flows that are genuinely abuse-prone.
 """
 
+import hashlib
+
 from slowapi import Limiter
 from slowapi.util import get_remote_address
+from starlette.requests import Request
 
 limiter = Limiter(key_func=get_remote_address)
+
+
+def user_or_ip_key(request: Request) -> str:
+    """Per-signed-in-user key (hash of the bearer token), else the client IP.
+    Used for customer endpoints: mobile carriers in India put many users behind
+    one NAT address, so a pure per-IP limit would throttle innocent neighbours.
+    The token is hashed, never stored or logged."""
+    auth = request.headers.get("authorization", "")
+    if auth.lower().startswith("bearer ") and len(auth) > 20:
+        return "u:" + hashlib.sha256(auth[7:].encode()).hexdigest()[:20]
+    return get_remote_address(request)

@@ -63,3 +63,12 @@ Deletion rules (code-verified): a **category** can be deleted only when it has n
 - No tests cover ads, home slides or the wishlist beyond the role-matrix test, and the backend does not validate ad image dimensions.
 - Names/slugs are not validated beyond uniqueness; marathi/Devanagari text is supported by the database (UTF-8) and the app font — not separately tested.
 - `farms` and `quality_checks` tables exist but nothing creates them ([INVENTORY](INVENTORY.md)).
+
+## Quick create (added 2026-10-26, uncommitted)
+
+`POST /catalog/products/quick-create` ([`CatalogService.quick_create_product`](../../backend/app/services/catalog.py)) saves a whole product - product, extra categories, sizes, one price per size, optional primary photo URL and optional opening stock - in **one transaction**: any failure (bad category, unknown warehouse, a unit no size uses…) leaves nothing behind, audit rows included. The web address and product codes are made unique on the server (`tomato`, `tomato-2`; `TOMATO-250-G`…), names without Latin letters get a `product-xxxxxx` address. Gate: `products.create`, plus `products.manage_pricing` always, `products.manage_media` when an image is sent and `inventory.receive` when stock is sent. `status` may be `DRAFT` or `ACTIVE`; publishing is possible because every size must have a price. The existing `PATCH /products/{id}` is **not** changed and still lets `status` become `ACTIVE` without sizes or prices - only the Admin UI blocks that (known gap).
+
+Admin list items carry `active_variant_count` / `priced_variant_count`, and the admin detail carries `stock` (kg, warehouses, expiry), which the Admin uses to compute **readiness** (sizes, a price on every size, stock; a photo is only a suggestion) in `Admin/lib/readiness.ts`.
+
+**Deleting a size (2026-10-26):** `DELETE /variants/{id}` is `products.delete` (ADMIN) only and only for a size added by mistake: it is refused (409) when the size has orders, quotes, stock lots, a customer cart line, more than one price row (price history is kept) or is the only size of a live product. Everything else is hidden (`status` INACTIVE), which keeps carts, orders and prices intact. `PATCH /variants` with `reserve_level` needs `inventory.adjust`. Making a product live (`PATCH status=ACTIVE`) requires a sellable size with a price on every such size.
+

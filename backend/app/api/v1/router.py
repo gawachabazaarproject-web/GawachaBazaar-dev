@@ -17,6 +17,7 @@ from app.api.v1.cart import router as cart_router
 from app.api.v1.catalog import router as catalog_router
 from app.api.v1.customers import router as customers_router
 from app.api.v1.dashboard import router as dashboard_router
+from app.api.v1.delivery import router as delivery_router
 from app.api.v1.fulfillments import router as fulfillments_router
 from app.api.v1.home_slides import router as home_slides_router
 from app.api.v1.inventory import router as inventory_router
@@ -137,6 +138,7 @@ api_router.include_router(ads_router, prefix="/ads", tags=["ads"])
 api_router.include_router(push_router, prefix="/push-tokens", tags=["push"])
 api_router.include_router(home_slides_router, prefix="/home-slides", tags=["home-slides"])
 api_router.include_router(bazaar_router, prefix="/bazaar", tags=["bazaar"])
+api_router.include_router(delivery_router, prefix="/delivery", tags=["delivery"])
 api_router.include_router(offers_router, prefix="/offers", tags=["offers"])
 
 # Live order/fulfillment/payment/refund status events (WebSocket). See

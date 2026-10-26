@@ -40,6 +40,7 @@ header_check() {
 echo "API  https://$API_DOMAIN"
 check "health"                    "https://$API_DOMAIN/health" 200
 check "health/db"                 "https://$API_DOMAIN/health/db" 200
+check "readiness"                 "https://$API_DOMAIN/readiness" 200
 check "catalog (public)"          "https://$API_DOMAIN/api/v1/catalog/categories" 200
 check "docs disabled in prod"     "https://$API_DOMAIN/docs" 404
 check "auth required"             "https://$API_DOMAIN/api/v1/auth/me" 401

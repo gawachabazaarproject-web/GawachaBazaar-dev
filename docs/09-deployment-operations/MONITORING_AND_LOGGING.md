@@ -28,7 +28,7 @@
 | `INVENTORY_RESERVATION_*` (`CREATED`, `COMMITTED`, `RELEASED`, `LATE_PAYMENT`, `INSUFFICIENT_STOCK`, `SWEEP_FAILED`, `SWEEP_LOOP_ERROR`), `INVENTORY_RESERVATION_SWEEP` | info/warning/error | Stock holds and expiry |
 | `ORDER_CANCELLED`, `ORDER_EXPIRED`, `FULFILLMENT_DELIVERED`, `PAYMENT_COD_CONFIRMED`, `PAYMENT_COD_COLLECTED`, `PAYMENT_ORDER_CONFIRMED` | info | Business events |
 | `AUTH_INVALID_TOKEN` (with reason `invalid`/`revoked`), `AUTH_UNKNOWN_FIREBASE_UID`, `AUTH_USER_NOT_ACTIVE`, `AUTH_USER_CREATED`, `AUTH_ACCOUNT_LINKED`, `AUTH_SYNC_CONFLICT`, `AUTH_LEGACY_*`, `FIREBASE_CERT_FETCH_FAILED`, `FIREBASE_CREDENTIAL_FILE_LOAD_FAILED`, `FIREBASE_CERTIFICATE_INIT_FAILED`, `FIREBASE_VERIFY_CREDENTIALS_FAILED`, `FIREBASE_REVOCATION_CHECK_FAILED` | info/warning/error | Sign-in health; a burst of `FIREBASE_*` errors means every user is locked out |
-| `DELIVERY_ROUTING_FAILED` | warning | Fee used the straight-line fallback |
+| `routing cache=miss ... status=failed` | warning | Router failed; the quote/checkout returned 503 (also `routing cache=hit/miss`, `latency_ms`, `delivery_priced`, `route_cache redis_*_failed`) |
 | `PUSH_NO_TOKENS`, `PUSH_TICKET_ERROR`, `PUSH_SEND_FAILED`, `PUSH_NOTIFY_FAILED` | info/warning/error | Push delivery problems (credentials, dead tokens) |
 | `RATE_LIMIT_EXCEEDED`, `Unhandled server exception …` | warning/error | Abuse; unexpected 500s |
 

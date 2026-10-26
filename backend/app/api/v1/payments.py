@@ -37,6 +37,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
+from app.core.rate_limit import limiter, user_or_ip_key
 from app.core.roles import ADMIN, CUSTOMER
 from app.dependencies.auth import get_current_user, require_roles
 from app.dependencies.database import get_db
@@ -152,7 +153,9 @@ def get_checkout(
     response_model=OnlineCheckoutResponse,
     summary="Pay-first online checkout: price the cart and get the Razorpay order to open (no order is created yet)",
 )
+@limiter.limit("10/minute", key_func=user_or_ip_key)
 def start_online_checkout(
+    request: Request,  # required by slowapi
     payload: StartOnlineCheckoutRequest,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),

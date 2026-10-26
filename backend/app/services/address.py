@@ -27,6 +27,8 @@ checkout time with no foreign key back to `addresses` - removing an
 address from a customer's book cannot corrupt or orphan any past order.
 """
 
+from datetime import UTC, datetime
+
 from sqlalchemy.orm import Session
 
 from app.exceptions.base import NotFoundError
@@ -37,6 +39,17 @@ from app.schemas.address import (
     CreateAddressRequest,
     UpdateAddressRequest,
 )
+
+
+def _geocode_fields(lat, lng, provider_id: str | None) -> dict:
+    """Server-side geocode metadata whenever coordinates are saved."""
+    if lat is None or lng is None:
+        return {"geocode_provider": None, "geocode_provider_id": None, "geocoded_at": None}
+    return {
+        "geocode_provider": "nominatim" if provider_id else None,
+        "geocode_provider_id": provider_id,
+        "geocoded_at": datetime.now(UTC),
+    }
 
 
 class AddressService:
@@ -78,6 +91,7 @@ class AddressService:
             latitude=data.latitude,
             longitude=data.longitude,
             is_default=make_default,
+            **_geocode_fields(data.latitude, data.longitude, data.geocode_provider_id),
         )
         self.db.add(address)
         self.db.commit()
@@ -98,6 +112,15 @@ class AddressService:
             # they have at least one address, so checkout always has a
             # sensible preselection.
             update_data.pop("is_default")
+
+        provider_id = update_data.pop("geocode_provider_id", None)
+        new_lat = update_data.get("latitude", address.latitude)
+        new_lng = update_data.get("longitude", address.longitude)
+        # Re-saving an unchanged pin (every edit sends it) must not rewrite
+        # the geocode provenance/time.
+        if (new_lat, new_lng) != (address.latitude, address.longitude):
+            for field, value in _geocode_fields(new_lat, new_lng, provider_id).items():
+                setattr(address, field, value)
 
         for field, value in update_data.items():
             setattr(address, field, value)

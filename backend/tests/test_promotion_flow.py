@@ -10,6 +10,7 @@ from decimal import Decimal
 from sqlalchemy.orm import Session
 from starlette.testclient import TestClient
 
+from app.core.config import settings
 from app.core.roles import ADMIN
 from tests.test_phase_13_cart_orders import _ready_customer
 from tests.test_phase_18_cancellation_refunds import _staff
@@ -60,8 +61,8 @@ def test_percentage_code_previews_and_is_charged_at_checkout(client: TestClient,
     assert body["subtotal_amount"] == "200.00"
     assert body["discount_amount"] == "20.00"
     assert body["applied_promo_code"] == "SAVE10"
-    # 180.00 of goods + Rs 20 base delivery (one product, not a 15-product Bazaar)
-    assert body["total_amount"] == "200.00"
+    # 180.00 of goods + the base delivery fee (one product, not a 15-product Bazaar)
+    assert Decimal(body["total_amount"]) == Decimal("180.00") + settings.DELIVERY_BASE_FEE
 
 
 def test_code_is_case_and_space_insensitive(client: TestClient, db_session: Session) -> None:

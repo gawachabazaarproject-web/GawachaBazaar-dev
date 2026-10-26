@@ -49,6 +49,8 @@ const CUSTOMER_SAFE_5XX_CODES = new Set([
   "PAYMENT_GATEWAY_UNAVAILABLE",
   "PAYMENT_GATEWAY_ERROR",
   "AUTH_UNAVAILABLE",
+  // Delivery distance / address search outages (backend ServiceUnavailableError).
+  "SERVICE_UNAVAILABLE",
 ]);
 
 /** Codes whose backend message is accurate but not customer-friendly

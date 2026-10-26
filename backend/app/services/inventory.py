@@ -24,14 +24,15 @@ from sqlalchemy import func, or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
 
+from app.core.business_time import business_today
 from app.exceptions.base import BusinessValidationError, ConflictError, NotFoundError
 from app.models.batch import Batch
+from app.models.category import Category
 from app.models.inventory_location import InventoryLocation
 from app.models.inventory_lot import InventoryLot
 from app.models.inventory_reservation import InventoryReservation
 from app.models.inventory_reservation_item import InventoryReservationItem
 from app.models.order import Order
-from app.models.category import Category
 from app.models.product import Product
 from app.models.product_variant import ProductVariant
 from app.models.stock_movement import StockMovement
@@ -41,10 +42,13 @@ from app.schemas.admin_inventory import (
     AdminInventoryLotListItemResponse,
     AdminInventoryLotListResponse,
     InventoryDashboardResponse,
+    ProductExpiryResponse,
     ProductStockItemResponse,
     ProductStockListResponse,
+    ProductStockSummaryResponse,
     ProductStockTotalResponse,
     ProductStockVariantResponse,
+    ProductWarehouseStockResponse,
     ReceiveStockRequest,
     ReconcileStockRequest,
     RelatedOrderResponse,
@@ -71,12 +75,13 @@ from app.schemas.inventory import (
     UpdateInventoryLocationRequest,
 )
 from app.services.admin_audit import AdminAuditService
-from app.services.stock_alerts import count_by_level, list_stock_alerts
+from app.services.stock_alerts import count_by_level, count_products, list_stock_alerts
 from app.services.stock_levels import (
     BELOW,
     DEFAULT_RESERVE,
     NEAR,
     effective_reserve,
+    product_status,
     stock_level,
 )
 from app.services.stock_pool import (
@@ -658,7 +663,7 @@ class InventoryService:
         if lot_status == _INACTIVE:
             return "INACTIVE"
         available = on_hand - reserved
-        today = datetime.now(UTC).date()
+        today = business_today()
         if expiry is not None:
             if expiry < today:
                 return "EXPIRED"
@@ -706,16 +711,7 @@ class InventoryService:
             updated_at=lot.updated_at,
         )
 
-    def admin_list_product_stock(
-        self,
-        page: int,
-        page_size: int,
-        category_id: int | None = None,
-        q: str | None = None,
-    ) -> ProductStockListResponse:
-        """Stock per product: the stock total ("100 kg") with each size's
-        whole packs and weight underneath. Sizes of one unit family draw from
-        the same pool unless the stock was divided, see app.services.stock_pool."""
+    def _product_stock_query(self, category_id: int | None, q: str | None):
         query = (
             self.db.query(Product, Category.name)
             .join(Category, Product.category_id == Category.id)
@@ -726,13 +722,107 @@ class InventoryService:
         if q:
             escaped = q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
             query = query.filter(Product.name.ilike(f"%{escaped}%", escape="\\"))
-        total = query.count()
-        rows = query.order_by(Product.name).offset((page - 1) * page_size).limit(page_size).all()
-        items = self._product_stock_items(rows)
-        return ProductStockListResponse(items=items, page=page, page_size=page_size, total=total)
+        return query
+
+    def admin_list_product_stock(
+        self,
+        page: int,
+        page_size: int,
+        category_id: int | None = None,
+        q: str | None = None,
+        status: str | None = None,
+    ) -> ProductStockListResponse:
+        """Stock per product: the stock total ("100 kg") with each size's
+        whole packs and weight underneath. Sizes of one unit family draw from
+        the same pool unless the stock was divided, see app.services.stock_pool.
+
+        `status` (low / out / expiring) keeps only products that need
+        attention; that has to judge every product, so the plain listing (no
+        status) stays the cheap, paged path."""
+        query = self._product_stock_query(category_id, q)
+        if status in (None, "", "all"):
+            total = query.count()
+            rows = query.order_by(Product.name).offset((page - 1) * page_size).limit(page_size).all()
+            items = self._product_stock_items(rows)
+            return ProductStockListResponse(items=items, page=page, page_size=page_size, total=total)
+
+        matching = [item for item in self._all_product_stock_items(query) if self._matches_status(item, status)]
+        start = (page - 1) * page_size
+        return ProductStockListResponse(
+            items=matching[start : start + page_size], page=page, page_size=page_size, total=len(matching)
+        )
+
+    def admin_product_stock_summary(
+        self, category_id: int | None = None, q: str | None = None
+    ) -> ProductStockSummaryResponse:
+        """How many products are in each Inventory filter chip."""
+        items = self._all_product_stock_items(self._product_stock_query(category_id, q))
+        return ProductStockSummaryResponse(
+            all=len(items),
+            low=sum(1 for i in items if self._matches_status(i, "low")),
+            out=sum(1 for i in items if self._matches_status(i, "out")),
+            expiring=sum(1 for i in items if self._matches_status(i, "expiring")),
+        )
+
+    @staticmethod
+    def _matches_status(item: ProductStockItemResponse, status: str) -> bool:
+        if status == "low":
+            return item.product_status == _ACTIVE and item.stock_status == "LOW"
+        if status == "out":
+            return item.product_status == _ACTIVE and item.stock_status == "OUT"
+        if status == "expiring":
+            return item.expiry is not None and item.expiry.days_left <= EXPIRING_SOON_DAYS
+        return True
+
+    def _all_product_stock_items(self, query) -> list[ProductStockItemResponse]:
+        """Every product of `query`, in chunks so the lot queries stay small."""
+        rows = query.order_by(Product.name).all()
+        items: list[ProductStockItemResponse] = []
+        for start in range(0, len(rows), 200):
+            items.extend(self._product_stock_items(rows[start : start + 200]))
+        return items
+
+    def _stock_details(self, product_ids: set[int]):
+        """On hand / reserved per (product, family), available per (product,
+        family, warehouse), and the soonest expiry - from ACTIVE lots, in the
+        families' base units."""
+        on_hand: dict[tuple[int, str], Decimal] = {}
+        reserved: dict[tuple[int, str], Decimal] = {}
+        per_location: dict[tuple[int, str, int], tuple[str, Decimal, Decimal]] = {}
+        expiry: dict[int, tuple[date, str, Decimal]] = {}
+        if not product_ids:
+            return on_hand, reserved, per_location, expiry
+        rows = (
+            self.db.query(InventoryLot, ProductVariant, Batch.expiry_date, InventoryLocation.name)
+            .join(ProductVariant, ProductVariant.id == InventoryLot.variant_id)
+            .join(Batch, Batch.id == InventoryLot.batch_id)
+            .join(InventoryLocation, InventoryLocation.id == InventoryLot.location_id)
+            .filter(ProductVariant.product_id.in_(list(product_ids)), InventoryLot.status == _ACTIVE)
+            .all()
+        )
+        for lot, variant, expiry_date, location_name in rows:
+            family, size = variant_size(variant)
+            key = (variant.product_id, family)
+            on_hand[key] = on_hand.get(key, Decimal("0")) + lot.quantity * size
+            reserved[key] = reserved.get(key, Decimal("0")) + lot.reserved_quantity * size
+            available = (lot.quantity - lot.reserved_quantity) * size
+            if lot.quantity > 0:
+                loc_key = (variant.product_id, family, lot.location_id)
+                name, avail_sum, held_sum = per_location.get(loc_key, (location_name, Decimal("0"), Decimal("0")))
+                per_location[loc_key] = (name, avail_sum + max(available, Decimal("0")), held_sum + lot.quantity * size)
+            if expiry_date is not None and lot.quantity > 0:
+                current = expiry.get(variant.product_id)
+                if current is None or expiry_date < current[0]:
+                    expiry[variant.product_id] = (expiry_date, family, lot.quantity * size)
+                elif expiry_date == current[0]:
+                    expiry[variant.product_id] = (current[0], family, current[2] + lot.quantity * size)
+        return on_hand, reserved, per_location, expiry
 
     def _product_stock_items(self, rows: list[tuple[Product, str]]) -> list[ProductStockItemResponse]:
-        pool, variants, shares = pool_base_amounts(self.db, {p.id for p, _ in rows})
+        product_ids = {p.id for p, _ in rows}
+        pool, variants, shares = pool_base_amounts(self.db, product_ids)
+        on_hand, reserved, per_location, expiry = self._stock_details(product_ids)
+        today = business_today()
         variants_by_product: dict[int, list[ProductVariant]] = {}
         for v in sorted(variants, key=lambda v: v.id):
             variants_by_product.setdefault(v.product_id, []).append(v)
@@ -741,12 +831,15 @@ class InventoryService:
         for product, category_name in rows:
             families: list[str] = []
             variant_items = []
+            levels: list[str] = []
             for v in variants_by_product.get(product.id, []):
                 family, size = variant_size(v)
                 if family not in families:
                     families.append(family)
                 share_base = shares.get(v.id, Decimal("0"))
                 packs = to_packs(pool[(product.id, family)] + share_base, size).to_integral_value(rounding=ROUND_DOWN)
+                if v.status == _ACTIVE:
+                    levels.append(stock_level(packs, v.reserve_level))
                 amount, amount_unit = display_amount(family, packs * size)
                 share_amount, _ = display_amount(family, share_base)
                 variant_items.append(
@@ -765,12 +858,14 @@ class InventoryService:
                     )
                 )
             totals = []
+            sellable_base = Decimal("0")
             for family in families:
                 unassigned = pool[(product.id, family)]
                 assigned = sum(
                     (shares.get(v.id, Decimal("0")) for v in variants_by_product[product.id] if variant_size(v)[0] == family),
                     Decimal("0"),
                 )
+                sellable_base += unassigned + assigned
                 amount, amount_unit = display_amount(family, unassigned + assigned)
                 totals.append(
                     ProductStockTotalResponse(
@@ -778,7 +873,34 @@ class InventoryService:
                         amount=amount,
                         amount_unit=amount_unit,
                         unassigned_amount=display_amount(family, unassigned)[0],
+                        on_hand_amount=display_amount(family, on_hand.get((product.id, family), Decimal("0")))[0],
+                        reserved_amount=display_amount(family, reserved.get((product.id, family), Decimal("0")))[0],
                     )
+                )
+            warehouses = []
+            for (pid, family, loc_id), (name, base, held) in sorted(per_location.items(), key=lambda kv: (kv[1][0], kv[0][2])):
+                if pid != product.id:
+                    continue
+                amount, amount_unit = display_amount(family, base)
+                warehouses.append(
+                    ProductWarehouseStockResponse(
+                        location_id=loc_id,
+                        location_name=name,
+                        family=family,
+                        amount=amount,
+                        amount_unit=amount_unit,
+                        on_hand_amount=display_amount(family, held)[0],
+                    )
+                )
+            expiry_info = None
+            if product.id in expiry:
+                expiry_date, family, base = expiry[product.id]
+                amount, amount_unit = display_amount(family, base)
+                expiry_info = ProductExpiryResponse(
+                    expiry_date=expiry_date,
+                    days_left=(expiry_date - today).days,
+                    amount=amount,
+                    amount_unit=amount_unit,
                 )
             items.append(
                 ProductStockItemResponse(
@@ -787,9 +909,19 @@ class InventoryService:
                     category_name=category_name,
                     totals=totals,
                     variants=variant_items,
+                    stock_status=product_status(levels),
+                    product_status=product.status,
+                    warehouses=warehouses,
+                    expiry=expiry_info,
                 )
             )
         return items
+
+    def product_stock_card(self, product_id: int) -> ProductStockItemResponse | None:
+        """One product's stock the way the Inventory page shows it (None if the product does not exist)."""
+        if not self.db.query(Product.id).filter(Product.id == product_id).first():
+            return None
+        return self._product_stock_item(product_id)
 
     def _product_stock_item(self, product_id: int) -> ProductStockItemResponse:
         row = (
@@ -1113,7 +1245,7 @@ class InventoryService:
         total_reserved = sum((lot.reserved_quantity for lot in active_lots), Decimal("0"))
         total_available = total_on_hand - total_reserved
 
-        today = datetime.now(UTC).date()
+        today = business_today()
         low_stock_count = 0
         out_of_stock_count = 0
         batch_ids = {lot.batch_id for lot in active_lots}
@@ -1178,19 +1310,14 @@ class InventoryService:
             warehouses_requiring_attention=warehouses_requiring_attention,
         )
 
-    def receive_stock(self, data: ReceiveStockRequest, admin_user_id: int) -> AdminInventoryLotListItemResponse:
-        """Get-or-create the (batch, variant, location) lot, lock it, and
-        apply one RECEIPT movement - one atomic admin action instead of
-        the raw two-call POST /lots + POST /lots/{id}/movements sequence.
-
-        If `data.batch_id` is omitted, a minimal Batch is auto-created
-        first (server-generated code, harvest date today, no
-        supplier/wholesaler) - the traceability row still exists, it's
-        just not admin-authored. See ReceiveStockRequest docstring.
-        """
+    def receive_stock_no_commit(self, data: ReceiveStockRequest, admin_user_id: int) -> InventoryLot:
+        """Everything `receive_stock` does except the final commit, so a caller
+        can make receiving part of a larger atomic action (e.g. creating a
+        product with its opening stock). The caller owns the transaction."""
         variant = self.db.query(ProductVariant).filter(ProductVariant.id == data.variant_id).first()
         if not variant:
             raise NotFoundError("Product variant not found.")
+        self.get_location_or_404(data.location_id)
         quantity = (
             data.quantity
             if data.quantity is not None
@@ -1201,7 +1328,8 @@ class InventoryService:
             batch = Batch(
                 product_id=variant.product_id,
                 batch_code=f"ADMIN-{secrets.token_hex(4).upper()}",
-                harvest_date=date.today(),
+                harvest_date=business_today(),
+                expiry_date=data.expiry_date,
                 quantity=quantity,
                 unit=variant.unit if variant.unit != "PACK" else "BOX",
                 status="APPROVED",
@@ -1222,6 +1350,19 @@ class InventoryService:
             reference_type="admin_receive",
             remarks=data.remarks,
         )
+        return lot
+
+    def receive_stock(self, data: ReceiveStockRequest, admin_user_id: int) -> AdminInventoryLotListItemResponse:
+        """Get-or-create the (batch, variant, location) lot, lock it, and
+        apply one RECEIPT movement - one atomic admin action instead of
+        the raw two-call POST /lots + POST /lots/{id}/movements sequence.
+
+        If `data.batch_id` is omitted, a minimal Batch is auto-created
+        first (server-generated code, harvest date today, the optional
+        `expiry_date`, no supplier/wholesaler) - the traceability row still
+        exists, it's just not admin-authored. See ReceiveStockRequest docstring.
+        """
+        lot = self.receive_stock_no_commit(data, admin_user_id)
         try:
             self.db.commit()
         except IntegrityError as exc:
@@ -1282,11 +1423,14 @@ class InventoryService:
     def stock_alerts(self, limit: int = 20) -> StockAlertsResponse:
         alerts = list_stock_alerts(self.db)
         counts = count_by_level(alerts)
+        product_counts = count_products(self.db, alerts)
         return StockAlertsResponse(
             count=len(alerts),
             out_count=counts["OUT"],
             below_count=counts["BELOW"],
             near_count=counts["NEAR"],
+            products_out=product_counts["OUT"],
+            products_low=product_counts["LOW"],
             items=[
                 StockAlertItemResponse(
                     product_id=a.product_id, variant_id=a.variant_id, product_name=a.product_name,

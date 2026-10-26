@@ -39,3 +39,19 @@ def stock_level(available: Decimal, reserve_level: Decimal | None) -> str:
     if available <= reserve * NEAR_FACTOR:
         return NEAR
     return OK
+
+
+def product_status(levels: list[str]) -> str:
+    """One status for a whole product from the levels of its sellable sizes
+    ("OUT" / "LOW" / "OK") - the single rule behind the Inventory chips, the
+    Products list and the header alert, so they always agree.
+
+      OUT - no size can be sold (every size is OUT), or there is no size at all
+      LOW - some size is out, at/below its reserve, or close to it
+      OK  - every size is comfortably stocked
+    """
+    if not levels or all(level == OUT for level in levels):
+        return "OUT"
+    if any(level in ALERT_LEVELS for level in levels):
+        return "LOW"
+    return "OK"

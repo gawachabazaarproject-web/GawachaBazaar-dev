@@ -15,6 +15,7 @@ from decimal import Decimal
 
 from pydantic import Field, model_validator
 
+from app.core.business_time import business_today
 from app.schemas.base import BaseSchema
 from app.schemas.inventory import (
     AmountUnit,
@@ -152,10 +153,18 @@ class ReceiveStockRequest(BaseSchema):
     amount: Decimal | None = Field(default=None, gt=0, max_digits=12, decimal_places=3)
     amount_unit: AmountUnit | None = None
     remarks: str | None = Field(default=None)
+    # When this delivery should be used by. Applies to the delivery record the
+    # server creates for you, so it cannot be combined with `batch_id`.
+    expiry_date: date | None = None
 
     @model_validator(mode="after")
     def _packs_or_amount(self) -> "ReceiveStockRequest":
         check_packs_or_amount(self.quantity, self.amount, self.amount_unit)
+        if self.expiry_date is not None:
+            if self.batch_id is not None:
+                raise ValueError("expiry_date is set on a new delivery; leave out batch_id.")
+            if self.expiry_date < business_today():
+                raise ValueError("expiry_date cannot be in the past.")
         return self
 
 
@@ -219,6 +228,9 @@ class StockAlertsResponse(BaseSchema):
     out_count: int
     below_count: int
     near_count: int
+    # Products (not sizes) that are out of stock / running low: the header badge.
+    products_out: int = 0
+    products_low: int = 0
     items: list[StockAlertItemResponse]
 
 
@@ -248,6 +260,31 @@ class ProductStockTotalResponse(BaseSchema):
     amount: Decimal
     amount_unit: str
     unassigned_amount: Decimal
+    # Everything physically there (including what is promised to orders) and
+    # the part promised to customer orders, in `amount_unit`.
+    on_hand_amount: Decimal = Decimal("0")
+    reserved_amount: Decimal = Decimal("0")
+
+
+class ProductWarehouseStockResponse(BaseSchema):
+    """Available stock of one unit family at one warehouse."""
+
+    location_id: int
+    location_name: str
+    family: str
+    # Available to sell, and everything physically there (reserved included).
+    amount: Decimal
+    amount_unit: str
+    on_hand_amount: Decimal = Decimal("0")
+
+
+class ProductExpiryResponse(BaseSchema):
+    """The soonest-expiring stock that is still there."""
+
+    expiry_date: date
+    days_left: int  # negative once expired
+    amount: Decimal
+    amount_unit: str
 
 
 class ProductStockItemResponse(BaseSchema):
@@ -256,6 +293,21 @@ class ProductStockItemResponse(BaseSchema):
     category_name: str
     totals: list[ProductStockTotalResponse]
     variants: list[ProductStockVariantResponse]
+    # OK / LOW / OUT, judged with the same rule as the alerts (see stock_levels).
+    stock_status: str = "OK"
+    # Only a LIVE (ACTIVE) product can run low or out: a draft cannot be bought.
+    product_status: str = "ACTIVE"
+    warehouses: list[ProductWarehouseStockResponse] = Field(default_factory=list)
+    expiry: ProductExpiryResponse | None = None
+
+
+class ProductStockSummaryResponse(BaseSchema):
+    """Counts behind the Inventory filter chips."""
+
+    all: int
+    low: int
+    out: int
+    expiring: int
 
 
 class StockShare(BaseSchema):
@@ -279,3 +331,61 @@ class ProductStockListResponse(BaseSchema):
     page: int
     page_size: int
     total: int
+
+
+# ---------------------------------------------------------------------------
+# Product-level stock actions: the staff member talks about a product and an
+# amount ("I counted 43 kg"); the server picks the lots. Each is one atomic
+# transaction through the same movement core as every other stock change.
+# ---------------------------------------------------------------------------
+
+
+class ProductCorrectStockRequest(BaseSchema):
+    """What was physically counted. The difference is calculated on the
+    server, never sent by the client."""
+
+    physical_amount: Decimal = Field(..., ge=0, max_digits=12, decimal_places=3)
+    amount_unit: AmountUnit
+    # Needed only when the product is stored in more than one warehouse.
+    location_id: int | None = Field(default=None, gt=0)
+    reason: str = Field(default="Physical count", min_length=1, max_length=200)
+    notes: str | None = Field(default=None, max_length=500)
+
+
+class ProductRemoveStockRequest(BaseSchema):
+    amount: Decimal = Field(..., gt=0, max_digits=12, decimal_places=3)
+    amount_unit: AmountUnit
+    # Leave out to take from every warehouse, oldest stock first.
+    location_id: int | None = Field(default=None, gt=0)
+    reason: str = Field(..., min_length=1, max_length=200)
+
+
+class ProductMoveStockRequest(BaseSchema):
+    amount: Decimal = Field(..., gt=0, max_digits=12, decimal_places=3)
+    amount_unit: AmountUnit
+    from_location_id: int = Field(..., gt=0)
+    to_location_id: int = Field(..., gt=0)
+
+
+class StockChangeResponse(BaseSchema):
+    """One movement an operation made (for transparency and Undo)."""
+
+    lot_id: int
+    location_id: int
+    location_name: str
+    variant_id: int
+    movement_type: str
+    packs: Decimal
+
+
+class ProductStockOperationResponse(BaseSchema):
+    operation_id: int | None  # None when nothing needed to change
+    kind: str  # correct / remove / move
+    message: str
+    # Signed change of the product's physical stock in `amount_unit`
+    # (correct: the difference; remove: negative; move: 0).
+    difference: Decimal
+    amount_unit: str
+    changes: list[StockChangeResponse]
+    undo_until: datetime | None = None
+    product: ProductStockItemResponse

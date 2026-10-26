@@ -18,11 +18,18 @@ from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
 from sqlalchemy.orm import Session
 
 from app.core.realtime import manager
-from app.core.roles import DELIVERY_PARTNER, STAFF_ROLES
+from app.core.roles import CATALOG_STAFF, DELIVERY_PARTNER, STAFF_ROLES
 from app.dependencies.database import get_db
 from app.services.auth import AuthService
 
 router = APIRouter()
+
+
+def receives_order_events(roles) -> bool:
+    """Who gets every customer's order events. Delivery partners are staff but
+    only ever act on their own assignments (which they poll), and catalogue
+    staff work on products, not on customers' orders."""
+    return not (STAFF_ROLES - {DELIVERY_PARTNER, CATALOG_STAFF}).isdisjoint(roles)
 
 
 @router.websocket("/events")
@@ -41,9 +48,7 @@ async def order_events(websocket: WebSocket, db: Session = Depends(get_db)) -> N
 
     user_id = user.id
     roles = auth_service.get_role_names(user_id)
-    # Delivery partners are staff but must not see every customer's order
-    # events - they only ever act on their own assignments (which they poll).
-    is_staff = not (STAFF_ROLES - {DELIVERY_PARTNER}).isdisjoint(roles)
+    is_staff = receives_order_events(roles)
     # Release the DB connection NOW. FastAPI keeps a yield-dependency's
     # session open until the handler returns, i.e. for the whole life of
     # the socket - every connected client would pin one pooled connection

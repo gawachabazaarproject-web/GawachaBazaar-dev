@@ -11,7 +11,7 @@
 4. Routes use `require_roles(...)` (often as a router-level gate), `require_permission(...)`, or only `get_current_user`. Public routes: 12 operations (catalog browsing, ads, home slides, offers, `/ping`, health, `legacy-migrate`, payment webhook). See [API_REFERENCE](../03-api/API_REFERENCE.md) for the gate on each operation.
 5. The Admin panel keeps a hand-synchronised copy of the map in `Admin/lib/permissions.ts` **only to hide navigation**; it grants nothing and can drift (no shared package). The backend always re-checks.
 
-## 2. Roles (the seven baseline roles)
+## 2. Roles (the eight baseline roles)
 
 | Role | Kind | What it can do (verified) | Notes |
 |---|---|---|---|
@@ -22,9 +22,10 @@
 | `HUB_STAFF` | Staff | Inventory (all), read orders, delivery read/assign | 8 permissions; cannot mark deliveries out/delivered |
 | `DELIVERY_PARTNER` | Staff | See and complete **their own** assigned deliveries | 2 permissions; ownership enforced in the service layer (`FulfillmentService`), not just by route |
 | `SUPPORT` | Staff | Read-only customer lookup (`customers.view`), phone masked | 1 permission |
+| `CATALOG_STAFF` | Staff | Adds and edits products, prices and photos (`products.read/create/update/manage_media/manage_pricing`, `categories.read`); **cannot** delete products, sizes or categories, change low-stock levels, touch stock (no access to any inventory route), or see orders | 6 permissions; added 2026-10-26 (migration `a8d2f4b6c0e1`, uncommitted). Excluded from the staff order-event broadcast like `DELIVERY_PARTNER` |
 | *(no role)* | Signed-in user with no roles | `/auth/me`, `/auth/sync`, `/push-tokens` only | Observed in the matrix as role `NONE` |
 
-Staff roles (`STAFF_ROLES`) = `ADMIN, HUB_STAFF, OPERATIONS, DELIVERY_PARTNER, SUPPORT`. They receive realtime order events, except that `DELIVERY_PARTNER` is deliberately excluded from the staff broadcast ([`realtime.py`](../../backend/app/api/v1/realtime.py)).
+Staff roles (`STAFF_ROLES`) = `ADMIN, HUB_STAFF, OPERATIONS, DELIVERY_PARTNER, SUPPORT, CATALOG_STAFF`. They receive realtime order events, except that `DELIVERY_PARTNER` is deliberately excluded from the staff broadcast ([`realtime.py`](../../backend/app/api/v1/realtime.py)).
 
 ## 3. Permission matrix (generated from `ROLE_PERMISSIONS`)
 

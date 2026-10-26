@@ -9,6 +9,7 @@ from sqlalchemy import (
     ForeignKey,
     Identity,
     Index,
+    Integer,
     Numeric,
     String,
     UniqueConstraint,
@@ -116,6 +117,15 @@ class Order(Base):
         Numeric(12, 2),
         server_default="0",
         nullable=False,
+    )
+    # Delivery audit snapshot taken at checkout (null for free-delivery Bazaar
+    # orders, orders without GPS, and orders placed before this existed).
+    delivery_distance_meters: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    routing_provider: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    warehouse_id: Mapped[int | None] = mapped_column(
+        BigInteger,
+        ForeignKey("inventory_locations.id", ondelete="SET NULL"),
+        nullable=True,
     )
     promotion_id: Mapped[int | None] = mapped_column(
         BigInteger,

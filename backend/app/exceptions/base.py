@@ -116,3 +116,18 @@ class RateLimitError(AppException):
             code="RATE_LIMIT_EXCEEDED",
             details=details,
         )
+
+
+class ServiceUnavailableError(AppException):
+    """Raised when a required external dependency (e.g. the routing service)
+    is down. Callers must fail the operation rather than guess."""
+
+    def __init__(
+        self, message: str = "Service temporarily unavailable", details: Any = None
+    ) -> None:
+        super().__init__(
+            message=message,
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            code="SERVICE_UNAVAILABLE",
+            details=details,
+        )

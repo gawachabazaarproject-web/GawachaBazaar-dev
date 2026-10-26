@@ -1,11 +1,11 @@
 /**
  * Types mirror backend/app/schemas/staff.py field-for-field. A "staff
  * member" is not a separate table - it is an existing User holding at
- * least one of ADMIN/HUB_STAFF/OPERATIONS/DELIVERY_PARTNER/SUPPORT (see
+ * least one of ADMIN/HUB_STAFF/OPERATIONS/DELIVERY_PARTNER/SUPPORT/CATALOG_STAFF (see
  * backend/app/core/roles.py STAFF_ROLES), same convention as Customers.
  */
 
-export const STAFF_ROLES = ["ADMIN", "HUB_STAFF", "OPERATIONS", "DELIVERY_PARTNER", "SUPPORT"] as const;
+export const STAFF_ROLES = ["ADMIN", "HUB_STAFF", "OPERATIONS", "DELIVERY_PARTNER", "SUPPORT", "CATALOG_STAFF"] as const;
 export const STAFF_STATUSES = ["ACTIVE", "INACTIVE", "SUSPENDED"] as const;
 
 export interface StaffListItem {

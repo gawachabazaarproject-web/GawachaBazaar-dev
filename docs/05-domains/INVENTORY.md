@@ -53,3 +53,39 @@ Packaging operations (`DRAFT → IN_PROGRESS → COMPLETED`, or `CANCELLED`) hol
 - The reservation sweep is per process and not coordinated across replicas.
 - Customer-facing availability for a product with no lots is 0 (no "unlimited" mode).
 - No automated test covers the Admin inventory pages.
+
+## Product-level stock actions (added 2026-10-26, uncommitted)
+
+Staff talk about a *product and an amount*; the server picks the lots. Implemented in [`services/product_stock.py`](../../backend/app/services/product_stock.py), routes under `/inventory/admin/products/{id}/…` (see [API_REFERENCE](../03-api/API_REFERENCE.md)). Every action is **one transaction**: lots are locked in ascending id (the system-wide order), quantity changes only through `InventoryService.apply_movement`, stock reserved for orders is never taken, and one audit row (`inventory.correct_product` / `remove_product` / `move_product`) is created whose id is stamped on every movement (`reference_type` `product_correct|remove|move`).
+
+| Action | Route (permission) | Rule |
+|---|---|---|
+| Correct stock | `POST …/products/{id}/correct` (`inventory.reconcile`) | Client sends the **count** in kg/g/L/ml/pcs/dozen; the server computes the difference against **on hand** (reserved stock is still physically there). A count below the reserved amount is refused. A warehouse (`location_id`) is required when stock is in more than one. |
+| Remove stock | `POST …/products/{id}/remove` (`inventory.adjust`) | Amount + reason; movement type `DAMAGE` (reason contains "damag"), `WASTE` ("spoil", "waste", "expire") or `ADJUSTMENT_OUT`. Only available (unreserved) stock can go. |
+| Move stock | `POST …/products/{id}/move` (`inventory.transfer`) | Source and destination lots locked in one ascending pass; destination lot is get-or-created for the same batch/size (expiry follows the stock); `TRANSFER_OUT`+`TRANSFER_IN` pairs. Destination must be an ACTIVE warehouse. |
+| Undo | `POST …/stock-actions/{operation_id}/undo` | Compensating movements only (nothing is edited or deleted), same user (or ADMIN), within 30 minutes, once. Refused with 409 "can no longer be undone" if reversing would take stock that has since been reserved, sold or moved. |
+
+**Allocation rule (business decision to confirm with the client):** a shortage is taken **oldest lot first** (the FIFO order checkout uses), stock shared by all sizes before stock assigned to one size; a surplus is added to the **newest** shared lot of the warehouse. No lot is created for a surplus: with no stock record the action asks to use Add stock first.
+
+**Receive with expiry:** `POST /inventory/admin/receive` accepts `expiry_date` (not in the past, not together with `batch_id`) and stores it on the automatically created delivery (batch). Before this change normal receipts never had an expiry, so expiry alerts could not fire for them.
+
+**Inventory page data:** `GET /inventory/admin/products` now also returns `stock_status` (OK/LOW/OUT), per-warehouse amounts (available and on hand), soonest expiry, and per-family `on_hand_amount` / `reserved_amount`; `?status=low|out|expiring` filters (judges every product, so it is the slower path) and `GET …/products/summary` gives the chip counts.
+
+## One definition of "low" and "out" (2026-10-26)
+
+`stock_levels.product_status` is the only rule: **OUT** = no live size can be sold (or there is none), **LOW** = some live size is out, at/below its low-stock level or close to it, **OK** otherwise. The Inventory chips and cards, the header alert (`products_out` / `products_low` in `GET /inventory/admin/stock-alerts`) and the Products list (`stock_status`) all use it, and only **ACTIVE** products can be low/out (a draft cannot be bought). The per-size list (`items`, "Restock list") is the detail behind it. "Expiring" = the soonest lot with stock expires within 7 days (or already has); dates follow `BAZAAR_TIMEZONE`.
+
+## Who may operate on which warehouse
+
+Nobody is limited: `inventory.*` permissions apply to every warehouse. There is no user-to-warehouse association in the data model and the PRD describes single-warehouse operation, so per-warehouse authorization is **not implemented and is an open decision** (KNOWN_ISSUES VAL-7). The Admin only shows a warehouse picker / Move when more than one active warehouse exists; that is convenience, not access control.
+
+## Two different "oldest first" rules (do not confuse them)
+
+| | Customer fulfilment | Staff stock actions |
+|---|---|---|
+| Where | `InventoryReservationService.create_reservation_for_order` | `ProductStockService._fifo` |
+| Rule | Reserve FIFO by lot age at checkout (own size first, then sibling sizes) - approved, tested, concurrency-safe | Correct / remove / move take the **oldest** lot first, shared stock before a size's own share - **an assumption, not approved** |
+| Effect | Decides which lot an order is promised from | Decides which lot loses (or gains) quantity when staff count, discard or move stock |
+
+They share nothing: changing the staff rule cannot change checkout. Open question for the client: should discards/corrections take the lot that **expires first** instead (it may differ from the oldest)? Surplus found in a count goes to the newest shared lot of the warehouse.
+

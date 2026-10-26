@@ -18,7 +18,7 @@
 | `FakeRazorpay` | `test_razorpay_payments.py`, an `httpx.MockTransport` handler injected into `RazorpayGateway` | `POST /orders`, `GET /orders/{id}/payments`, refunds, webhook payloads and HMAC signatures built with the test secrets | Not Razorpay's real behaviour; payload shapes were written from the gateway's own parser |
 | `FakePNBGateway` | `test_phase_14_payments.py` (subclass of the unwired `PNBGateway`) | A scriptable gateway for the order-first payment API: success/failure/timeout/outcome-unknown, webhook events | Historical name; exercises the generic `PaymentGateway` protocol |
 | Expo push | `test_push_send.py` (`monkeypatch` of `httpx.post`) | Ticket responses: ok, `DeviceNotRegistered`, credential errors, no tokens | Real Expo/FCM not contacted |
-| Routing (Google/OSRM) | `test_delivery_fee.py` monkeypatches the settings and the distance function | Fees for given distances, fallback to haversine | Live providers not exercised |
+| Routing (OSRM) / Nominatim / Redis | `test_delivery_fee.py`, `test_delivery_routing.py`, `test_delivery_quote_api.py` stub the provider / `httpx.get` / Redis client | Fees, boundaries, cache hit/miss/expiry/Redis down, quote API, checkout authority | Live providers not exercised |
 | Cloudinary | variables blanked; upload paths return 503 in tests | – | Real uploads untested |
 
 ## Constants and setup data

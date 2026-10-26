@@ -3,9 +3,10 @@ delegates to OrderService (checkout orchestration lives there, not in
 CartService) even though its path is under /cart.
 """
 
-from fastapi import APIRouter, Depends, Response, status
+from fastapi import APIRouter, Depends, Request, Response, status
 from sqlalchemy.orm import Session
 
+from app.core.rate_limit import limiter, user_or_ip_key
 from app.core.roles import CUSTOMER
 from app.dependencies.auth import get_current_user, require_roles
 from app.dependencies.database import get_db
@@ -109,7 +110,9 @@ def evaluate_promo(
     response_model=OrderDetailResponse,
     summary="Checkout the active cart into a PENDING order",
 )
+@limiter.limit("10/minute", key_func=user_or_ip_key)
 def checkout(
+    request: Request,  # required by slowapi
     payload: CheckoutRequest,
     response: Response,
     current_user: User = Depends(get_current_user),

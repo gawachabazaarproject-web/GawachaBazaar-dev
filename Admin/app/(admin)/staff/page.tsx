@@ -26,6 +26,7 @@ const ROLE_LABELS: Record<string, string> = {
   OPERATIONS: "Operations",
   DELIVERY_PARTNER: "Delivery Partner",
   SUPPORT: "Support",
+  CATALOG_STAFF: "Catalogue Staff",
 };
 
 export default function StaffPage() {

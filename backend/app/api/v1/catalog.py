@@ -6,8 +6,10 @@ from decimal import Decimal
 from fastapi import APIRouter, Depends, File, Form, Query, UploadFile, status
 from sqlalchemy.orm import Session
 
-from app.dependencies.auth import require_permission
+from app.core.permissions import role_has_permission
+from app.dependencies.auth import require_permission, user_role_names
 from app.dependencies.database import get_db
+from app.exceptions.base import AuthorizationError
 from app.models.user import User
 from app.schemas.admin_catalog import MAX_PAGE_SIZE as ADMIN_MAX_PAGE_SIZE
 from app.schemas.admin_catalog import (
@@ -32,6 +34,7 @@ from app.schemas.catalog import (
     ProductListResponse,
     ProductResponse,
     ProductVariantResponse,
+    QuickCreateProductRequest,
     ReorderCategoriesRequest,
     UpdateCategoryRequest,
     UpdatePriceRequest,
@@ -327,6 +330,28 @@ def create_product(
     return CatalogService(db).create_product(payload, current_user.id)
 
 
+@router.post(
+    "/products/quick-create",
+    response_model=ProductResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Create a whole product - sizes, prices, photo, opening stock - in one transaction",
+)
+def quick_create_product(
+    payload: QuickCreateProductRequest,
+    current_user: User = Depends(require_permission("products.create")),
+    db: Session = Depends(get_db),
+) -> ProductResponse:
+    roles = user_role_names(db, current_user.id)
+    if not role_has_permission(roles, "products.manage_pricing"):
+        raise AuthorizationError("You do not have permission to set prices.")
+    return CatalogService(db).quick_create_product(
+        payload,
+        current_user.id,
+        can_media=role_has_permission(roles, "products.manage_media"),
+        can_receive=role_has_permission(roles, "inventory.receive"),
+    )
+
+
 @router.delete(
     "/products/{product_id}",
     status_code=status.HTTP_204_NO_CONTENT,
@@ -380,17 +405,22 @@ def update_variant(
     current_user: User = Depends(require_permission("products.update")),
     db: Session = Depends(get_db),
 ) -> ProductVariantResponse:
+    # The low-stock level is a stock setting, not catalogue data: it needs stock rights.
+    if "reserve_level" in payload.model_fields_set and not role_has_permission(
+        user_role_names(db, current_user.id), "inventory.adjust"
+    ):
+        raise AuthorizationError("You do not have permission to change low-stock levels.")
     return CatalogService(db).update_variant(variant_id, payload, current_user.id)
 
 
 @router.delete(
     "/variants/{variant_id}",
     status_code=status.HTTP_204_NO_CONTENT,
-    summary="Delete a product variant that has no order, quote or stock history",
+    summary="Delete a size that was only just added: no orders, quotes, stock, carts or price changes (hide it instead otherwise)",
 )
 def delete_variant(
     variant_id: int,
-    current_user: User = Depends(require_permission("products.update")),
+    current_user: User = Depends(require_permission("products.delete")),
     db: Session = Depends(get_db),
 ) -> None:
     CatalogService(db).delete_variant(variant_id, current_user.id)

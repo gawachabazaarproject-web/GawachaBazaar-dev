@@ -71,7 +71,17 @@ export interface CreateAddressPayload {
   postal_code: string;
   latitude?: number | null;
   longitude?: number | null;
+  /** Nominatim place id when the pin was confirmed from a search result. */
+  geocode_provider_id?: string | null;
   is_default?: boolean;
+}
+
+export interface GeocodeCandidate {
+  display_name: string;
+  latitude: number;
+  longitude: number;
+  provider: string;
+  provider_id: string | null;
 }
 
 export type UpdateAddressPayload = Partial<CreateAddressPayload>;
@@ -229,15 +239,6 @@ export interface OrderAddressResponse {
   postal_code: string;
   latitude: string | null;
   longitude: string | null;
-}
-
-export interface DeliveryQuote {
-  needs_location: boolean;
-  distance_km: string | null;
-  fee: string | null;
-  base_fee: string;
-  per_km_fee: string;
-  method: "road" | "estimate" | null;
 }
 
 export interface OrderResponse {
@@ -610,6 +611,8 @@ export interface DeliveryQuoteResponse {
   distance_km: number | null;
   distance_estimated: boolean;
   currency: string;
+  /** The chosen address has no map location: checkout is refused until it is confirmed. */
+  needs_location?: boolean;
 }
 
 export interface BazaarStatusResponse {

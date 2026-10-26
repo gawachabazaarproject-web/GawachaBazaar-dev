@@ -1,7 +1,7 @@
 "use client";
 
 import React, { use, useCallback, useEffect, useState, useRef } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { hasPermission } from "@/lib/permissions";
 import {
@@ -34,7 +34,25 @@ import { ImageDropzone } from "@/components/ImageDropzone";
 import { packCount } from "@/lib/inventory";
 import { CategoryChecklist } from "@/components/CategoryChecklist";
 import { ReserveLevelEditor } from "@/components/ReserveLevelEditor";
-import { ReceiveStockForm } from "@/components/ReceiveStockForm";
+import { ProductAlertEditor } from "@/components/ProductAlertEditor";
+import { statusLabel } from "@/lib/product-form";
+import {
+  AddStockDialog,
+  CorrectStockDialog,
+  MoveStockDialog,
+  RemoveStockAmountDialog,
+} from "@/components/StockDialogs";
+import { StockActionBanner, StockNotice } from "@/components/StockActionBanner";
+import { checkReadiness, FixTarget, Readiness } from "@/lib/readiness";
+import {
+  expiryPhrase,
+  fetchProductStockCard,
+  plain,
+  ProductStockItem,
+  ProductStockOperation,
+  stockErrorMessage,
+} from "@/lib/inventory";
+import { useWarehouses } from "@/lib/use-warehouses";
 import { Icon } from "@/components/icons";
 import { BusyLabel, PageLoader } from "@/components/Spinner";
 import { SearchableSelect, categoryOptions } from "@/components/SearchableSelect";
@@ -64,8 +82,13 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
-  const canReceive = !!(user && hasPermission(user.roles, "inventory.receive"));
-  const [addStockOpen, setAddStockOpen] = useState(false);
+  const searchParams = useSearchParams();
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const [fix, setFix] = useState<FixTarget | null>(null);
+  const [statusBusy, setStatusBusy] = useState(false);
+  const [statusError, setStatusError] = useState<string | null>(null);
+  const canSetStockLevels = !!(user && hasPermission(user.roles, "inventory.adjust"));
   const canManageMedia = user && hasPermission(user.roles, "products.manage_media");
   const canManagePricing = user && hasPermission(user.roles, "products.manage_pricing");
 
@@ -100,6 +123,35 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
     load();
     fetchCategories().then(setCategories).catch(() => undefined);
   }, [load]);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const close = (e: MouseEvent) => {
+      if (!menuRef.current?.contains(e.target as Node)) setMenuOpen(false);
+    };
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, [menuOpen]);
+
+  // Arriving from a "Fix now" link on the products list (?price=ID or ?fix=...).
+  const arrivedFix = useRef(false);
+  useEffect(() => {
+    if (!product || arrivedFix.current) return;
+    arrivedFix.current = true;
+    const priceId = Number(searchParams.get("price"));
+    const wanted = searchParams.get("fix");
+    if (priceId) setFix({ type: "price", variantId: priceId });
+    else if (wanted === "price") setFix({ type: "price", variantId: 0 });
+    else if (wanted === "size" || wanted === "stock" || wanted === "photo") setFix({ type: wanted });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [product]);
+
+  // "Fix now" scrolls to the control that fixes it.
+  useEffect(() => {
+    if (!fix) return;
+    const id = fix.type === "photo" ? "media-section" : fix.type === "stock" ? "stock-section" : "sizes-section";
+    document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [fix]);
 
   useEffect(() => {
     const handler = (e: BeforeUnloadEvent) => {
@@ -168,7 +220,42 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
     return v ? sizeLabel(v.quantity, v.unit) : "";
   };
   const primaryImage = product.images.find((i) => i.is_primary) ?? product.images[0];
-  const firstVariant = product.variants[0];
+  const readiness = checkReadiness({
+    name: product.name,
+    hasCategory: !!product.category,
+    imageCount: product.images.length,
+    variants: product.variants.map((v) => ({
+      id: v.id,
+      label: sizeLabel(v.quantity, v.unit),
+      status: v.status,
+      hasPrice: !!v.current_price,
+    })),
+    hasStock: product.variant_stock.some((v) => Number(v.available_quantity) > 0),
+  });
+
+  // Publishing needs a size and a price on every size; missing stock only shows as "needs attention".
+  const changeStatus = async (next: string) => {
+    const token = getAccessToken();
+    if (!token) return;
+    setStatusError(null);
+    if (next === "ACTIVE") {
+      const blocking = readiness.problems.filter((p) => p.key !== "stock");
+      if (blocking.length > 0) {
+        setStatusError(`Can't make this live yet: ${blocking.map((p) => p.text).join(", ")}.`);
+        setFix(blocking[0].fix);
+        return;
+      }
+    }
+    setStatusBusy(true);
+    try {
+      await updateProduct(token, productId, { status: next });
+      await load();
+    } catch (err) {
+      setStatusError(`Couldn't change this product. ${err instanceof CatalogApiError ? err.message : "The connection failed."} Nothing was changed.`);
+    } finally {
+      setStatusBusy(false);
+    }
+  };
 
   return (
     <div className="mx-auto max-w-4xl">
@@ -176,38 +263,87 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
         <Icon name="chevron-left" size={14} /> Back to products
       </button>
 
-      <div className="mb-6 flex items-start gap-4">
+      <div className="mb-4 flex items-start gap-4">
         <div className="h-20 w-20 shrink-0 overflow-hidden rounded bg-neutral-100">
           {primaryImage ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={primaryImage.image_url} alt="" className="h-full w-full object-cover" />
-          ) : null}
+          ) : (
+            <div className="flex h-full w-full items-center justify-center rounded border border-dashed border-neutral-300 text-center text-[11px] leading-tight text-neutral-400">
+              No photo
+            </div>
+          )}
         </div>
-        <div className="flex-1">
-          <div className="flex items-center gap-2">
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
             <h1 className="font-display text-2xl font-semibold text-primary-900">{product.name}</h1>
-            <StatusBadge status={product.status} />
+            <span
+              className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${
+                product.status === "ACTIVE" ? "bg-primary-100 text-primary-800" : "bg-neutral-100 text-neutral-600"
+              }`}
+            >
+              {product.status === "ACTIVE" ? "Live ●" : statusLabel(product.status)}
+            </span>
           </div>
-          <p className="mt-1 text-sm text-neutral-500">
-            {product.category.name}
-            {firstVariant?.current_price &&
-              ` · ${formatMoney(firstVariant.current_price.price, firstVariant.current_price.currency)}`}
-          </p>
+          <p className="mt-1 text-sm text-neutral-500">{product.category.name}</p>
         </div>
-        {canDelete && (
-          <button
-            onClick={() => {
-              setDeleteError(null);
-              setDeleteOpen(true);
-            }}
-            className="shrink-0 rounded border border-status-danger/40 px-3 py-1.5 text-sm font-semibold text-status-danger hover:bg-status-dangerLight"
-          >
-            Delete product
-          </button>
+        {canEdit && (
+          <div className="relative flex shrink-0 items-center gap-2" ref={menuRef}>
+            {product.status === "ACTIVE" ? (
+              <button type="button" onClick={() => changeStatus("INACTIVE")} disabled={statusBusy} className="min-h-[36px] rounded border border-neutral-300 px-3 py-1.5 text-sm font-semibold text-neutral-700 hover:bg-neutral-50 disabled:opacity-50">
+                Hide from customers
+              </button>
+            ) : product.status !== "ARCHIVED" ? (
+              <button type="button" onClick={() => changeStatus("ACTIVE")} disabled={statusBusy} className="min-h-[36px] rounded bg-primary-800 px-3 py-1.5 text-sm font-semibold text-white hover:bg-primary-700 disabled:opacity-50">
+                {product.status === "DRAFT" ? "Publish" : "Make live"}
+              </button>
+            ) : null}
+            <button
+              type="button"
+              onClick={() => setMenuOpen((o) => !o)}
+              aria-haspopup="menu"
+              aria-expanded={menuOpen}
+              aria-label="More actions"
+              className="min-h-[36px] rounded border border-neutral-300 px-3 py-1.5 text-sm font-semibold text-neutral-600 hover:bg-neutral-50"
+            >
+              ⋯
+            </button>
+            {menuOpen && (
+              <div role="menu" className="absolute right-0 top-full z-20 mt-1 w-44 rounded border border-neutral-200 bg-white py-1 text-sm shadow-lg">
+                <button role="menuitem" type="button" onClick={() => router.push(`/products/new?from=${product.id}`)} className="block w-full px-3 py-2 text-left hover:bg-neutral-50">Duplicate</button>
+                {product.status !== "ARCHIVED" && (
+                  <button role="menuitem" type="button" onClick={() => { setMenuOpen(false); changeStatus("ARCHIVED"); }} className="block w-full px-3 py-2 text-left hover:bg-neutral-50">Archive</button>
+                )}
+                {canDelete && (
+                  <button role="menuitem" type="button" onClick={() => { setMenuOpen(false); setDeleteError(null); setDeleteOpen(true); }} className="block w-full px-3 py-2 text-left text-status-danger hover:bg-neutral-50">Delete…</button>
+                )}
+              </div>
+            )}
+          </div>
         )}
       </div>
 
-      <Section title="General">
+      {statusError && (
+        <p role="alert" className="mb-4 rounded border border-status-danger/30 bg-status-dangerLight px-3 py-2 text-sm text-status-danger">{statusError}</p>
+      )}
+
+      {searchParams.get("created") && (
+        <p role="status" className="mb-4 rounded border border-primary-200 bg-primary-50 px-4 py-2.5 text-sm text-primary-900">
+          ✓ {product.name} was added{product.status === "ACTIVE" ? " and is now live for customers." : " as a draft."}
+        </p>
+      )}
+
+      <ReadinessCard readiness={readiness} onFix={setFix} />
+
+      <div id="sizes-section">
+        <VariantsSection product={product} canManagePricing={!!canManagePricing} canEdit={!!canEdit} canDelete={!!canDelete} fix={fix} onFixHandled={() => setFix(null)} onChange={load} />
+      </div>
+
+      <div id="stock-section">
+        <StockSection product={product} fix={fix} onFixHandled={() => setFix(null)} onChange={load} />
+      </div>
+
+      <Section title="Details">
         <div className="grid grid-cols-2 gap-4">
           <Field label="Name">
             <input
@@ -215,14 +351,6 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
               onChange={(e) => updateGeneralField("name", e.target.value)}
               disabled={!canEdit}
               className="w-full rounded border border-neutral-300 px-3 py-2 text-sm disabled:bg-neutral-50"
-            />
-          </Field>
-          <Field label="Slug">
-            <input
-              value={general.slug}
-              onChange={(e) => updateGeneralField("slug", e.target.value)}
-              disabled={!canEdit}
-              className="w-full rounded border border-neutral-300 px-3 py-2 text-sm font-mono disabled:bg-neutral-50"
             />
           </Field>
           <Field label="Category">
@@ -242,18 +370,6 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
               onChange={(ids) => { setExtraIds(ids); setIsDirty(true); }}
               disabled={!canEdit}
             />
-          </Field>
-          <Field label="Status" hint={general.status === "ARCHIVED" ? "Archived products are hidden from customers." : undefined}>
-            <select
-              value={general.status}
-              onChange={(e) => updateGeneralField("status", e.target.value)}
-              disabled={!canEdit}
-              className="w-full rounded border border-neutral-300 bg-white px-3 py-2 text-sm disabled:bg-neutral-50"
-            >
-              {PRODUCT_STATUSES.map((s) => (
-                <option key={s} value={s}>{s}</option>
-              ))}
-            </select>
           </Field>
           <div className="col-span-2">
             <Field label="Description">
@@ -283,9 +399,9 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
         )}
       </Section>
 
-      <MediaSection product={product} canManageMedia={!!canManageMedia} onChange={load} />
-
-      <VariantsSection product={product} canManagePricing={!!canManagePricing} canEdit={!!canEdit} onChange={load} />
+      <div id="media-section">
+        <MediaSection product={product} canManageMedia={!!canManageMedia} onChange={load} />
+      </div>
 
       <ConfirmDialog
         open={deleteOpen}
@@ -299,37 +415,36 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
         onCancel={() => setDeleteOpen(false)}
       />
 
-      <Section title="Inventory">
-        <p className="mb-2 text-sm text-neutral-500">
-          Stock is managed in the Inventory module. Set how much to keep in reserve for each variant - you&apos;ll be alerted when
-          stock is at or below it, or getting close.
-        </p>
-        <div className="divide-y divide-neutral-100">
-          {product.variant_stock.map((vs) => {
-            return (
-              <div key={vs.variant_id} className="py-3 text-sm">
-                <div className="flex items-center justify-between">
-                  <span className="text-neutral-700">{sizeOf(vs.variant_id)}</span>
-                  <span className="flex items-center gap-2">
-                    <span className={Number(vs.available_quantity) === 0 ? "font-semibold text-status-danger" : "text-neutral-800"}>
-                      {packCount(vs.available_quantity)} available
-                    </span>
-                    {vs.stock_level !== "OK" && (
-                      <span
-                        className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
-                          vs.stock_level === "OUT"
-                            ? "bg-status-dangerLight text-status-danger"
-                            : vs.stock_level === "BELOW"
-                              ? "bg-status-warningLight text-status-warning"
-                              : "bg-neutral-100 text-neutral-600"
-                        }`}
-                      >
-                        {vs.stock_level === "OUT" ? "Out of stock" : vs.stock_level === "BELOW" ? "Low on stock" : "Close to reserve"}
-                      </span>
-                    )}
-                  </span>
-                </div>
-                <div className="mt-2">
+      <details className="mb-4 rounded border border-neutral-200 bg-white p-4">
+        <summary className="cursor-pointer font-display text-base font-semibold text-primary-900">Advanced</summary>
+        <div className="mt-4 space-y-5">
+          <Field label="Web address (slug)" hint="Used in the product link. Change only if needed, then press Save changes above.">
+            <input
+              value={general.slug}
+              onChange={(e) => updateGeneralField("slug", e.target.value)}
+              disabled={!canEdit}
+              className="w-full rounded border border-neutral-300 px-3 py-2 font-mono text-sm disabled:bg-neutral-50"
+            />
+          </Field>
+          <div>
+            <h3 className="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">Low-stock level</h3>
+            <ProductAlertEditor
+              key={product.variant_stock.map((x) => `${x.variant_id}:${x.reserve_level ?? ""}`).join("|")}
+              variants={product.variants}
+              reserves={Object.fromEntries(product.variant_stock.map((x) => [x.variant_id, x.reserve_level]))}
+              canEdit={canSetStockLevels}
+              onSaved={load}
+            />
+          </div>
+          <div>
+            <h3 className="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">Low-stock level per size</h3>
+            <div className="divide-y divide-neutral-100">
+              {product.variant_stock.map((vs) => (
+                <div key={vs.variant_id} className="py-2 text-sm">
+                  <div className="mb-1 flex items-center justify-between text-neutral-700">
+                    <span>{sizeOf(vs.variant_id)} <span className="font-mono text-xs text-neutral-400">{vs.sku}</span></span>
+                    <span className="text-neutral-500">{packCount(vs.available_quantity)} available</span>
+                  </div>
                   <ReserveLevelEditor
                     key={`${vs.variant_id}-${vs.reserve_level ?? "default"}`}
                     variantId={vs.variant_id}
@@ -337,67 +452,35 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
                     effectiveReserve={vs.effective_reserve}
                     variantUnit={product.variants.find((v) => v.id === vs.variant_id)?.unit ?? "PACK"}
                     variantQuantity={product.variants.find((v) => v.id === vs.variant_id)?.quantity ?? "1"}
-                    canEdit={!!canEdit}
+                    canEdit={canSetStockLevels}
                     onSaved={load}
                   />
                 </div>
-              </div>
-            );
-          })}
-        </div>
-        {canReceive && (
-          <div className="mt-4 border-t border-neutral-100 pt-4">
-            {!addStockOpen ? (
-              <button
-                onClick={() => setAddStockOpen(true)}
-                className="rounded border border-primary-700 px-3 py-1.5 text-sm font-semibold text-primary-800 hover:bg-primary-50"
-              >
-                + Add stock to sizes
-              </button>
+              ))}
+            </div>
+            <a href={`/inventory?q=${encodeURIComponent(product.name)}`} className="mt-2 inline-block text-sm font-semibold text-primary-700 hover:underline">
+              Lots, batches and transfers in Inventory →
+            </a>
+          </div>
+          <div>
+            <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-neutral-500">History</h3>
+            {activity.length === 0 ? (
+              <p className="text-sm text-neutral-400">No recorded activity yet.</p>
             ) : (
-              <div className="rounded border border-neutral-200 p-3">
-                <h3 className="mb-3 font-display text-sm font-semibold text-primary-900">Add stock to sizes</h3>
-                <ReceiveStockForm productId={product.id} variants={product.variants} onReceived={load} onCancel={() => setAddStockOpen(false)} />
+              <div className="space-y-2">
+                {activity.map((entry) => (
+                  <div key={`${entry.resource_type}-${entry.id}`} className="flex items-start justify-between text-sm">
+                    <p className="text-neutral-800">
+                      {formatActivityAction(entry)} <span className="text-neutral-400">by {entry.admin_name}</span>
+                    </p>
+                    <p className="shrink-0 text-xs text-neutral-400">{formatDateTime(entry.created_at)}</p>
+                  </div>
+                ))}
               </div>
             )}
           </div>
-        )}
-        <a href="/inventory" className="mt-3 inline-block text-sm font-semibold text-primary-700 hover:underline">
-          View inventory →
-        </a>
-      </Section>
-
-      <Section title="Merchandising">
-        <p className="text-sm text-neutral-400">
-          Featured/seasonal/homepage-visibility flags don&apos;t exist on the Product model yet - there is nothing
-          real to control here until that backend work is done.
-        </p>
-      </Section>
-
-      <Section title="Reviews">
-        <p className="text-sm text-neutral-400">
-          No review domain exists in the backend yet - there is nothing to summarize until that module is built.
-        </p>
-      </Section>
-
-      <Section title="Activity">
-        {activity.length === 0 ? (
-          <p className="text-sm text-neutral-400">No recorded activity yet.</p>
-        ) : (
-          <div className="space-y-2">
-            {activity.map((entry) => (
-              <div key={`${entry.resource_type}-${entry.id}`} className="flex items-start justify-between text-sm">
-                <div>
-                  <p className="text-neutral-800">
-                    {formatActivityAction(entry)} <span className="text-neutral-400">by {entry.admin_name}</span>
-                  </p>
-                </div>
-                <p className="shrink-0 text-xs text-neutral-400">{formatDateTime(entry.created_at)}</p>
-              </div>
-            ))}
-          </div>
-        )}
-      </Section>
+        </div>
+      </details>
     </div>
   );
 }
@@ -437,14 +520,24 @@ function MediaSection({
   const handleSetPrimary = async (imageId: number) => {
     const token = getAccessToken();
     if (!token) return;
-    await updateImage(token, imageId, { is_primary: true }).catch(() => undefined);
+    setError(null);
+    try {
+      await updateImage(token, imageId, { is_primary: true });
+    } catch (err) {
+      setError(err instanceof CatalogApiError ? err.message : "Unable to change the primary image.");
+    }
     onChange();
   };
 
   const handleDelete = async (imageId: number) => {
     const token = getAccessToken();
     if (!token) return;
-    await deleteImage(token, imageId).catch(() => undefined);
+    setError(null);
+    try {
+      await deleteImage(token, imageId);
+    } catch (err) {
+      setError(err instanceof CatalogApiError ? err.message : "Unable to remove this image.");
+    }
     onChange();
   };
 
@@ -501,11 +594,17 @@ function VariantsSection({
   product,
   canManagePricing,
   canEdit,
+  canDelete,
+  fix,
+  onFixHandled,
   onChange,
 }: {
   product: AdminProductDetail;
   canManagePricing: boolean;
   canEdit: boolean;
+  canDelete: boolean;
+  fix: FixTarget | null;
+  onFixHandled: () => void;
   onChange: () => void;
 }) {
   const { getAccessToken } = useAuth();
@@ -513,9 +612,19 @@ function VariantsSection({
   const [newSizes, setNewSizes] = useState<NewSize[]>([emptySize()]);
   const [sizesSaved, setSizesSaved] = useState<string | null>(null);
   const [addingVariant, setAddingVariant] = useState(false);
-  const [priceDialogVariant, setPriceDialogVariant] = useState<number | null>(null);
-  const [newPrice, setNewPrice] = useState("");
+  const [rowMenu, setRowMenu] = useState<number | null>(null);
+  const [cannotDelete, setCannotDelete] = useState<{ id: number; message: string } | null>(null);
+  const activeSizes = product.variants.filter((v) => v.status === "ACTIVE").length;
+  // Offer Delete only where it can work: not the only size of a live product, not a size holding stock.
+  const mayOfferDelete = (v: AdminProductDetail["variants"][number]) =>
+    canDelete &&
+    !(product.status === "ACTIVE" && v.status === "ACTIVE" && activeSizes <= 1) &&
+    !(Number(product.variant_stock.find((x) => x.variant_id === v.id)?.available_quantity ?? 0) > 0);
+  // Inline price edit: the price being typed, and the last change (for Undo).
+  const [pricingVariant, setPricingVariant] = useState<number | null>(null);
+  const [priceDraft, setPriceDraft] = useState("");
   const [savingPrice, setSavingPrice] = useState(false);
+  const [lastPriceChange, setLastPriceChange] = useState<{ variantId: number; label: string; from: string; to: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [editingVariant, setEditingVariant] = useState<number | null>(null);
   const [editForm, setEditForm] = useState({ unit: "KG", quantity: "" });
@@ -573,7 +682,12 @@ function VariantsSection({
     const token = getAccessToken();
     if (!token) return;
     const next = currentStatus === "ACTIVE" ? "INACTIVE" : "ACTIVE";
-    await updateVariant(token, variantId, { status: next }).catch(() => undefined);
+    setError(null);
+    try {
+      await updateVariant(token, variantId, { status: next });
+    } catch (err) {
+      setError(err instanceof CatalogApiError ? err.message : "Unable to change this size.");
+    }
     onChange();
   };
 
@@ -613,25 +727,62 @@ function VariantsSection({
       setDeleteVariantId(null);
       onChange();
     } catch (err) {
+      const id = deleteVariantId;
       setDeleteVariantId(null);
-      setError(err instanceof CatalogApiError ? err.message : "Unable to delete this variant.");
+      if (err instanceof CatalogApiError && err.status === 409) {
+        setCannotDelete({ id, message: err.message });
+      } else {
+        setError(`Couldn't delete this size. ${err instanceof CatalogApiError ? err.message : "The connection failed."} Nothing was changed.`);
+      }
     } finally {
       setDeleting(false);
     }
   };
 
-  const activeVariant = product.variants.find((v) => v.id === priceDialogVariant);
   const variantToDelete = product.variants.find((v) => v.id === deleteVariantId);
 
-  const handleConfirmPrice = async () => {
+  const startPriceEdit = (v: AdminProductDetail["variants"][number]) => {
+    setPricingVariant(v.id);
+    setPriceDraft(v.current_price ? String(Number(v.current_price.price)) : "");
+    setError(null);
+  };
+
+  useEffect(() => {
+    if (!fix) return;
+    if (fix.type === "price" && canManagePricing) {
+      const target =
+        product.variants.find((v) => v.id === fix.variantId) ??
+        product.variants.find((v) => v.status === "ACTIVE" && !v.current_price);
+      if (target) startPriceEdit(target);
+      onFixHandled();
+    } else if (fix.type === "size" && canEdit) {
+      setShowAddVariant(true);
+      onFixHandled();
+    } else if (fix.type === "price" || fix.type === "size") {
+      onFixHandled();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fix]);
+
+  const commitPrice = async (v: AdminProductDetail["variants"][number]) => {
     const token = getAccessToken();
-    if (!token || !priceDialogVariant) return;
+    if (!token || savingPrice) return;
+    const previous = v.current_price ? Number(v.current_price.price) : null;
+    const next = Number(priceDraft);
+    if (!(next > 0) || next === previous) {
+      setPricingVariant(null);
+      return;
+    }
     setSavingPrice(true);
     setError(null);
     try {
-      await createPrice(token, priceDialogVariant, newPrice);
-      setPriceDialogVariant(null);
-      setNewPrice("");
+      await createPrice(token, v.id, next.toFixed(2));
+      setLastPriceChange(
+        previous !== null
+          ? { variantId: v.id, label: sizeLabel(v.quantity, v.unit), from: previous.toFixed(2), to: next.toFixed(2) }
+          : null,
+      );
+      setPricingVariant(null);
       onChange();
     } catch (err) {
       setError(err instanceof CatalogApiError ? err.message : "Unable to update this price.");
@@ -640,58 +791,130 @@ function VariantsSection({
     }
   };
 
+  // Undo writes the old price as a new price - the history keeps both.
+  const undoPrice = async () => {
+    const token = getAccessToken();
+    if (!token || !lastPriceChange) return;
+    try {
+      await createPrice(token, lastPriceChange.variantId, lastPriceChange.from);
+      setLastPriceChange(null);
+      onChange();
+    } catch (err) {
+      setError(err instanceof CatalogApiError ? err.message : "Unable to undo the price change.");
+    }
+  };
+
   return (
-    <Section title={`Variants & Pricing (${product.variants.length})`}>
+    <Section title="Selling options">
       <div className="divide-y divide-neutral-100">
-        {product.variants.map((v) => (
-          <div key={v.id} className="flex items-center justify-between py-2 text-sm">
-            <div>
-              <p className="font-medium text-neutral-800">{sizeLabel(v.quantity, v.unit)}</p>
-              <p className="text-xs text-neutral-500">
-                {product.name}
-                {v.current_price && ratePerBaseUnit(v.current_price.price, v.quantity, v.unit)
-                  ? ` · ${ratePerBaseUnit(v.current_price.price, v.quantity, v.unit)}`
-                  : ""}
-              </p>
+        {product.variants.map((v) => {
+          const hidden = v.status !== "ACTIVE";
+          const unpriced = !hidden && !v.current_price;
+          return (
+            <div key={v.id} id={`size-${v.id}`} className={`flex flex-wrap items-center justify-between gap-2 py-2 text-sm ${hidden ? "opacity-60" : ""}`}>
+              <div className="min-w-[110px]">
+                <p className="font-medium text-neutral-800">
+                  {sizeLabel(v.quantity, v.unit)}
+                  {hidden && <span className="ml-2 rounded-full bg-neutral-100 px-2 py-0.5 text-xs font-semibold text-neutral-500">Hidden</span>}
+                </p>
+                <p className="text-xs text-neutral-500">
+                  {v.current_price ? ratePerBaseUnit(v.current_price.price, v.quantity, v.unit) ?? "" : ""}
+                </p>
+              </div>
+              <div className="flex items-center gap-1">
+                {pricingVariant === v.id ? (
+                  <>
+                    <span className="text-neutral-500">₹</span>
+                    <input
+                      type="number"
+                      inputMode="decimal"
+                      min="0"
+                      step="0.01"
+                      autoFocus
+                      value={priceDraft}
+                      disabled={savingPrice}
+                      onChange={(e) => setPriceDraft(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") commitPrice(v);
+                        if (e.key === "Escape") setPricingVariant(null);
+                      }}
+                      onBlur={() => commitPrice(v)}
+                      aria-label={`Price of ${sizeLabel(v.quantity, v.unit)}`}
+                      className="w-24 rounded border border-primary-500 px-2 py-1 text-sm"
+                    />
+                  </>
+                ) : canManagePricing ? (
+                  <button
+                    type="button"
+                    onClick={() => startPriceEdit(v)}
+                    title="Click to change the price"
+                    className={`min-h-[36px] rounded px-2 py-1 font-medium hover:bg-neutral-100 ${unpriced ? "text-status-danger" : "text-neutral-800"}`}
+                  >
+                    {v.current_price ? formatMoney(v.current_price.price, v.current_price.currency) : "Set price"}
+                  </button>
+                ) : (
+                  <span className="px-2 py-1 font-medium text-neutral-800">
+                    {v.current_price ? formatMoney(v.current_price.price, v.current_price.currency) : "No price set"}
+                  </span>
+                )}
+              </div>
+              {canEdit && (
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setRowMenu(rowMenu === v.id ? null : v.id)}
+                    aria-haspopup="menu"
+                    aria-expanded={rowMenu === v.id}
+                    aria-label={`More for ${sizeLabel(v.quantity, v.unit)}`}
+                    className="min-h-[36px] rounded px-2 text-lg leading-none text-neutral-500 hover:bg-neutral-100"
+                  >
+                    ⋯
+                  </button>
+                  {rowMenu === v.id && (
+                    <div role="menu" className="absolute right-0 top-full z-20 mt-1 w-36 rounded border border-neutral-200 bg-white py-1 text-sm shadow-lg">
+                      <button role="menuitem" type="button" onClick={() => { setRowMenu(null); startEdit(v); }} className="block w-full px-3 py-1.5 text-left hover:bg-neutral-50">Edit size</button>
+                      <button role="menuitem" type="button" onClick={() => { setRowMenu(null); handleToggleVariantStatus(v.id, v.status); }} className="block w-full px-3 py-1.5 text-left hover:bg-neutral-50">
+                        {v.status === "ACTIVE" ? "Hide" : "Show"}
+                      </button>
+                      {mayOfferDelete(v) && (
+                        <button role="menuitem" type="button" onClick={() => { setRowMenu(null); setDeleteVariantId(v.id); }} className="block w-full px-3 py-1.5 text-left text-status-danger hover:bg-neutral-50">Delete…</button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
-            <div className="flex items-center gap-3">
-              <span className="font-medium text-neutral-800">
-                {v.current_price ? formatMoney(v.current_price.price, v.current_price.currency) : "No price set"}
-              </span>
-              <StatusBadge status={v.status} />
-              {canManagePricing && (
-                <button
-                  onClick={() => { setPriceDialogVariant(v.id); setNewPrice(v.current_price?.price ?? ""); }}
-                  className="text-xs font-semibold text-primary-700 hover:underline"
-                >
-                  Change price
-                </button>
-              )}
-              {canEdit && (
-                <button
-                  onClick={() => handleToggleVariantStatus(v.id, v.status)}
-                  className="text-xs font-semibold text-neutral-500 hover:underline"
-                >
-                  {v.status === "ACTIVE" ? "Deactivate" : "Activate"}
-                </button>
-              )}
-              {canEdit && (
-                <button onClick={() => startEdit(v)} className="text-xs font-semibold text-primary-700 hover:underline">
-                  Edit
-                </button>
-              )}
-              {canEdit && (
-                <button
-                  onClick={() => setDeleteVariantId(v.id)}
-                  className="text-xs font-semibold text-status-danger hover:underline"
-                >
-                  Delete
-                </button>
-              )}
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
+
+      {cannotDelete && (
+        <div role="alert" className="mt-2 rounded border border-status-warning/40 bg-status-warningLight px-3 py-2 text-sm text-neutral-800">
+          <p className="font-semibold">Can&apos;t delete this size.</p>
+          <p>{cannotDelete.message}</p>
+          <div className="mt-1 flex gap-4">
+            <button
+              type="button"
+              onClick={() => {
+                handleToggleVariantStatus(cannotDelete.id, "ACTIVE");
+                setCannotDelete(null);
+              }}
+              className="font-semibold text-primary-800 underline"
+            >
+              Hide size
+            </button>
+            <button type="button" onClick={() => setCannotDelete(null)} className="text-neutral-500 hover:underline">Close</button>
+          </div>
+        </div>
+      )}
+
+      {lastPriceChange && (
+        <p role="status" className="mt-2 rounded bg-primary-50 px-3 py-2 text-sm text-primary-900">
+          {lastPriceChange.label}: ₹{lastPriceChange.from} → ₹{lastPriceChange.to}{" "}
+          <button type="button" onClick={undoPrice} className="ml-2 font-semibold underline">Undo</button>
+          <button type="button" onClick={() => setLastPriceChange(null)} className="ml-3 text-xs text-neutral-500 hover:underline">Dismiss</button>
+        </p>
+      )}
 
       {error && <p className="mt-2 text-sm text-status-danger">{error}</p>}
 
@@ -834,35 +1057,14 @@ function VariantsSection({
 
       <ConfirmDialog
         open={deleteVariantId !== null}
-        title="Delete variant?"
-        description={`Permanently delete the ${variantToDelete ? sizeLabel(variantToDelete.quantity, variantToDelete.unit) : "selected"} size and its price. Variants with order, quote or stock history can't be deleted - deactivate those instead.`}
-        confirmLabel="Delete variant"
+        title="Delete this size?"
+        description={`Permanently delete the ${variantToDelete ? sizeLabel(variantToDelete.quantity, variantToDelete.unit) : "selected"} size. This only works for a size that was just added by mistake: one with orders, stock, carts or a changed price is kept - hide it instead.`}
+        confirmLabel="Delete size"
         loading={deleting}
         onCancel={() => setDeleteVariantId(null)}
         onConfirm={handleConfirmDelete}
       />
 
-      <ConfirmDialog
-        open={priceDialogVariant !== null}
-        title="Change price?"
-        description={
-          activeVariant?.current_price
-            ? `Current price: ${formatMoney(activeVariant.current_price.price, activeVariant.current_price.currency)}. This creates a new price effective immediately - the old price is kept as history, not overwritten.`
-            : "This variant has no price yet. This creates its first price, effective immediately."
-        }
-        confirmLabel="Update price"
-        loading={savingPrice}
-        onCancel={() => setPriceDialogVariant(null)}
-        onConfirm={handleConfirmPrice}
-      >
-        <input
-          type="number"
-          value={newPrice}
-          onChange={(e) => setNewPrice(e.target.value)}
-          placeholder="New price (₹)"
-          className="mt-2 w-full rounded border border-neutral-300 px-3 py-2 text-sm"
-        />
-      </ConfirmDialog>
     </Section>
   );
 }
@@ -883,5 +1085,194 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
       {children}
       {hint && <p className="mt-1 text-xs text-neutral-400">{hint}</p>}
     </div>
+  );
+}
+
+function ReadinessCard({ readiness, onFix }: { readiness: Readiness; onFix: (target: FixTarget) => void }) {
+  const count = readiness.problems.length;
+  return (
+    <div
+      className={`mb-4 rounded border p-4 ${
+        readiness.ready ? "border-primary-200 bg-primary-50/50" : "border-status-warning/40 bg-status-warningLight/40"
+      }`}
+    >
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className={`font-display text-base font-semibold ${readiness.ready ? "text-primary-800" : "text-status-warning"}`}>
+          {readiness.ready ? "READY TO SELL" : `${count} ${count === 1 ? "THING NEEDS" : "THINGS NEED"} ATTENTION`}
+        </p>
+        {!readiness.ready && readiness.problems[0] && (
+          <button
+            type="button"
+            onClick={() => onFix(readiness.problems[0].fix)}
+            className="min-h-[36px] rounded bg-primary-800 px-3 py-1.5 text-sm font-semibold text-white hover:bg-primary-700"
+          >
+            Fix now
+          </button>
+        )}
+      </div>
+      <ul className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-sm sm:grid-cols-3">
+        {readiness.checks.map((c) => (
+          <li key={c.key} className={c.ok ? "text-neutral-700" : c.advisory || c.waiting ? "text-neutral-500" : "text-status-danger"}>
+            <span className="mr-1.5 inline-block w-4 text-center">{c.ok ? "✓" : c.advisory || c.waiting ? "○" : "✕"}</span>
+            {c.label}
+            {!c.ok && c.advisory && <span className="text-xs text-neutral-400"> (recommended)</span>}
+          </li>
+        ))}
+      </ul>
+      {readiness.problems.length > 0 && (
+        <ul className="mt-3 space-y-1 border-t border-neutral-200/70 pt-2 text-sm">
+          {readiness.problems.slice(0, 3).map((p) => (
+            <li key={p.key} className="flex items-center justify-between gap-3">
+              <span className="text-neutral-800">{p.text}</span>
+              <button type="button" onClick={() => onFix(p.fix)} className="font-semibold text-primary-700 hover:underline">Fix</button>
+            </li>
+          ))}
+          {readiness.problems.length > 3 && (
+            <li className="text-neutral-500">…and {readiness.problems.length - 3} more - fix these first.</li>
+          )}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+/** Stock the way staff read it: how much, where, and the everyday actions. */
+function StockSection({
+  product,
+  fix,
+  onFixHandled,
+  onChange,
+}: {
+  product: AdminProductDetail;
+  fix: FixTarget | null;
+  onFixHandled: () => void;
+  onChange: () => void;
+}) {
+  const { user } = useAuth();
+  const { locations } = useWarehouses(!!(user && hasPermission(user.roles, "inventory.transfer")));
+  const can = (perm: Parameters<typeof hasPermission>[1]) => !!(user && hasPermission(user.roles, perm));
+  const canReceive = can("inventory.receive");
+  const canAdjust = can("inventory.adjust");
+  const canReconcile = can("inventory.reconcile");
+  const canMove = can("inventory.transfer") && locations.length > 1;
+  const stock = product.stock;
+  const hasSizes = product.variants.some((v) => v.status === "ACTIVE");
+  const hasStock = !!stock && stock.warehouses.length > 0;
+
+  const { getAccessToken } = useAuth();
+  const [dialog, setDialog] = useState<"add" | "correct" | "remove" | "move" | null>(null);
+  const [fresh, setFresh] = useState<ProductStockItem | null>(null);
+  const [openError, setOpenError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<StockNotice | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  // Read the latest numbers right before a stock action (other staff and customers change them all day).
+  const openDialog = async (kind: "add" | "correct" | "remove" | "move") => {
+    const token = getAccessToken();
+    if (!token) return;
+    setOpenError(null);
+    try {
+      setFresh(await fetchProductStockCard(token, product.id));
+      setDialog(kind);
+    } catch (err) {
+      setOpenError(stockErrorMessage(err, "load the latest stock", "Nothing was changed."));
+    }
+  };
+
+  useEffect(() => {
+    if (fix?.type === "stock") {
+      if (canReceive && stock && hasSizes) openDialog("add");
+      onFixHandled();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fix]);
+
+  const done = (op: ProductStockOperation) => {
+    setNotice({ message: op.message, operation: op.operation_id ? op : undefined });
+    onChange();
+  };
+  const available = stock && stock.totals.length > 0 ? stock.totals.map((t) => `${plain(t.amount)} ${t.amount_unit}`).join(" + ") : null;
+  const reserved = stock?.totals.filter((t) => Number(t.reserved_amount) > 0) ?? [];
+  const expiring = stock?.expiry && stock.expiry.days_left <= 7 ? stock.expiry : null;
+
+  return (
+    <Section title="Stock">
+      {notice && (
+        <StockActionBanner
+          notice={notice}
+          historyHref={`/inventory?view=lot&q=${encodeURIComponent(product.name)}`}
+          onChanged={() => onChange()}
+          onDismiss={() => setNotice(null)}
+        />
+      )}
+      {!stock || !hasSizes ? (
+        <p className="text-sm text-neutral-500">Add a selling size first, then you can add stock.</p>
+      ) : (
+        <>
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <p className={`font-display text-2xl font-semibold ${hasStock ? "text-primary-900" : "text-status-danger"}`}>
+                {hasStock && available ? `${available} available` : "No stock yet"}
+              </p>
+              {reserved.map((t) => (
+                <p key={t.family} className="text-sm text-neutral-500">
+                  {plain(t.reserved_amount)} {t.amount_unit} reserved for orders
+                </p>
+              ))}
+            </div>
+            <div className="flex items-center gap-2">
+              {canReceive && (
+                <button type="button" onClick={() => openDialog("add")} className="min-h-[36px] rounded bg-primary-800 px-3 py-1.5 text-sm font-semibold text-white hover:bg-primary-700">
+                  + Add stock
+                </button>
+              )}
+              {hasStock && (canReconcile || canAdjust || canMove) && (
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setMenuOpen((o) => !o)}
+                    aria-haspopup="menu"
+                    aria-expanded={menuOpen}
+                    aria-label="More stock actions"
+                    className="min-h-[36px] rounded border border-neutral-300 px-3 py-1.5 text-sm font-semibold text-neutral-600 hover:bg-neutral-50"
+                  >
+                    ⋯
+                  </button>
+                  {menuOpen && (
+                    <div role="menu" className="absolute right-0 top-full z-20 mt-1 w-48 rounded border border-neutral-200 bg-white py-1 text-sm shadow-lg">
+                      {canReconcile && <button role="menuitem" type="button" onClick={() => { setMenuOpen(false); openDialog("correct"); }} className="block w-full px-3 py-2 text-left hover:bg-neutral-50">Correct stock count</button>}
+                      {canAdjust && <button role="menuitem" type="button" onClick={() => { setMenuOpen(false); openDialog("remove"); }} className="block w-full px-3 py-2 text-left hover:bg-neutral-50">Remove stock</button>}
+                      {canMove && <button role="menuitem" type="button" onClick={() => { setMenuOpen(false); openDialog("move"); }} className="block w-full px-3 py-2 text-left hover:bg-neutral-50">Move stock</button>}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+          {stock.warehouses.length > 0 && (
+            <ul className="mt-3 space-y-0.5 text-sm text-neutral-700">
+              {stock.warehouses.map((w) => (
+                <li key={`${w.location_id}-${w.family}`} className="flex justify-between border-b border-neutral-50 py-1 sm:max-w-sm">
+                  <span>{w.location_name}</span>
+                  <strong>{plain(w.amount)} {w.amount_unit}</strong>
+                </li>
+              ))}
+            </ul>
+          )}
+          {expiring && (
+            <p className="mt-3 text-sm text-status-warning">
+              {plain(expiring.amount)} {expiring.amount_unit} · {expiryPhrase(expiring.days_left)}
+            </p>
+          )}
+        </>
+      )}
+      {openError && <p role="alert" className="mt-3 text-sm text-status-danger">{openError}</p>}
+      {stock && dialog === "add" && (
+        <AddStockDialog product={fresh ?? stock} onClose={() => setDialog(null)} onDone={(message) => { setNotice({ message }); onChange(); }} />
+      )}
+      {stock && dialog === "correct" && <CorrectStockDialog product={fresh ?? stock} onClose={() => setDialog(null)} onDone={done} />}
+      {stock && dialog === "remove" && <RemoveStockAmountDialog product={fresh ?? stock} onClose={() => setDialog(null)} onDone={done} />}
+      {stock && dialog === "move" && <MoveStockDialog product={fresh ?? stock} onClose={() => setDialog(null)} onDone={done} />}
+    </Section>
   );
 }

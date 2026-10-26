@@ -1,6 +1,6 @@
 # Database Schema
 
-> **Status:** Verified (generated from the ORM models). **Generated:** 2026-10-20 by [`docs/_tools/gen_schema_reference.py`](../_tools/gen_schema_reference.py).
+> **Status:** Verified (generated from the ORM models). **Generated:** 2026-10-27 by [`docs/_tools/gen_schema_reference.py`](../_tools/gen_schema_reference.py).
 > **Evidence:** [`backend/app/models/`](../../backend/app/models) (SQLAlchemy 2 declarative models, 52 tables) and the migration history in [`backend/alembic/versions/`](../../backend/alembic/versions). The models were compared with a database migrated to head using `alembic check` (see [MIGRATIONS.md](MIGRATIONS.md)). `alembic_version` is Alembic's own table and is not listed.
 
 Relationships between tables: [ENTITY_RELATIONSHIPS.md](ENTITY_RELATIONSHIPS.md). Retention and lifecycle: [DATA_RETENTION.md](DATA_RETENTION.md). Business meaning of statuses: the domain documents in [`../05-domains/`](../05-domains).
@@ -92,6 +92,9 @@ Constraints and indexes:
 | `postal_code` | VARCHAR(20) | no |  |  |
 | `latitude` | NUMERIC(9, 6) | yes |  |  |
 | `longitude` | NUMERIC(9, 6) | yes |  |  |
+| `geocode_provider` | VARCHAR(30) | yes |  |  |
+| `geocode_provider_id` | VARCHAR(100) | yes |  |  |
+| `geocoded_at` | DATETIME | yes |  |  |
 | `is_default` | BOOLEAN | no | false |  |
 | `created_at` | DATETIME | no | now() |  |
 | `updated_at` | DATETIME | no | now() |  |
@@ -202,7 +205,6 @@ Constraints and indexes:
 | `unit` | VARCHAR(20) | no |  |  |
 | `quantity` | NUMERIC(12, 3) | no |  |  |
 | `reserve_level` | NUMERIC(12, 3) | yes |  |  |
-| `dedicated_stock` | BOOLEAN | no | false |  |
 | `status` | VARCHAR(30) | no |  |  |
 | `created_at` | DATETIME | no | now() |  |
 | `updated_at` | DATETIME | no | now() |  |
@@ -556,13 +558,14 @@ Constraints and indexes:
 | `location_id` | BIGINT | no |  | FK -> inventory_locations.id (ON DELETE RESTRICT) |
 | `quantity` | NUMERIC(12, 3) | no |  |  |
 | `reserved_quantity` | NUMERIC(12, 3) | no | 0 |  |
+| `is_share` | BOOLEAN | no | false |  |
 | `status` | VARCHAR(30) | no |  |  |
 | `created_at` | DATETIME | no | now() |  |
 | `updated_at` | DATETIME | no | now() |  |
 
 Constraints and indexes:
 
-- UNIQUE `uq_inventory_lots_batch_variant_location`: (batch_id, variant_id, location_id)
+- UNIQUE `uq_inventory_lots_batch_variant_location`: (batch_id, variant_id, location_id, is_share)
 - CHECK `ck_inventory_lots_quantity`: `quantity >= 0`
 - CHECK `ck_inventory_lots_reserved_quantity`: `reserved_quantity >= 0 AND reserved_quantity <= quantity`
 - CHECK `ck_inventory_lots_status`: `status IN ('ACTIVE', 'INACTIVE', 'DEPLETED')`
@@ -711,6 +714,9 @@ Constraints and indexes:
 | `subtotal_amount` | NUMERIC(12, 2) | no |  |  |
 | `discount_amount` | NUMERIC(12, 2) | no | 0 |  |
 | `delivery_fee` | NUMERIC(12, 2) | no | 0 |  |
+| `delivery_distance_meters` | INTEGER | yes |  |  |
+| `routing_provider` | VARCHAR(30) | yes |  |  |
+| `warehouse_id` | BIGINT | yes |  | FK -> inventory_locations.id (ON DELETE SET NULL) |
 | `promotion_id` | BIGINT | yes |  | FK -> promotions.id (ON DELETE RESTRICT) |
 | `applied_promo_code` | VARCHAR(50) | yes |  |  |
 | `placed_at` | DATETIME | no |  |  |

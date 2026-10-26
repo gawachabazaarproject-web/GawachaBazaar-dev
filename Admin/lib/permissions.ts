@@ -15,6 +15,7 @@ export const OPERATIONS = "OPERATIONS";
 export const HUB_STAFF = "HUB_STAFF";
 export const DELIVERY_PARTNER = "DELIVERY_PARTNER";
 export const SUPPORT = "SUPPORT";
+export const CATALOG_STAFF = "CATALOG_STAFF";
 
 const CATALOG_PERMISSIONS = [
   "products.read",
@@ -102,10 +103,19 @@ const ROLE_PERMISSIONS: Record<string, Permission[]> = {
   [HUB_STAFF]: [...INVENTORY_PERMISSIONS, "orders.read", "delivery.read", "delivery.assign"],
   [DELIVERY_PARTNER]: ["delivery.read", "delivery.fulfill"],
   [SUPPORT]: ["customers.view"],
+  // Adds and edits products, prices and photos; never touches stock or deletes.
+  [CATALOG_STAFF]: [
+    "products.read",
+    "products.create",
+    "products.update",
+    "products.manage_media",
+    "products.manage_pricing",
+    "categories.read",
+  ],
 };
 
 /** The only roles that may open the admin panel at all. */
-export const ADMIN_PANEL_ROLES = [ADMIN, OPERATIONS, HUB_STAFF, DELIVERY_PARTNER, SUPPORT];
+export const ADMIN_PANEL_ROLES = [ADMIN, OPERATIONS, HUB_STAFF, DELIVERY_PARTNER, SUPPORT, CATALOG_STAFF];
 
 export function hasPermission(roles: string[], permission: Permission): boolean {
   return roles.some((role) => ROLE_PERMISSIONS[role]?.includes(permission));

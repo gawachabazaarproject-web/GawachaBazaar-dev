@@ -28,6 +28,7 @@ from starlette.testclient import TestClient
 from app.core.roles import (
     ADMIN,
     BASELINE_ROLES,
+    CATALOG_STAFF,
     CUSTOMER,
     DELIVERY_PARTNER,
     HUB_STAFF,
@@ -50,10 +51,11 @@ from tests.firebase_fake import fake_firebase
 
 _VERSIONS_DIR = Path(__file__).resolve().parent.parent / "alembic" / "versions"
 # Every migration that seeds baseline roles, in revision order: the original
-# six, then SUPPORT (Admin Panel Customers follow-up).
+# six, then SUPPORT (Admin Panel Customers follow-up), then CATALOG_STAFF.
 _SEED_ROLE_MIGRATIONS = (
     "37bbdf459894_seed_baseline_roles.py",
     "a3f8c1d2e6b4_seed_support_role.py",
+    "a8d2f4b6c0e1_seed_catalog_staff_role.py",
 )
 
 
@@ -88,6 +90,7 @@ def test_1_baseline_roles_seeded_by_migration(test_engine) -> None:
         OPERATIONS,
         DELIVERY_PARTNER,
         SUPPORT,
+        CATALOG_STAFF,
     )
     for role_name in BASELINE_ROLES:
         assert role_name in names, f"{role_name} role missing after migration"

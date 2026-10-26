@@ -6,7 +6,8 @@ import { Text } from "@/components/Text";
 import { TextField } from "@/components/TextField";
 import { Button } from "@/components/Button";
 import { colors, radius, spacing } from "@/theme";
-import { AddressResponse, CreateAddressPayload } from "@/types/api";
+import { deliveryApi, toApiError } from "@/api";
+import { AddressResponse, CreateAddressPayload, GeocodeCandidate } from "@/types/api";
 import { validateRequired } from "@/utils/validation";
 
 const QUICK_LABELS = ["Home", "Work", "Other"];
@@ -60,6 +61,12 @@ export function AddressForm({ initial, submitLabel, loading, allowDefaultToggle 
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [error, setError] = useState<string | null>(null);
   const [locating, setLocating] = useState(false);
+  // Delivery is priced from the confirmed pin, so the customer confirms a
+  // search result for the address they typed; GPS is only a helper.
+  const [searching, setSearching] = useState(false);
+  const [candidates, setCandidates] = useState<GeocodeCandidate[] | null>(null);
+  const [providerId, setProviderId] = useState<string | null>(null);
+  const [confirmedName, setConfirmedName] = useState<string | null>(null);
 
   const set = <K extends keyof AddressFormValues>(key: K, value: AddressFormValues[K]) => {
     setValues((v) => ({ ...v, [key]: value }));
@@ -79,6 +86,9 @@ export function AddressForm({ initial, submitLabel, loading, allowDefaultToggle 
       const latitude = roundCoord(position.coords.latitude);
       const longitude = roundCoord(position.coords.longitude);
       setCoords({ latitude, longitude });
+      setProviderId(null);
+      setConfirmedName(null);
+      setCandidates(null);
 
       const [place] = await Location.reverseGeocodeAsync({ latitude, longitude });
       if (place) {
@@ -123,8 +133,40 @@ export function AddressForm({ initial, submitLabel, loading, allowDefaultToggle 
       postal_code: values.postal_code.trim(),
       latitude: coords ? roundCoord(coords.latitude) : null,
       longitude: coords ? roundCoord(coords.longitude) : null,
+      geocode_provider_id: coords ? providerId : null,
       is_default: values.is_default,
     });
+  };
+
+  const handleFindOnMap = async () => {
+    const query = [values.address_line_1, values.address_line_2, values.city, values.state, values.postal_code]
+      .map((p) => p.trim())
+      .filter(Boolean)
+      .join(", ");
+    if (values.address_line_1.trim().length < 3 || !values.city.trim()) {
+      setError("Enter your street and city first, then find it on the map.");
+      return;
+    }
+    setError(null);
+    setSearching(true);
+    try {
+      const found = await deliveryApi.geocode(query);
+      setCandidates(found);
+      if (found.length === 0) {
+        setError("We couldn't find that address on the map. Try a nearby landmark or use your current location.");
+      }
+    } catch (err) {
+      setError(toApiError(err).message);
+    } finally {
+      setSearching(false);
+    }
+  };
+
+  const handlePickCandidate = (c: GeocodeCandidate) => {
+    setCoords({ latitude: roundCoord(c.latitude), longitude: roundCoord(c.longitude) });
+    setProviderId(c.provider_id);
+    setConfirmedName(c.display_name);
+    setCandidates(null);
   };
 
   return (
@@ -141,9 +183,13 @@ export function AddressForm({ initial, submitLabel, loading, allowDefaultToggle 
       </Pressable>
       {coords ? (
         <Text variant="caption" color={colors.textMuted} style={styles.locationHint}>
-          Location detected. You can still edit any field below.
+          {confirmedName ? `Location confirmed: ${confirmedName}` : "Location saved. You can still edit any field below."}
         </Text>
-      ) : null}
+      ) : (
+        <Text variant="caption" color={colors.error} style={styles.locationHint}>
+          No map location yet - delivery can't be calculated until you confirm one.
+        </Text>
+      )}
 
       <Text variant="bodyMedium" style={styles.fieldLabel}>
         Label
@@ -202,6 +248,31 @@ export function AddressForm({ initial, submitLabel, loading, allowDefaultToggle 
         onChangeText={(v) => set("postal_code", v)}
         error={fieldErrors.postal_code}
       />
+
+      <Pressable style={[styles.locationButton, { marginTop: spacing.base }]} onPress={handleFindOnMap} disabled={searching}>
+        {searching ? (
+          <ActivityIndicator size="small" color={colors.primary} />
+        ) : (
+          <Feather name="search" size={16} color={colors.primary} />
+        )}
+        <Text variant="bodyMedium" color={colors.primary} style={{ marginLeft: spacing.sm }}>
+          {searching ? "Searching the map..." : "Find this address on the map"}
+        </Text>
+      </Pressable>
+      {candidates && candidates.length > 0 ? (
+        <View style={{ marginTop: spacing.sm }}>
+          <Text variant="caption" color={colors.textMuted}>
+            Tap the right place to confirm your delivery location:
+          </Text>
+          {candidates.map((c) => (
+            <Pressable key={`${c.provider}-${c.provider_id ?? c.display_name}`} style={styles.chip} onPress={() => handlePickCandidate(c)}>
+              <Text variant="bodySmall" numberOfLines={2}>
+                {c.display_name}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+      ) : null}
 
       {allowDefaultToggle ? (
         <View style={styles.defaultRow}>

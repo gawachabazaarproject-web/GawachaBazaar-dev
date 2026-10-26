@@ -38,6 +38,7 @@ from sqlalchemy import func, or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.core.logging import logger
 from app.core.realtime import notify_status_event
 from app.exceptions.base import BusinessValidationError, ConflictError, NotFoundError
@@ -73,9 +74,10 @@ from app.schemas.payment import PaymentResponse
 from app.schemas.refund import AdminRefundResponse
 from app.services.admin_audit import AdminAuditService
 from app.services.delivery import (
-    calculate_delivery_fee,
     distinct_product_count,
-    get_packing_point,
+    get_packing_origin,
+    price_delivery,
+    resolve_route,
 )
 from app.services.inventory_reservation import InventoryReservationService
 from app.services.order_state import (
@@ -91,6 +93,12 @@ _ACTIVE = "ACTIVE"
 _CHECKED_OUT = "CHECKED_OUT"
 _ABANDONED = "ABANDONED"
 _CENTS = Decimal("0.01")
+
+
+# `checkout(route_outcome=NOT_RESOLVED)`: look the route up itself. Callers that
+# must not do network I/O under their own locks (pay-first finalize) resolve it
+# first and pass it in (None is a valid outcome: nothing to route).
+NOT_RESOLVED = object()
 
 
 @dataclass
@@ -431,7 +439,11 @@ class OrderService:
     # ------------------------------------------------------------------
 
     def checkout(
-        self, user_id: int, data: CheckoutRequest, expected_total: Decimal | None = None
+        self,
+        user_id: int,
+        data: CheckoutRequest,
+        expected_total: Decimal | None = None,
+        route_outcome=NOT_RESOLVED,
     ) -> tuple[OrderDetailResponse, bool]:
         """Returns (order, created) - created=False when this call found an
         already-CHECKED_OUT cart and returned its existing order instead of
@@ -442,6 +454,12 @@ class OrderService:
         anything else (item price changed, promo expired...) the order is
         refused BEFORE it is created and the caller refunds the payment.
         """
+        # DEL-1: the router (network, up to ROUTING_TIMEOUT_SECONDS) is asked
+        # BEFORE any row lock is taken; the planner below only prices the
+        # result and re-validates that the inputs are unchanged.
+        if route_outcome is NOT_RESOLVED:
+            route_outcome = self._resolve_delivery_route(user_id, data.address_id)
+
         cart = (
             self.db.query(Cart)
             .filter(Cart.user_id == user_id)
@@ -475,7 +493,7 @@ class OrderService:
         if not items:
             raise ConflictError("Cannot checkout an empty cart.")
 
-        plan = self._plan_checkout(user_id, items, data, expected_total)
+        plan = self._plan_checkout(user_id, items, data, expected_total, route_outcome)
         address = plan.address
         currency = plan.currency
         order_item_rows = plan.order_item_rows
@@ -494,6 +512,9 @@ class OrderService:
             subtotal_amount=subtotal_amount,
             discount_amount=evaluation.discount_amount,
             delivery_fee=delivery_quote.fee,
+            delivery_distance_meters=delivery_quote.distance_meters,
+            routing_provider=delivery_quote.routing_provider,
+            warehouse_id=delivery_quote.warehouse_id,
             total_amount=total_amount,
             currency=currency,
             promotion_id=evaluation.promotion.id if evaluation.promotion else None,
@@ -546,6 +567,12 @@ class OrderService:
                 "Could not complete checkout due to a conflicting update."
             ) from exc
 
+        logger.info(
+            "ORDER_CREATED: order_id=%s user_id=%s address_id=%s warehouse_id=%s provider=%s "
+            "distance_m=%s delivery_fee=%s total=%s",
+            order.id, user_id, data.address_id, order.warehouse_id, order.routing_provider,
+            order.delivery_distance_meters, order.delivery_fee, order.total_amount,
+        )
         notify_status_event(
             resource="order",
             order_id=order.id,
@@ -556,8 +583,35 @@ class OrderService:
 
         return self._to_order_detail(order), True
 
+    def resolve_delivery_route(self, user_id: int, address_id: int):
+        """Public alias: route lookup for callers that hold their own locks."""
+        return self._resolve_delivery_route(user_id, address_id)
+
+    def _resolve_delivery_route(self, user_id: int, address_id: int):
+        """Plain reads (no FOR UPDATE) + the router call. Never raises: a
+        missing address or a routing error is reported later by the planner,
+        inside the transaction, in the same way as before."""
+        address = (
+            self.db.query(Address)
+            .filter(Address.id == address_id, Address.user_id == user_id)
+            .first()
+        )
+        if address is None:
+            return None
+        o_lat, o_lon, warehouse_id = get_packing_origin(self.db)
+        outcome = resolve_route(
+            (o_lat, o_lon), address.latitude, address.longitude, warehouse_id
+        )
+        # Plain SELECTs: no row locks are held while the router is called.
+        return outcome
+
     def _plan_checkout(
-        self, user_id: int, items: list[CartItem], data: CheckoutRequest, expected_total: Decimal | None
+        self,
+        user_id: int,
+        items: list[CartItem],
+        data: CheckoutRequest,
+        expected_total: Decimal | None,
+        route_outcome=None,
     ) -> "_CheckoutPlan":
         """Everything checkout needs to know BEFORE writing an order:
         validated variants/prices, the address, line rows, the promotion
@@ -680,12 +734,28 @@ class OrderService:
         # Delivery fee: free for a Bazaar (15+ different products), otherwise base + per-km.
         # Computed here from the real cart and the real address - the same
         # function the cart's quote endpoint uses - never from the client.
-        delivery_quote = calculate_delivery_fee(
+        # No network here (DEL-1). The route was resolved before the locks;
+        # it is only valid if the address and the packing point are still
+        # what it was resolved for - otherwise ask the caller to retry.
+        o_lat, o_lon, warehouse_id = get_packing_origin(self.db)
+        if not self._route_matches(route_outcome, address, (o_lat, o_lon), warehouse_id):
+            raise ConflictError(
+                "Your address or our delivery point changed while checking out. Please try again."
+            )
+        if None not in (o_lat, o_lon) and (address.latitude is None or address.longitude is None):
+            raise BusinessValidationError(
+                "This address has no map location yet. Open it in Addresses and confirm "
+                "its location on the map so we can calculate delivery."
+            )
+        delivery_quote = price_delivery(
             distinct_product_count(variants[i.variant_id].product_id for i in items),
-            address.latitude,
-            address.longitude,
-            origin=get_packing_point(self.db),
+            route_outcome,
         )
+        min_order = settings.DELIVERY_MIN_ORDER_VALUE
+        if min_order > 0 and evaluation.final_total < min_order:
+            raise BusinessValidationError(
+                f"The minimum order value is Rs {min_order:f}."
+            )
         total_amount = evaluation.final_total + delivery_quote.fee
 
         if expected_total is not None and total_amount != expected_total:
@@ -703,6 +773,20 @@ class OrderService:
             now=now,
             delivery_quote=delivery_quote,
             total_amount=total_amount,
+        )
+
+    @staticmethod
+    def _route_matches(outcome, address, origin, warehouse_id) -> bool:
+        a_has_gps = address.latitude is not None and address.longitude is not None
+        o_has = None not in origin
+        if outcome is None:
+            return not (a_has_gps and o_has)
+        return (
+            a_has_gps
+            and o_has
+            and outcome.warehouse_id == warehouse_id
+            and outcome.destination == (float(address.latitude), float(address.longitude))
+            and outcome.origin == (float(origin[0]), float(origin[1]))
         )
 
     def quote_checkout(self, user_id: int, data: CheckoutRequest) -> "_CheckoutPlan":
@@ -725,8 +809,9 @@ class OrderService:
         )
         if not items:
             raise ConflictError("Cannot checkout an empty cart.")
+        route_outcome = self._resolve_delivery_route(user_id, data.address_id)
         try:
-            plan = self._plan_checkout(user_id, items, data, None)
+            plan = self._plan_checkout(user_id, items, data, None, route_outcome)
         finally:
             # The planner row-locks variants; this is a read-only quote.
             self.db.rollback()

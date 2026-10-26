@@ -159,10 +159,9 @@ otherwise  fee = ceil( DELIVERY_BASE_FEE (40) + DELIVERY_PER_KM (10) x road_km )
 - "Items" means **different products**: the same product in two sizes counts once.
 - **Origin = the packing point.** An admin picks one active warehouse as the packing point
   (Admin -> Settings). If none is chosen the `PACKING_POINT_*` env values are the fallback.
-- **Road distance**, not straight line: Google Distance Matrix if `GOOGLE_MAPS_API_KEY` is set,
-  otherwise OSRM (`OSRM_BASE_URL`; the public demo server is for testing only). Results are
-  cached per rounded coordinate pair. If routing fails the fee falls back to straight-line x
-  `DELIVERY_ROAD_FACTOR` (1.4) instead of failing checkout.
+- **Road distance**, not straight line: OSRM (`OSRM_BASE_URL`; the public demo server is for
+  testing only), cached in Redis (or in-process). If routing fails the quote and checkout fail
+  with 503 - no straight-line guess. See `docs/05-domains/DELIVERY.md`.
 - No GPS on the address, or no origin configured: only the base fee applies and the quote is
   flagged `distance_estimated`.
 - **Gawacha Bazaar+**: a customer with `BAZAAR_PLUS_ORDERS_REQUIRED` (6) Bazaar orders in the

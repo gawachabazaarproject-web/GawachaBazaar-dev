@@ -1,0 +1,50 @@
+# AWS deployment: staging first (automatic after CI on main), production only
+# after a manual approval (protect the `production` environment with required
+# reviewers in Forgejo). NOT YET RUN - needs the AWS hosts, SSH key and secrets
+# described in docs/09-deployment-operations/AWS_PRODUCTION_PLAN.md section 13.
+# Deploys by SSH to the EC2 host and runs the repo's own deploy/smoke scripts;
+# no AWS credentials are stored in the repository or in the images.
+name: Deploy to AWS
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Git ref (tag or commit) to deploy"
+        required: true
+
+jobs:
+  staging:
+    runs-on: ubuntu
+    environment: staging
+    steps:
+      - uses: actions/checkout@v4
+        with: { ref: "${{ inputs.ref }}" }
+      - name: Deploy to staging host
+        env:
+          SSH_KEY: ${{ secrets.STAGING_SSH_KEY }}
+          HOST: ${{ secrets.STAGING_HOST }}
+        run: |
+          install -m 600 /dev/null key && printf '%s\n' "$SSH_KEY" > key
+          ssh -i key -o StrictHostKeyChecking=accept-new deploy@"$HOST" \
+            "cd /opt/gawachabazaar && git fetch --tags && git checkout ${{ inputs.ref }} && \
+             ENV_FILE=.env.aws COMPOSE_FILE_NAME=docker-compose.aws.yml deploy/scripts/deploy.sh && \
+             deploy/scripts/smoke-test.sh .env.aws"
+
+  production:
+    needs: staging
+    runs-on: ubuntu
+    environment: production   # required reviewers = the manual approval gate
+    steps:
+      - uses: actions/checkout@v4
+        with: { ref: "${{ inputs.ref }}" }
+      - name: Deploy to production host
+        env:
+          SSH_KEY: ${{ secrets.PROD_SSH_KEY }}
+          HOST: ${{ secrets.PROD_HOST }}
+        run: |
+          install -m 600 /dev/null key && printf '%s\n' "$SSH_KEY" > key
+          ssh -i key -o StrictHostKeyChecking=accept-new deploy@"$HOST" \
+            "cd /opt/gawachabazaar && git fetch --tags && git checkout ${{ inputs.ref }} && \
+             ENV_FILE=.env.aws COMPOSE_FILE_NAME=docker-compose.aws.yml deploy/scripts/deploy.sh && \
+             deploy/scripts/smoke-test.sh .env.aws"

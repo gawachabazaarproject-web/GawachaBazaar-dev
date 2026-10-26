@@ -91,6 +91,17 @@ def require_roles(*allowed_roles: str) -> Callable[..., Any]:
     return role_checker
 
 
+def user_role_names(db: Session, user_id: int) -> list[str]:
+    """Names of the roles a user holds right now (read live, never from the token)."""
+    return [
+        name
+        for (name,) in db.query(Role.name)
+        .join(UserRole, UserRole.role_id == Role.id)
+        .filter(UserRole.user_id == user_id)
+        .all()
+    ]
+
+
 def require_permission(permission: str) -> Callable[..., Any]:
     """Dependency factory enforcing a granular admin-panel permission.
 

@@ -20,8 +20,11 @@ class CreateAddressRequest(BaseSchema):
     city: str = Field(..., min_length=1, max_length=100)
     state: str = Field(..., min_length=1, max_length=100)
     postal_code: str = Field(..., min_length=1, max_length=20)
-    latitude: Decimal | None = Field(default=None, max_digits=9, decimal_places=6)
-    longitude: Decimal | None = Field(default=None, max_digits=9, decimal_places=6)
+    latitude: Decimal | None = Field(default=None, ge=-90, le=90, max_digits=9, decimal_places=6)
+    longitude: Decimal | None = Field(default=None, ge=-180, le=180, max_digits=9, decimal_places=6)
+    # Place id from POST /delivery/geocode when the pin was confirmed from a
+    # search result; informational only.
+    geocode_provider_id: str | None = Field(default=None, max_length=100)
     is_default: bool = False
 
 
@@ -34,8 +37,11 @@ class UpdateAddressRequest(BaseSchema):
     city: str | None = Field(default=None, min_length=1, max_length=100)
     state: str | None = Field(default=None, min_length=1, max_length=100)
     postal_code: str | None = Field(default=None, min_length=1, max_length=20)
-    latitude: Decimal | None = Field(default=None, max_digits=9, decimal_places=6)
-    longitude: Decimal | None = Field(default=None, max_digits=9, decimal_places=6)
+    latitude: Decimal | None = Field(default=None, ge=-90, le=90, max_digits=9, decimal_places=6)
+    longitude: Decimal | None = Field(default=None, ge=-180, le=180, max_digits=9, decimal_places=6)
+    # Place id from POST /delivery/geocode when the pin was confirmed from a
+    # search result; informational only.
+    geocode_provider_id: str | None = Field(default=None, max_length=100)
     is_default: bool | None = None
 
 

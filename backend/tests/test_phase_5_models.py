@@ -1242,7 +1242,7 @@ def test_55_inventory_lots_schema_and_uniqueness_unchanged(test_engine) -> None:
         (
             uq
             for uq in uqs
-            if set(uq["column_names"]) == {"batch_id", "variant_id", "location_id"}
+            if set(uq["column_names"]) == {"batch_id", "variant_id", "location_id", "is_share"}
         ),
         None,
     )

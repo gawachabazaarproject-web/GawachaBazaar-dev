@@ -13,6 +13,7 @@ from decimal import Decimal
 from sqlalchemy.orm import Session
 from starlette.testclient import TestClient
 
+from app.core.config import settings
 from app.core.roles import ADMIN, CUSTOMER, WHOLESALER
 from app.core.security import hash_password
 from app.models.address import Address
@@ -430,11 +431,11 @@ def test_22_successful_checkout(client: TestClient, db_session: Session) -> None
     )
     assert response.status_code == 201
     body = response.json()
-    # 3 x 25.00 of ONE product: not a 15-product Bazaar, so the Rs 20 base
-    # delivery fee applies (no packing point / GPS in this test).
+    # 3 x 25.00 of ONE product: not a 15-product Bazaar, so the base delivery
+    # fee applies (no packing point / GPS in this test).
     assert body["subtotal_amount"] == "75.00"
-    assert body["delivery_fee"] == "20.00"
-    assert body["total_amount"] == "95.00"
+    assert Decimal(body["delivery_fee"]) == settings.DELIVERY_BASE_FEE
+    assert Decimal(body["total_amount"]) == Decimal("75.00") + settings.DELIVERY_BASE_FEE
     assert len(body["items"]) == 1
 
 
@@ -491,8 +492,8 @@ def test_26_correct_order_total(client: TestClient, db_session: Session) -> None
     # 2*10.55 + 5*3.20 = 21.10 + 16.00 = 37.10 of goods, plus the Rs 20 base
     # delivery fee (2 products - not a 15-product Bazaar).
     assert body["subtotal_amount"] == "37.10"
-    assert body["delivery_fee"] == "20.00"
-    assert body["total_amount"] == "57.10"
+    assert Decimal(body["delivery_fee"]) == settings.DELIVERY_BASE_FEE
+    assert Decimal(body["total_amount"]) == Decimal("37.10") + settings.DELIVERY_BASE_FEE
 
     db_session.expire_all()
     order = db_session.query(Order).filter_by(id=body["id"]).first()
