@@ -13,4 +13,5 @@ export { pushApi } from "./pushApi";
 export { homeSlidesApi } from "./homeSlidesApi";
 export { wishlistApi } from "./wishlistApi";
 export { bazaarApi } from "./bazaarApi";
+export { deliveryApi } from "./deliveryApi";
 export { offersApi } from "./offersApi";

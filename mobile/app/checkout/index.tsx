@@ -39,7 +39,7 @@ export default function CheckoutScreen() {
   const onlineCheckout = useOnlineCheckout();
 
   const [selectedAddressId, setSelectedAddressId] = useState<number | null>(null);
-  const { data: deliveryQuote } = useDeliveryQuote(selectedAddressId);
+  const { data: deliveryQuote, error: quoteError } = useDeliveryQuote(selectedAddressId);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("COD");
   const [result, setResult] = useState<PlaceOrderResult | null>(null);
   const [day, setDay] = useState<Day>("today");
@@ -516,6 +516,23 @@ export default function CheckoutScreen() {
             Amount to pay on delivery: {formatMoney(total, cart.currency ?? "INR")}
           </Text>
         ) : null}
+        {/* The server could not price delivery (outside the delivery area,
+            routing down): say why - it will refuse the order too. */}
+        {quoteError ? (
+          <Text variant="caption" color={colors.error} style={styles.footerNote}>
+            {toApiError(quoteError).code === "DELIVERY_UNAVAILABLE"
+              ? `Delivery unavailable for this address. ${toApiError(quoteError).message}`
+              : toApiError(quoteError).message}
+          </Text>
+        ) : deliveryQuote?.needs_location ? (
+          <Text variant="caption" color={colors.error} style={styles.footerNote}>
+            This address has no map location. Edit it in Addresses and tap "Find this address on the map".
+          </Text>
+        ) : deliveryQuote?.distance_km ? (
+          <Text variant="caption" color={colors.textSecondary} style={styles.footerNote}>
+            Distance: {deliveryQuote.distance_km} km by road
+          </Text>
+        ) : null}
         {/* Order creation itself failed (offline, out of stock, ...) - no
             order exists, so say why instead of silently doing nothing. */}
         {placeOrder.error ? (
@@ -544,9 +561,9 @@ export default function CheckoutScreen() {
             </Text>
           </View>
           <Pressable
-            style={[styles.placeOrderButton, (!selectedAddressId || placeOrder.isPending || onlineCheckout.busy) && styles.disabled]}
+            style={[styles.placeOrderButton, (!selectedAddressId || !!quoteError || !!deliveryQuote?.needs_location || placeOrder.isPending || onlineCheckout.busy) && styles.disabled]}
             onPress={handlePlaceOrder}
-            disabled={!selectedAddressId || placeOrder.isPending || onlineCheckout.busy}
+            disabled={!selectedAddressId || !!quoteError || !!deliveryQuote?.needs_location || placeOrder.isPending || onlineCheckout.busy}
           >
             <Text variant="bodyMedium" color={colors.textOnAccent}>
               {placeOrder.isPending || onlineCheckout.busy ? "Please wait..." : paymentMethod === "UPI" ? "Pay Now" : "Place Order"}
