@@ -24,7 +24,7 @@ from app.schemas.bazaar import BazaarStatusResponse, DeliveryQuoteResponse
 from app.services.delivery import (
     calculate_delivery_fee,
     distinct_product_count,
-    get_packing_point,
+    get_packing_origin,
 )
 
 _NOT_COUNTED = ("CANCELLED", "EXPIRED")
@@ -60,6 +60,7 @@ class BazaarService:
 
     def delivery_quote(self, user_id: int, address_id: int | None) -> DeliveryQuoteResponse:
         lat = lon = None
+        found = False
         if address_id is not None:
             address = (
                 self.db.query(Address)
@@ -67,9 +68,14 @@ class BazaarService:
                 .first()
             )
             if address:
+                found = True
                 lat, lon = address.latitude, address.longitude
+        o_lat, o_lon, warehouse_id = get_packing_origin(self.db)
+        needs_location = (
+            found and None not in (o_lat, o_lon) and (lat is None or lon is None)
+        )
         quote = calculate_delivery_fee(
-            self._cart_product_count(user_id), lat, lon, origin=get_packing_point(self.db)
+            self._cart_product_count(user_id), lat, lon, origin=(o_lat, o_lon), warehouse_id=warehouse_id
         )
         return DeliveryQuoteResponse(
             fee=quote.fee,
@@ -80,6 +86,7 @@ class BazaarService:
             distance_km=quote.distance_km,
             distance_estimated=quote.distance_estimated,
             currency="INR",
+            needs_location=needs_location,
         )
 
     def status(self, user_id: int) -> BazaarStatusResponse:

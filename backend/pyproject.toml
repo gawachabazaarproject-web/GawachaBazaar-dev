@@ -52,6 +52,9 @@ minversion = "8.0"
 testpaths = ["tests"]
 python_files = ["test_*.py"]
 asyncio_mode = "auto"
+markers = [
+    "integration: needs real PostgreSQL + Redis + OSRM (run with GB_INTEGRATION=1; see docs/05-domains/DELIVERY.md)",
+]
 filterwarnings = [
     "ignore::DeprecationWarning",
     "ignore:.*deprecated.*:Warning",

@@ -4,9 +4,10 @@ user's own address book. See app/services/address.py for why this exists
 previously no API path to ever create one).
 """
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Request, status
 from sqlalchemy.orm import Session
 
+from app.core.rate_limit import limiter, user_or_ip_key
 from app.core.roles import CUSTOMER
 from app.dependencies.auth import get_current_user, require_roles
 from app.dependencies.database import get_db
@@ -35,7 +36,9 @@ def list_addresses(
     status_code=status.HTTP_201_CREATED,
     summary="Add a new address to the current user's address book",
 )
+@limiter.limit("20/minute", key_func=user_or_ip_key)
 def create_address(
+    request: Request,  # required by slowapi
     payload: CreateAddressRequest,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -61,7 +64,9 @@ def get_address(
     response_model=AddressResponse,
     summary="Update one of the current user's addresses",
 )
+@limiter.limit("30/minute", key_func=user_or_ip_key)
 def update_address(
+    request: Request,  # required by slowapi
     address_id: int,
     payload: UpdateAddressRequest,
     current_user: User = Depends(get_current_user),

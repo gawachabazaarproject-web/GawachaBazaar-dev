@@ -70,7 +70,7 @@ Rules that define the boundary: the client is never trusted for identity (token 
 | T14 | Denial of service / overload | Gzip, health probes, Caddy body cap | **PERF-001:** pool starvation → 100 % timeouts and ~6 min recovery at ~100 concurrent users; HPA scales on CPU which does not move; no WAF/CDN; Render cold start ≈ 44 s |
 | T15 | Insider data scraping (staff) | Role-limited endpoints; SUPPORT is read-only with masked phone | **PRIV-1:** order detail exposes phone/email to `orders.read`; no bulk-export endpoint exists, but reads of personal data are not access-logged |
 | T16 | Silent configuration failure (e.g. bad secret → all sign-ins 503; missing env → dev defaults) | Production start-up validation (partial) | Observed on 2026-10-14; CFG-1 |
-| T17 | Third-party outage (Firebase, Razorpay, routing, Expo) | Documented fallbacks: routing → haversine; payments → COD; push best-effort | Firebase/Razorpay outage blocks sign-in/online payment by design; no status monitoring |
+| T17 | Third-party outage (Firebase, Razorpay, routing, Expo) | Documented fallbacks: routing → quote/checkout fail closed (503), no guess; payments → COD; push best-effort | Firebase/Razorpay outage blocks sign-in/online payment by design; no status monitoring |
 | T18 | Refund fraud / mistaken refund | Admin approval, one refund per order, process guard, audit | Refund stuck in `PROCESSING` after a lost response has no in-app resolution (G-REF-1); audit rows not viewable |
 
 ## 5. Assumptions

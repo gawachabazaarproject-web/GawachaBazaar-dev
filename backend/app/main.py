@@ -12,6 +12,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.api.v1.router import api_router
+from app.core.concurrency import InflightLimitMiddleware
 from app.core.config import settings
 from app.core.logging import logger
 from app.core.rate_limit import limiter
@@ -105,6 +106,23 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             "Razorpay is using TEST keys (rzp_test_...) in production - no "
             "real money will be collected. Switch to rzp_live_ keys to go live."
         )
+    # Delivery routing: in production say loudly what is not production-grade.
+    if settings.is_production:
+        if not settings.REDIS_URL:
+            logger.warning(
+                "REDIS_URL is not set: route distances are cached in-process only "
+                "(per worker, lost on restart). Set REDIS_URL for a shared cache."
+            )
+        if settings.PACKING_POINT_LATITUDE is None and settings.PACKING_POINT_LONGITUDE is None:
+            logger.warning(
+                "PACKING_POINT_* is not set: delivery distance needs an admin-chosen "
+                "packing point (Admin -> Settings), else only the base fee is charged."
+            )
+        if "router.project-osrm.org" in settings.OSRM_BASE_URL:
+            logger.warning(
+                "OSRM_BASE_URL is the public demo server (best effort, no SLA): "
+                "self-host OSRM for production."
+            )
     # Uploads - see the comment above.
     if settings.is_production and not (
         settings.CLOUDINARY_CLOUD_NAME
@@ -137,6 +155,14 @@ def create_application() -> FastAPI:
         redoc_url="/redoc" if not settings.is_production else None,
         openapi_url="/openapi.json" if not settings.is_production else None,
         lifespan=lifespan,
+    )
+
+    # Cap in-flight requests at the DB pool size (innermost, so request-id
+    # logging and CORS still wrap the 503 it can produce).
+    app.add_middleware(
+        InflightLimitMiddleware,
+        max_inflight=settings.MAX_INFLIGHT_REQUESTS,
+        queue_timeout=settings.INFLIGHT_QUEUE_TIMEOUT_SECONDS,
     )
 
     # Compress JSON responses - catalog/home payloads are large and the
@@ -235,6 +261,39 @@ def create_application() -> FastAPI:
                     "database": "disconnected",
                 },
             )
+
+    @app.get(
+        "/readiness",
+        tags=["health"],
+        summary="Readiness: can this instance serve traffic?",
+    )
+    def readiness(db: Session = Depends(get_db)) -> JSONResponse:
+        """DB must answer (503 otherwise). Redis is an optional cache and only
+        reported. OSRM/Nominatim/Razorpay are deliberately NOT called here - a
+        probe must be cheap and an outage of an external dependency must not
+        pull the whole API out of rotation."""
+        checks: dict[str, str] = {}
+        ok = True
+        try:
+            db.execute(text("SELECT 1"))
+            checks["database"] = "ok"
+        except Exception as exc:  # noqa: BLE001
+            logger.error("Readiness: database probe failed: %s", type(exc).__name__)
+            checks["database"] = "down"
+            ok = False
+        if settings.REDIS_URL:
+            from app.services.routing.cache import route_cache
+
+            checks["redis"] = "ok" if route_cache.ping() else "degraded (in-process cache)"
+        else:
+            checks["redis"] = "not configured (in-process cache)"
+        checks["origin"] = (
+            "configured" if settings.PACKING_POINT_LATITUDE is not None else "env-fallback-unset"
+        )
+        return JSONResponse(
+            status_code=status.HTTP_200_OK if ok else status.HTTP_503_SERVICE_UNAVAILABLE,
+            content={"status": "ready" if ok else "not_ready", "checks": checks},
+        )
 
     return app
 

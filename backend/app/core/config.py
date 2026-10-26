@@ -12,6 +12,9 @@ class Settings(BaseSettings):
         env_file=".env",
         env_file_encoding="utf-8",
         extra="ignore",
+        # `FOO=` (blank, as in .env.example) means "use the default"; without
+        # this a blank numeric setting such as PACKING_POINT_LATITUDE= crashes startup.
+        env_ignore_empty=True,
         case_sensitive=True,
     )
 
@@ -68,14 +71,44 @@ class Settings(BaseSettings):
     # Fallback origin; the admin-chosen packing point (Settings page) wins.
     PACKING_POINT_LATITUDE: float | None = None
     PACKING_POINT_LONGITUDE: float | None = None
-    # Road-distance routing. GOOGLE_MAPS_API_KEY (Distance Matrix API) is used
-    # when set; otherwise OSRM_BASE_URL (the public demo server is fine for
-    # testing only - self-host or use a paid router in production). If routing
-    # fails, straight-line distance x DELIVERY_ROAD_FACTOR is charged instead.
-    GOOGLE_MAPS_API_KEY: str = ""
+    # PostgreSQL pool (per worker; production runs ONE worker, so this is also the
+    # per-instance total). Keep pool_size + max_overflow well below the RDS
+    # max_connections (db.t4g.micro ~ 110) after adding any second worker/replica.
+    # The timeouts are applied server-side on every connection; 0 disables one.
+    DB_POOL_SIZE: int = 12
+    DB_MAX_OVERFLOW: int = 12
+    # In-flight HTTP request cap; MUST be <= DB_POOL_SIZE + DB_MAX_OVERFLOW (each
+    # request holds a connection) - see app/core/concurrency.py. 0 disables.
+    MAX_INFLIGHT_REQUESTS: int = 24
+    INFLIGHT_QUEUE_TIMEOUT_SECONDS: float = 15.0
+    DB_POOL_TIMEOUT_SECONDS: int = 10
+    DB_POOL_RECYCLE_SECONDS: int = 1800
+    DB_STATEMENT_TIMEOUT_MS: int = 20000
+    DB_IDLE_IN_TRANSACTION_TIMEOUT_MS: int = 60000
+
+    # Road-distance routing (OpenStreetMap-based, no paid API). ROUTING_PROVIDER
+    # selects the RoutingProvider; "osrm" is the only one today. The public OSRM
+    # demo server is for development/testing only - self-host OSRM in production
+    # (docs/05-domains/DELIVERY.md). If routing fails the quote FAILS (503): a
+    # straight-line guess is never presented as a road distance.
+    ROUTING_PROVIDER: Literal["osrm"] = "osrm"
     OSRM_BASE_URL: str = "https://router.project-osrm.org"
     ROUTING_TIMEOUT_SECONDS: float = 3.0
-    DELIVERY_ROAD_FACTOR: float = 1.4
+    # Customers farther than this by road cannot be delivered to. 0 = no limit
+    # (the previous behaviour; the fee is still capped by DELIVERY_MAX_CHARGED_KM).
+    DELIVERY_MAX_DISTANCE_KM: float = 0.0
+    # Orders below this subtotal (after discount) are refused at checkout. 0 = off.
+    DELIVERY_MIN_ORDER_VALUE: Decimal = Decimal("0")
+    # Redis caches road distances only (never fees). Empty = in-process cache.
+    # Redis being down never breaks delivery - routing is simply called directly.
+    REDIS_URL: str = ""
+    ROUTE_CACHE_TTL_SECONDS: int = 7 * 24 * 3600
+    # Geocoding (address search -> coordinates). Public Nominatim allows ~1
+    # request/second and forbids autocomplete; it needs an identifying User-Agent.
+    GEOCODING_PROVIDER: Literal["nominatim"] = "nominatim"
+    NOMINATIM_BASE_URL: str = "https://nominatim.openstreetmap.org"
+    NOMINATIM_USER_AGENT: str = "GawachaBazaar/1.0 (gawachabazaar.project@gmail.com)"
+    GEOCODING_TIMEOUT_SECONDS: float = 5.0
     BAZAAR_PLUS_ORDERS_REQUIRED: int = 6
     BAZAAR_TIMEZONE: str = "Asia/Kolkata"
 

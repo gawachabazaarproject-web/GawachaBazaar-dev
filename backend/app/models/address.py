@@ -78,6 +78,13 @@ class Address(Base):
         Numeric(9, 6),
         nullable=True,
     )
+    # Set when the pin was confirmed from a geocoder search (null if the
+    # coordinates came from the device GPS or were never set).
+    geocode_provider: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    geocode_provider_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    geocoded_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     is_default: Mapped[bool] = mapped_column(
         Boolean,
         default=False,

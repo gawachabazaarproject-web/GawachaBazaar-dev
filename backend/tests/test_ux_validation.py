@@ -485,3 +485,16 @@ def test_warehouse_staff_may_work_on_every_warehouse_today(client, db_session) -
         json={"amount": "1", "amount_unit": "KG", "reason": "Damaged", "location_id": b.id},
         headers=hub,
     ).status_code == 200
+
+
+def test_the_public_readiness_probe_shares_no_business_data(client) -> None:
+    """/readiness is public on purpose (orchestrator probe, same class as /health/db)."""
+    response = client.get("/readiness")  # no credentials at all
+    assert response.status_code == 200
+    body = response.json()
+    assert set(body) == {"status", "checks"}
+    assert set(body["checks"]) <= {"database", "redis", "origin"}
+    assert all(isinstance(v, str) and len(v) < 60 for v in body["checks"].values())
+    text = response.text.lower()
+    for forbidden in ("product", "stock", "inventory", "user", "order", "password", "postgresql://", "latitude"):
+        assert forbidden not in text

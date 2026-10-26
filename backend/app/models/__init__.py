@@ -41,8 +41,8 @@ from app.models.payment_transaction import PaymentTransaction
 from app.models.payment_webhook_event import PaymentWebhookEvent
 from app.models.price import Price
 from app.models.product import Product
-from app.models.product_image import ProductImage
 from app.models.product_category import ProductCategory
+from app.models.product_image import ProductImage
 from app.models.product_variant import ProductVariant
 from app.models.promotion import Promotion
 from app.models.promotion_eligible_customer import PromotionEligibleCustomer

@@ -27,9 +27,12 @@ Legend — **When:** *runtime* = read when the process starts/handles requests; 
 | `DELIVERY_PER_KM` | Fee per road km (Rs) | No | runtime | No | `10` |
 | `DELIVERY_MAX_CHARGED_KM` | Distance cap for pricing | No | runtime | No | `30.0` |
 | `PACKING_POINT_LATITUDE`, `PACKING_POINT_LONGITUDE` | Fallback origin when no packing-point warehouse is chosen | No | runtime | No | unset |
-| `GOOGLE_MAPS_API_KEY` | Distance Matrix key; else OSRM is used | No | runtime | **Yes** | empty |
-| `OSRM_BASE_URL` | OSRM router (public demo server by default; "testing only") | No | runtime | No | `https://router.project-osrm.org` |
-| `ROUTING_TIMEOUT_SECONDS`, `DELIVERY_ROAD_FACTOR` | Routing timeout; fallback multiplier | No | runtime | No | `3.0`, `1.4` |
+| `ROUTING_PROVIDER`, `OSRM_BASE_URL`, `ROUTING_TIMEOUT_SECONDS` | Road-distance provider (only `osrm`), its URL (public demo server by default: development only), request timeout | No | runtime | No | `osrm`, `https://router.project-osrm.org`, `3.0` |
+| `DELIVERY_MAX_DISTANCE_KM`, `DELIVERY_MIN_ORDER_VALUE` | Maximum road distance deliverable (0 = none); minimum order value after discount (0 = off) | No | runtime | No | `0`, `0` |
+| `DB_POOL_SIZE`, `DB_MAX_OVERFLOW`, `MAX_INFLIGHT_REQUESTS`, `INFLIGHT_QUEUE_TIMEOUT_SECONDS` | SQLAlchemy pool per worker; in-flight HTTP cap (must be <= pool total); queue wait before 503 `SERVER_BUSY` | No | runtime | No | `12`, `12`, `24`, `15` |
+| `DB_STATEMENT_TIMEOUT_MS`, `DB_IDLE_IN_TRANSACTION_TIMEOUT_MS`, `DB_POOL_TIMEOUT_SECONDS`, `DB_POOL_RECYCLE_SECONDS` | Server-side query / idle-transaction guards (0 = off); pool wait; connection recycle | No | runtime | No | `20000`, `60000`, `10`, `1800` |
+| `REDIS_URL`, `ROUTE_CACHE_TTL_SECONDS` | Route-distance cache (empty = in-process); TTL | No | runtime | URL may hold a password: **Yes** | empty, `604800` |
+| `GEOCODING_PROVIDER`, `NOMINATIM_BASE_URL`, `NOMINATIM_USER_AGENT`, `GEOCODING_TIMEOUT_SECONDS` | Address search (`POST /delivery/geocode`); Nominatim policy needs an identifying User-Agent | No | runtime | No | `nominatim`, public URL, project UA, `5.0` |
 | `BAZAAR_PLUS_ORDERS_REQUIRED`, `BAZAAR_TIMEZONE` | Bazaar+ threshold and month boundary zone | No | runtime | No | `6`, `Asia/Kolkata` |
 | `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET` | Image uploads; empty ⇒ uploads return 503 | No | runtime | key + secret **Yes** | empty |
 | `ALLOWED_ORIGINS` | CORS allow-list; JSON list or comma-separated | No (but needed for browser clients) | runtime | No | `["http://localhost:3000","http://localhost:5173"]` |
@@ -51,7 +54,7 @@ Legacy/unused: `JWT_SECRET_KEY`, `JWT_ALGORITHM`, `ACCESS_TOKEN_EXPIRE_MINUTES`,
 | `FIREBASE_SERVICE_ACCOUNT_JSON`, `RAZORPAY_*`, `CLOUDINARY_*` | passed to backend | optional | secrets |
 | `BACKUP_RETENTION_DAYS`, `BACKUP_INTERVAL_SECONDS` | db-backup loop | No | `14`, `86400` |
 
-> **Discrepancy:** `.env.production.example` also lists `FREE_DELIVERY_MIN_ITEMS`, `DELIVERY_BASE_FEE`, `DELIVERY_PER_KM`, `DELIVERY_MAX_CHARGED_KM`, `PACKING_POINT_*`, `GOOGLE_MAPS_API_KEY`, `OSRM_BASE_URL`, `ROUTING_TIMEOUT_SECONDS`, `DELIVERY_ROAD_FACTOR`, `BAZAAR_PLUS_ORDERS_REQUIRED`, `BAZAAR_TIMEZONE`, but the compose file's `x-backend-env` block **does not pass any of them** to the backend container. In the compose deployment these variables have **no effect**; the code defaults apply. `docker-compose.yml` (dev) likewise passes only a subset.
+> **Delivery variables in compose (changed 2026-10-26):** `docker-compose.prod.yml` now forwards the delivery, routing, Redis and Nominatim variables (defaults equal the code defaults) and runs a `redis` service. `BAZAAR_PLUS_ORDERS_REQUIRED` and `BAZAAR_TIMEZONE` are still **not** forwarded; `docker-compose.yml` (dev) passes only a subset.
 
 Development compose (`docker-compose.yml`): `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` (defaults `postgres`/`postgres`/`gawachabazaar`, host port 5433), `FIREBASE_PROJECT_ID`, `FIREBASE_SERVICE_ACCOUNT_JSON`, `CLOUDINARY_*`, `RAZORPAY_*`.
 

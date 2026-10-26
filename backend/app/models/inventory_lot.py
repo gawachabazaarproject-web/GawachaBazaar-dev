@@ -13,8 +13,8 @@ from sqlalchemy import (
     Numeric,
     String,
     UniqueConstraint,
-    func,
     false,
+    func,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 

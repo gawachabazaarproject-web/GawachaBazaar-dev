@@ -10,6 +10,7 @@
   "GET /api/v1/ping",
   "GET /health",
   "GET /health/db",
+  "GET /readiness",
   "POST /api/v1/auth/legacy-migrate",
   "POST /api/v1/payments/webhooks/{gateway_slug}"
  ],
@@ -365,6 +366,12 @@
   ],
   "POST /api/v1/catalog/variants/{variant_id}/prices": [
    "CATALOG_STAFF"
+  ],
+  "POST /api/v1/delivery/geocode": [
+   "CUSTOMER"
+  ],
+  "POST /api/v1/delivery/quote": [
+   "CUSTOMER"
   ],
   "POST /api/v1/fulfillments/{fulfillment_id}/assign": [
    "HUB_STAFF",

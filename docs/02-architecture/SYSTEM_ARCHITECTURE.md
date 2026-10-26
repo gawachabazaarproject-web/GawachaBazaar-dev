@@ -124,7 +124,7 @@ There is **no queue, scheduler, Redis or Celery**. The only recurring job is the
 | Service-account JSON invalid/missing file | Same 503 for **every** sign-in (observed in production on 2026-10-14; resolved by removing the variable) | `core/firebase.py` |
 | Gateway timeout/connection error | HTTP 502; payment stays `PROCESSING`; webhook or `/verify` resolves | `exceptions/handlers.py`, `payment.py` |
 | Database error | Unhandled → generic 500 envelope (stack trace logged, not returned) | `exceptions/handlers.py` |
-| Routing API down | Fee falls back to haversine × `DELIVERY_ROAD_FACTOR` | `delivery.py` |
+| Routing API down | Quote and checkout fail with 503 (no straight-line fallback) | `delivery.py` |
 | Push/realtime failure | Logged, never raised into the request | `push.py`, `realtime.py` |
 
 Full error contract: [ERROR_HANDLING](ERROR_HANDLING.md). Request flows: [DATA_FLOW](DATA_FLOW.md). Decisions and their rationale: [ARCHITECTURE_DECISIONS](ARCHITECTURE_DECISIONS.md).

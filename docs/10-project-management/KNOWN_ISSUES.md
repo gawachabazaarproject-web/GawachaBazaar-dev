@@ -78,6 +78,17 @@
 | DEP-3 (new) | Low | Confirmed | No Python lockfile or dependency scan; `pyproject.toml` out of sync with `requirements.txt`; redundant `PyJWT`/`python-dotenv`; stale `alembic.ini` URL | [DEPENDENCY_MANAGEMENT](../06-development/DEPENDENCY_MANAGEMENT.md), [MIGRATIONS](../04-database/MIGRATIONS.md) |
 | DOC-1 (new) | Medium | Confirmed | Existing docs contained errors, now corrected where verified: `FEATURES.md` said push notifications are not implemented (they are), described an Audit-log page as live, listed the slot picker as a feature; `ARCHITECTURE.md` described only the reserve-then-pay flow and omitted pay-first checkout sessions. Stale comments remain in code (PNB gateway, JWT sessions, "no audit log exists yet", missing `PHASE_14_PAYMENTS.md`) | [AI_STATUS](../00-overview/AI_STATUS.md) |
 | DOC-2 (new) | Info | Confirmed | `docs/testing/EXISTING_TEST_INVENTORY.md` still describes the pre-SEC-001 fixtures (string-replace test DB) in places | that file |
+| DEL-1 | P0 | **Fixed 2026-10-26** | Router was called inside `_plan_checkout` while cart/variant row locks were held. Now resolved before locking; proven by a `FOR UPDATE NOWAIT` probe test | `services/order.py`, `tests/test_delivery_hardening.py` |
+| DEL-2 | P1 | **Fixed** | Blank numeric env values (`PACKING_POINT_LATITUDE=` as in `.env.example`) crashed startup; `env_ignore_empty=True` | `core/config.py` |
+| DEL-3 | P1 | **Fixed (not deployed)** | `docker-compose.prod.yml` forwarded no delivery/routing/Redis variables and had no Redis; added both (defaults = code defaults) | `docker-compose.prod.yml` |
+| DEL-4 | P1 | **Fixed** | OSRM answers "Ok"/0 m for points far from any road (swapped lat/lng proven live); snap guard -> 422 | `services/routing/osrm.py` |
+| DEL-5 | P1 | **Fixed** | Address without map location could be ordered with only the base fee; now 422 (origin configured) and `needs_location` in the quote | `services/order.py`, `services/bazaar.py` |
+| DEL-6 | P1 | **Open - launch decision** | Public OSRM/Nominatim are best-effort without SLA; self-host OSRM before real traffic | [DELIVERY](../05-domains/DELIVERY.md) |
+| DEL-7 | P2 | **Fixed 2026-10-27** | Pay-first `complete`/`verify`/webhook now resolve the route BEFORE locking the checkout-session row and pass it to `OrderService.checkout(route_outcome=...)`; proven by `tests/test_delivery_payfirst_locks.py` (probe fails if the old order is restored) | `services/checkout_session.py` |
+| DEL-8 | P2 | **Blocked (external)** | Mobile flow not run on any emulator/device. Needs: an Android emulator image (not installed; ~2-3 GB) or a USB device, a dev build, a Firebase test account for the app's Firebase project, and a backend reachable from the device | [DELIVERY](../05-domains/DELIVERY.md) |
+| DEL-9 | P2 | **Blocked (external)** | Real Firebase login and Razorpay payment not exercised (test double / fake gateway only). Needs a Firebase test user and Razorpay *test-mode* keys; neither was provided | tests |
+| DEL-10 | P3 | **Fixed 2026-10-27** | Removed the dead `addressApi.deliveryQuote`, the unused `useDeliveryQuote` in `features/address`, the `DeliveryQuote` type and `utils/delivery.ts`; the only delivery-quote call left is the real `/bazaar/delivery-quote` | mobile |
+| DEL-11 | P3 | **Fixed** | 7 tests hard-coded the old Rs 20 base fee (FEE-1); the suite now pins the fee rule | `tests/conftest.py` |
 
 ## Product / inventory UX milestone (2026-10-26)
 
@@ -92,6 +103,7 @@
 | UX-7 | P2 | **Open** | Admin UI changes (Add product, product page, Inventory page, dialogs) were built and type-checked (`tsc`, `next build`) and the pure logic has `node --test` tests, but they were **never run signed-in in a browser**; usability not tested with real staff | `Admin/` |
 | UX-8 | P3 | **Open** | Inventory "Low / Out / Expiring" filters judge every product (slower path, chunked); fine for hundreds of products, revisit at thousands | `InventoryService.admin_list_product_stock` |
 | UX-9 | P3 | **Open** | Per-user warehouse access, category shelf life, bulk import / CSV, bulk price and stock updates, server-side "needs attention" list filter are not built | [PRODUCT_INVENTORY_SIMPLIFICATION_AUDIT](PRODUCT_INVENTORY_SIMPLIFICATION_AUDIT.md) |
+| DEL-12 | P1 | **Open (external)** | The real Gawacha warehouse coordinates are not in the repo or the dev database; all live validation used a stand-in. Set `PACKING_POINT_*` or choose the packing point in Admin -> Settings, then re-run the live suite with `GB_WAREHOUSE_LAT/LNG` | [DELIVERY](../05-domains/DELIVERY.md) |
 
 ## Validation pass (2026-10-26, after the UX milestone)
 
@@ -119,6 +131,11 @@
 | HARD-5 | P3 | **Documented** | `/readiness` (other session) is public on purpose and exposes only database/redis/origin state strings; covered by a test | [DEPLOYMENT](../09-deployment-operations/DEPLOYMENT.md) |
 | HARD-6 | P2 | **Open - business** | Real Firebase sign-in was not tested (no credentials available here); all browser runs used a local sign-in stand-in | - |
 | HARD-7 | P3 | **Open** | Three small copies of the unit-family table remain (`inventory.ts`, `product-form.ts`, `ProductStockView.tsx`); stock status, readiness, expiry wording and stock dialogs are single implementations | Admin |
+| DEL-13 | P1 | **Fixed 2026-10-27** | Load test: at 100 concurrent users the API collapsed (92% 500/ReadError) - pool 5+10 vs 40 AnyIO threads, each request holding a connection while waiting for threads. Fix: in-flight cap = pool size (`core/concurrency.py`), pool 12+12, 503 `SERVER_BUSY` shedding; 0 errors at 100 users afterwards | `app/core/concurrency.py`, [AWS plan](../09-deployment-operations/AWS_PRODUCTION_PLAN.md) §6.1 |
+| DEL-14 | P2 | **Open (decision)** | One Python process is CPU-bound at ~40-47 req/s on a fast desktop core (~60 ms CPU/request: ~28% FastAPI route matching over ~200 routes, rest ORM). Graviton capacity unmeasured. Options: TTL cache for anonymous catalog GETs, route-table flattening, 2+ workers after moving rate limiter/WebSocket hub/sweep to Redis | AWS plan §6.1 |
+| DEL-15 | P3 | **Open** | Cloudinary: MIME check trusts the client content type; deleting a product image does not delete the Cloudinary asset | `services/image_upload.py` |
+| DEL-16 | P2 | **Open** | `requirements.txt` has version ranges and no lock file; base images not pinned by digest (non-reproducible builds) | `backend/Dockerfile` |
+| DEL-17 | P2 | **Blocked (external)** | AWS: no account/credentials - nothing created, restored or load-tested on AWS; CI/CD workflows written but never run | AWS plan §16 |
 
 ## How to use this register
 

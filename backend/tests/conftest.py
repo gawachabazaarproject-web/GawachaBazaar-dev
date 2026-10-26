@@ -82,6 +82,26 @@ def firebase_fake():
 
 
 @pytest.fixture(autouse=True)
+def offline_routing(request, monkeypatch) -> None:
+    """The ordinary suite never depends on public Internet services: the
+    default routing provider is a stub that fails like an unreachable router.
+    Tests that need a route inject their own provider; tests marked
+    `integration` use the real one."""
+    if request.node.get_closest_marker("integration"):
+        return
+    from app.services.routing import service as routing_service
+    from app.services.routing.base import RoutingError, RoutingProvider
+
+    class _Offline(RoutingProvider):
+        name = "offline"
+
+        def calculate_route(self, *_a):
+            raise RoutingError("routing is disabled in the unit-test suite")
+
+    monkeypatch.setattr(routing_service, "get_routing_provider", lambda: _Offline())
+
+
+@pytest.fixture(autouse=True)
 def reset_rate_limiter() -> None:
     """`limiter` (app/core/rate_limit.py) is a module-level singleton shared
     by every request the test app handles, in-process, for the lifetime of

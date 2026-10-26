@@ -1220,7 +1220,7 @@ def test_50_unique_batch_variant_location_constraint_exists(test_engine) -> None
         (
             uq
             for uq in unique_constraints
-            if set(uq["column_names"]) == {"batch_id", "variant_id", "location_id"}
+            if set(uq["column_names"]) == {"batch_id", "variant_id", "location_id", "is_share"}
         ),
         None,
     )

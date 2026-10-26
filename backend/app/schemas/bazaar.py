@@ -19,6 +19,9 @@ class DeliveryQuoteResponse(BaseSchema):
     # part whenever the chosen address has GPS.
     distance_estimated: bool
     currency: str
+    # The chosen address has no map location, so delivery cannot be priced or
+    # ordered until the customer confirms one (checkout refuses it with 422).
+    needs_location: bool = False
 
 
 class BazaarStatusResponse(BaseSchema):

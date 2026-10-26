@@ -45,7 +45,7 @@ from app.schemas.online_checkout import (
 )
 from app.schemas.order import CheckoutRequest
 from app.schemas.payment import ConfirmCheckoutRequest, PaymentResponse
-from app.services.order import OrderService
+from app.services.order import NOT_RESOLVED, OrderService
 from app.services.payment import OnlinePaymentsUnavailableError, PaymentService
 from app.services.payment_gateway import GatewayError, PaymentGateway
 from app.services.payment_state import PaymentStatus, TransactionStatus
@@ -195,6 +195,7 @@ class CheckoutSessionService:
     def complete(
         self, user_id: int, session_id: int, data: ConfirmCheckoutRequest
     ) -> OnlineCheckoutCompleteResponse:
+        route_outcome = self._route_before_lock(session_id, user_id)
         session = (
             self.db.query(CheckoutSession)
             .filter(CheckoutSession.id == session_id, CheckoutSession.user_id == user_id)
@@ -218,13 +219,14 @@ class CheckoutSessionService:
             self.db.rollback()
             raise BusinessValidationError("Payment signature verification failed.")
 
-        return self._finalize(session)
+        return self._finalize(session, route_outcome)
 
     def verify(self, user_id: int, session_id: int) -> OnlineCheckoutCompleteResponse:
         """Customer-triggered re-check, e.g. after the Razorpay sheet closed
         without a success callback (a UPI app can take the money and lose the
         hand-off). Needs no client proof: Razorpay itself is asked whether the
         order was captured, and only then is the order placed."""
+        route_outcome = self._route_before_lock(session_id, user_id)
         session = (
             self.db.query(CheckoutSession)
             .filter(CheckoutSession.id == session_id, CheckoutSession.user_id == user_id)
@@ -234,11 +236,26 @@ class CheckoutSessionService:
         )
         if not session:
             raise NotFoundError("Checkout not found.")
-        return self._finalize(session)
+        return self._finalize(session, route_outcome)
 
     # ------------------------------------------------------------------
     # Webhook entry point
     # ------------------------------------------------------------------
+
+    def _route_before_lock(self, session_id: int, user_id: int | None):
+        """DEL-7: look the delivery route up BEFORE the checkout-session row is
+        locked (the lock is then held across the Razorpay status call and the
+        order write, so no router wait may happen under it). Plain read, never
+        raises; `_finalize` hands the result to `OrderService.checkout`."""
+        query = self.db.query(CheckoutSession.user_id, CheckoutSession.address_id).filter(
+            CheckoutSession.id == session_id
+        )
+        if user_id is not None:
+            query = query.filter(CheckoutSession.user_id == user_id)
+        row = query.first()
+        if row is None:
+            return NOT_RESOLVED
+        return OrderService(self.db).resolve_delivery_route(row[0], row[1])
 
     def find_session_for_gateway_order(self, gateway_order_id: str) -> CheckoutSession | None:
         return (
@@ -254,6 +271,7 @@ class CheckoutSessionService:
         """Razorpay says this session's order was paid. Same completion as the
         client callback; business failures (already refunded...) are logged,
         never raised, so the webhook is always acknowledged."""
+        route_outcome = self._route_before_lock(session_id, None)
         session = (
             self.db.query(CheckoutSession)
             .filter(CheckoutSession.id == session_id)
@@ -264,7 +282,7 @@ class CheckoutSessionService:
         if session is None:
             return
         try:
-            self._finalize(session)
+            self._finalize(session, route_outcome)
         except PaymentNotConfirmedError:
             # Razorpay does not list the capture yet: let the webhook fail so
             # Razorpay delivers it again (the event row was rolled back).
@@ -326,7 +344,7 @@ class CheckoutSessionService:
     # Shared completion
     # ------------------------------------------------------------------
 
-    def _finalize(self, session: CheckoutSession) -> OnlineCheckoutCompleteResponse:
+    def _finalize(self, session: CheckoutSession, route_outcome=NOT_RESOLVED) -> OnlineCheckoutCompleteResponse:
         """Caller holds the session row lock. Idempotent."""
         if session.status == "COMPLETED":
             self.db.commit()
@@ -364,6 +382,7 @@ class CheckoutSessionService:
                 session.user_id,
                 CheckoutRequest(address_id=session.address_id, promo_code=session.promo_code),
                 expected_total=session.amount,
+                route_outcome=route_outcome,
             )
         except AppException as exc:
             # Paid, but the order cannot be placed (out of stock, price

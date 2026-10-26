@@ -12,7 +12,7 @@
 | `FIREBASE_SERVICE_ACCOUNT_JSON` (service-account private key) | backend (staff creation, resets, revocation) | Render secret env / secret file (`/etc/secrets/firebase-service-account.json`), K8s Secret | Gitignored patterns: `*firebase-adminsdk*.json`, `service-account*.json`. **A bad value breaks all sign-ins** ([AUTHENTICATION](../05-domains/AUTHENTICATION.md)) |
 | `RAZORPAY_KEY_SECRET`, `RAZORPAY_WEBHOOK_SECRET` | backend | same as above | Key **id** is public (sent to Checkout) |
 | `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET` | backend | same | – |
-| `GOOGLE_MAPS_API_KEY` | backend | same | Optional |
+| `REDIS_URL` | backend | same | Optional (may embed a password) |
 | `POSTGRES_PASSWORD` | compose `db`, `db-backup`, `backend` | `.env.production` (never committed; `deploy.sh` refuses `CHANGE_ME`) | – |
 | `DOCKERHUB_TOKEN`, `DOCKERHUB_USERNAME`, AWS credentials | CI | Forgejo repository secrets | Not visible here |
 | Android **upload keystore** / `GAWACHA_UPLOAD_*` | release signing | `~/.gradle/gradle.properties` on the build machine, or EAS credentials | Never in the repo (`withAndroidRelease.js` comment). The EAS project moved to account `yash145`, creating a **new** signing key (SHA-1 `D26E…365F`) that had to be registered in Firebase |
