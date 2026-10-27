@@ -1,7 +1,7 @@
 # Database Schema
 
 > **Status:** Verified (generated from the ORM models). **Generated:** 2026-10-27 by [`docs/_tools/gen_schema_reference.py`](../_tools/gen_schema_reference.py).
-> **Evidence:** [`backend/app/models/`](../../backend/app/models) (SQLAlchemy 2 declarative models, 59 tables) and the migration history in [`backend/alembic/versions/`](../../backend/alembic/versions). The models were compared with a database migrated to head using `alembic check` (see [MIGRATIONS.md](MIGRATIONS.md)). `alembic_version` is Alembic's own table and is not listed.
+> **Evidence:** [`backend/app/models/`](../../backend/app/models) (SQLAlchemy 2 declarative models, 60 tables) and the migration history in [`backend/alembic/versions/`](../../backend/alembic/versions). The models were compared with a database migrated to head using `alembic check` (see [MIGRATIONS.md](MIGRATIONS.md)). `alembic_version` is Alembic's own table and is not listed.
 
 Relationships between tables: [ENTITY_RELATIONSHIPS.md](ENTITY_RELATIONSHIPS.md). Retention and lifecycle: [DATA_RETENTION.md](DATA_RETENTION.md). Business meaning of statuses: the domain documents in [`../05-domains/`](../05-domains).
 
@@ -21,7 +21,7 @@ Timestamps show as `DATETIME` here (the ORM type) but are `timestamp with time z
 | Promotions | [`promotions`](#promotions), [`promotion_targets`](#promotion_targets), [`promotion_eligible_customers`](#promotion_eligible_customers), [`promotion_redemptions`](#promotion_redemptions) |
 | Bulk commerce | [`bulk_customer_profiles`](#bulk_customer_profiles), [`bulk_order_requests`](#bulk_order_requests), [`bulk_order_request_items`](#bulk_order_request_items), [`quotes`](#quotes), [`quote_versions`](#quote_versions), [`quote_items`](#quote_items) |
 | Audit | [`admin_action_logs`](#admin_action_logs) |
-| Other (not grouped) | [`delivery_assignments`](#delivery_assignments), [`delivery_partner_earnings`](#delivery_partner_earnings), [`delivery_partner_locations`](#delivery_partner_locations), [`delivery_partner_profiles`](#delivery_partner_profiles), [`notification_events`](#notification_events), [`product_categories`](#product_categories), [`referral_codes`](#referral_codes), [`referral_reward_ledger`](#referral_reward_ledger), [`referrals`](#referrals) |
+| Other (not grouped) | [`delivery_assignments`](#delivery_assignments), [`delivery_otps`](#delivery_otps), [`delivery_partner_earnings`](#delivery_partner_earnings), [`delivery_partner_locations`](#delivery_partner_locations), [`delivery_partner_profiles`](#delivery_partner_profiles), [`notification_events`](#notification_events), [`product_categories`](#product_categories), [`referral_codes`](#referral_codes), [`referral_reward_ledger`](#referral_reward_ledger), [`referrals`](#referrals) |
 
 ## Identity and access
 
@@ -1198,6 +1198,31 @@ Constraints and indexes:
 - UNIQUE INDEX `uq_delivery_assignments_one_active_per_order`: (order_id) - partial/filtered (see model)
 - INDEX `ix_delivery_assignments_order_id`: (order_id)
 - INDEX `ix_delivery_assignments_partner_status`: (partner_user_id, status)
+
+### delivery_otps
+
+| Column | Type | Null | Default | Key / reference |
+|---|---|---|---|---|
+| `id` | BIGINT | no | identity | PK |
+| `order_id` | BIGINT | no |  | FK -> orders.id (ON DELETE CASCADE) |
+| `assignment_id` | BIGINT | no |  | FK -> delivery_assignments.id (ON DELETE CASCADE) |
+| `otp_hash` | VARCHAR(64) | no |  |  |
+| `otp_encrypted` | BLOB | yes |  |  |
+| `expires_at` | DATETIME | no |  |  |
+| `attempts` | INTEGER | no | 0 |  |
+| `max_attempts` | INTEGER | no |  |  |
+| `verified_at` | DATETIME | yes |  |  |
+| `invalidated_at` | DATETIME | yes |  |  |
+| `invalidated_reason` | VARCHAR(30) | yes |  |  |
+| `created_at` | DATETIME | no | now() |  |
+| `updated_at` | DATETIME | no | now() |  |
+
+Constraints and indexes:
+
+- CHECK `ck_delivery_otps_attempts`: `attempts >= 0 AND attempts <= max_attempts`
+- CHECK `ck_delivery_otps_max_attempts`: `max_attempts >= 1`
+- UNIQUE INDEX `uq_delivery_otps_one_active_per_order`: (order_id) - partial/filtered (see model)
+- INDEX `ix_delivery_otps_order_created`: (order_id, created_at)
 
 ### delivery_partner_earnings
 

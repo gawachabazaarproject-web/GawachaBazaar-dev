@@ -76,6 +76,8 @@ from app.schemas.fulfillment import (
 from app.schemas.order import OrderAddressResponse, OrderItemResponse
 from app.services.admin_audit import AdminAuditService
 from app.services.delivery_assignment import DeliveryAssignmentService
+from app.services.delivery_otp import DeliveryOtpService
+from app.services.delivery_otp import require_for_delivery as require_otp_for_delivery
 from app.services.fulfillment_state import (
     FulfillmentStatus,
     IllegalFulfillmentTransitionError,
@@ -514,6 +516,7 @@ class FulfillmentService:
         assignment_id: int | None = None,
         cod_collected_amount: Decimal | None = None,
         strict: bool = False,
+        otp: str | None = None,
     ) -> FulfillmentResponse:
         """Atomically: lock order -> lock fulfillment -> verify ownership
         (assigned delivery partner, or ADMIN override) -> verify
@@ -598,6 +601,22 @@ class FulfillmentService:
             raise ConflictError(
                 f"Cannot confirm delivery: order status is {order.status}, not CONFIRMED."
             )
+
+        # COD proof of delivery: checked BEFORE any stock moves, inside this same
+        # transaction, so "code consumed" and "order completed" commit together.
+        # (Order is locked, so the payment row cannot change under this read.)
+        otp_payment = (
+            self.db.query(Payment).filter(Payment.order_id == order.id).populate_existing().first()
+        )
+        if require_otp_for_delivery(otp_payment):
+            if self._has_any_role(current_user.id, ADMIN) and (
+                fulfillment.delivery_partner_user_id != current_user.id
+            ):
+                logger.warning(
+                    "DELIVERY_OTP_ADMIN_OVERRIDE: order_id=%s admin_user_id=%s", order.id, current_user.id
+                )
+            else:
+                DeliveryOtpService(self.db).verify_for_delivery(order, assignment, otp)
 
         reservation = (
             self.db.query(InventoryReservation)

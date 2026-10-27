@@ -34,6 +34,17 @@ export function useOrderFulfillment(id: number | null) {
   });
 }
 
+/** Only asked for while a COD order can still need the code. The push
+ * handler invalidates ["order", id] (a prefix of this key) when the code arrives. */
+export function useDeliveryOtp(id: number | null, enabled: boolean) {
+  return useQuery({
+    queryKey: ["order", id, "delivery-otp"],
+    queryFn: () => orderApi.getDeliveryOtp(id as number),
+    enabled: id !== null && enabled,
+    refetchInterval: 8_000,
+  });
+}
+
 export function useOrderPayment(id: number | null) {
   return useQuery({
     queryKey: ["order", id, "payment"],

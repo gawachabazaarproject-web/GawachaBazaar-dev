@@ -136,6 +136,18 @@ class Settings(BaseSettings):
     PARTNER_EARNING_BASE: Decimal = Decimal("20")
     PARTNER_EARNING_PER_KM: Decimal = Decimal("5")
     PARTNER_EARNING_COD_BONUS: Decimal = Decimal("0")
+
+    # COD delivery OTP: the customer reads a 6-digit code to the partner; the
+    # backend alone generates, stores (HMAC hash) and verifies it. DELIVERY_OTP_SECRET
+    # is the HMAC/encryption key (>= 32 chars, required in production when enforced).
+    # DELIVERY_OTP_ENFORCED=false is a rollout switch: COD orders can then be
+    # completed without a code (the code is still issued if the partner asks).
+    DELIVERY_OTP_ENFORCED: bool = True
+    DELIVERY_OTP_SECRET: str = ""
+    DELIVERY_OTP_EXPIRY_MINUTES: int = 10
+    DELIVERY_OTP_MAX_ATTEMPTS: int = 5
+    DELIVERY_OTP_RESEND_LIMIT: int = 3
+    DELIVERY_OTP_RESEND_WINDOW_MINUTES: int = 15
     # Live location: minimum seconds between accepted updates per assignment,
     # the largest plausible speed between two updates, and how old a position
     # may be before a customer stops seeing it.
@@ -208,6 +220,11 @@ class Settings(BaseSettings):
             # can never be verified (or can't call the API at all).
             problems.append(
                 "RAZORPAY_KEY_ID is set but RAZORPAY_KEY_SECRET and/or RAZORPAY_WEBHOOK_SECRET is empty"
+            )
+        if self.DELIVERY_OTP_ENFORCED and len(self.DELIVERY_OTP_SECRET) < 32:
+            problems.append(
+                "DELIVERY_OTP_SECRET must be at least 32 characters while DELIVERY_OTP_ENFORCED is true "
+                "(it keys the delivery-OTP hash; without it a leaked table could be brute-forced)"
             )
         if problems:
             raise ValueError(

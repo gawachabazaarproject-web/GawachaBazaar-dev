@@ -37,6 +37,16 @@ class SetAvailabilityRequest(BaseSchema):
     availability: Literal["OFFLINE", "AVAILABLE"]
 
 
+class OtpStatusSummary(BaseSchema):
+    """OTP state for partner/admin screens. Never carries the code itself."""
+
+    status: str  # NOT_GENERATED | ACTIVE | EXPIRED | LOCKED | INVALIDATED | VERIFIED
+    generated_at: datetime | None = None
+    expires_at: datetime | None = None
+    verified_at: datetime | None = None
+    attempts_left: int | None = None
+
+
 class AssignmentAddress(BaseSchema):
     address_line_1: str
     address_line_2: str | None = None
@@ -77,6 +87,8 @@ class AssignmentResponse(BaseSchema):
     items: list[AssignmentItem] = []
     maps_url: str | None = None
     earning_amount: Decimal | None = None
+    otp_required: bool = False
+    delivery_otp: OtpStatusSummary | None = None
 
 
 class AssignmentListResponse(BaseSchema):
@@ -97,6 +109,22 @@ class FailRequest(BaseSchema):
 class DeliverRequest(BaseSchema):
     # Required (and checked against the server's expected amount) for COD orders.
     cod_collected_amount: Decimal | None = Field(default=None, ge=0, le=Decimal("10000000"))
+    # The 6-digit code the customer reads out; required for unpaid COD orders.
+    otp: str | None = Field(default=None, min_length=6, max_length=6, pattern=r"^[0-9]{6}$")
+
+
+class LegacyDeliverRequest(BaseSchema):
+    otp: str | None = Field(default=None, min_length=6, max_length=6, pattern=r"^[0-9]{6}$")
+
+
+class CustomerDeliveryOtpResponse(BaseSchema):
+    """Owner-only. `otp` is present only while status == ACTIVE."""
+
+    required: bool
+    status: str  # NOT_REQUIRED | WAITING | ACTIVE | EXPIRED | LOCKED | VERIFIED | COMPLETED | CANCELLED
+    otp: str | None = None
+    expires_at: datetime | None = None
+    seconds_left: int | None = None
 
 
 class LocationUpdateRequest(BaseSchema):

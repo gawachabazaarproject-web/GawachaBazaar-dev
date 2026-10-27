@@ -28,7 +28,7 @@ from app.core.roles import ADMIN, DELIVERY_PARTNER, HUB_STAFF, OPERATIONS
 from app.dependencies.auth import require_roles
 from app.dependencies.database import get_db
 from app.models.user import User
-from app.schemas.delivery_partner import ReassignRequest
+from app.schemas.delivery_partner import LegacyDeliverRequest, ReassignRequest
 from app.schemas.fulfillment import (
     MAX_PAGE_SIZE,
     AssignDeliveryPartnerRequest,
@@ -164,7 +164,11 @@ def mark_out_for_delivery(
 )
 def confirm_delivery(
     fulfillment_id: int,
+    payload: LegacyDeliverRequest | None = None,
     current_user: User = Depends(require_roles(*_DELIVERY_ROLES)),
     db: Session = Depends(get_db),
 ) -> FulfillmentResponse:
-    return FulfillmentService(db).confirm_delivery(fulfillment_id, current_user)
+    # The body is optional for compatibility; an unpaid COD order still needs `otp`.
+    return FulfillmentService(db).confirm_delivery(
+        fulfillment_id, current_user, otp=payload.otp if payload else None
+    )

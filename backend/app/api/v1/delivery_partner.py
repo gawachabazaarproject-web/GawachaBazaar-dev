@@ -29,18 +29,21 @@ from app.schemas.delivery_partner import (
     CodListResponse,
     CodReconcileRequest,
     CodSummaryItem,
+    CustomerDeliveryOtpResponse,
     CustomerTrackingResponse,
     DeliverRequest,
     EarningsResponse,
     FailRequest,
     LocationAck,
     LocationUpdateRequest,
+    OtpStatusSummary,
     PartnerMeResponse,
     PartnerProfileResponse,
     RejectRequest,
     SetAvailabilityRequest,
 )
 from app.services.delivery_assignment import DeliveryAssignmentService
+from app.services.delivery_otp import DeliveryOtpService
 
 _STATUS_RE = "^(ASSIGNED|ACCEPTED|PICKED_UP|OUT_FOR_DELIVERY|DELIVERED|FAILED|REJECTED|CANCELLED)$"
 _ID = Query(default=None, ge=1, le=2**62)
@@ -164,7 +167,26 @@ def partner_deliver(
     user: User = Depends(require_roles(DELIVERY_PARTNER)),
     db: Session = Depends(get_db),
 ) -> AssignmentResponse:
-    return DeliveryAssignmentService(db).deliver(assignment_id, user, payload.cod_collected_amount)
+    # This is also the OTP verification endpoint: the code is checked inside the same
+    # atomic transaction that completes the delivery (see DeliveryOtpService).
+    return DeliveryAssignmentService(db).deliver(
+        assignment_id, user, payload.cod_collected_amount, payload.otp
+    )
+
+
+@partner_router.post(
+    "/assignments/{assignment_id}/otp/send",
+    response_model=OtpStatusSummary,
+    summary="At the door: send the COD delivery code to the customer (resend replaces it; rate limited)",
+)
+@limiter.limit("10/minute", key_func=user_or_ip_key)
+def partner_send_delivery_otp(
+    request: Request,
+    assignment_id: int,
+    user: User = Depends(require_roles(DELIVERY_PARTNER)),
+    db: Session = Depends(get_db),
+) -> OtpStatusSummary:
+    return DeliveryOtpService(db).send_for_assignment(assignment_id, user)
 
 
 @partner_router.post(
@@ -228,6 +250,21 @@ def order_delivery_tracking(
     db: Session = Depends(get_db),
 ) -> CustomerTrackingResponse:
     return DeliveryAssignmentService(db).customer_tracking(order_id, user.id)
+
+
+@tracking_router.get(
+    "/{order_id}/delivery-otp",
+    response_model=CustomerDeliveryOtpResponse,
+    summary="My COD delivery code (own order only; the code is shown only while active)",
+)
+@limiter.limit("60/minute", key_func=user_or_ip_key)
+def order_delivery_otp(
+    request: Request,
+    order_id: int,
+    user: User = Depends(require_roles(CUSTOMER)),
+    db: Session = Depends(get_db),
+) -> CustomerDeliveryOtpResponse:
+    return DeliveryOtpService(db).customer_view(order_id, user.id)
 
 
 # ---------------------------------------------------------------------------

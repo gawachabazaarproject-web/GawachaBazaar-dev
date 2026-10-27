@@ -211,8 +211,14 @@ class DeliveryAssignmentService:
             DeliveryPartnerLocation.assignment_id == assignment.id
         ).delete()
         self.db.flush()
+        self._invalidate_otp(order_id, "REASSIGNED" if status == "REASSIGNED" else "ORDER_CANCELLED")
         self._refresh_availability(assignment.partner_user_id)
         return assignment
+
+    def _invalidate_otp(self, order_id: int, reason: str) -> None:
+        from app.services.delivery_otp import DeliveryOtpService
+
+        DeliveryOtpService(self.db).invalidate_for_order(order_id, reason)
 
     def close_for_cancelled_order(self, order_id: int) -> None:
         self.close_active_for_order(order_id, "CANCELLED", "Order cancelled")
@@ -354,6 +360,7 @@ class DeliveryAssignmentService:
             DeliveryPartnerLocation.assignment_id == assignment.id
         ).delete()
         self.db.flush()
+        self._invalidate_otp(order.id, "DELIVERY_FAILED")
         self._refresh_availability(user.id)
         self._commit("Could not update the delivery due to a conflicting update.")
         logger.info("DELIVERY_ASSIGNMENT_FAILED: assignment_id=%s partner=%s", assignment.id, user.id)
@@ -375,7 +382,11 @@ class DeliveryAssignmentService:
         fulfillment.assigned_at = None
 
     def deliver(
-        self, assignment_id: int, user: User, cod_collected_amount: Decimal | None
+        self,
+        assignment_id: int,
+        user: User,
+        cod_collected_amount: Decimal | None,
+        otp: str | None = None,
     ) -> AssignmentResponse:
         """Delegates to the one atomic delivery transaction (stock, order, COD,
         assignment, earnings) in FulfillmentService.confirm_delivery."""
@@ -393,6 +404,7 @@ class DeliveryAssignmentService:
             assignment_id=assignment_id,
             cod_collected_amount=cod_collected_amount,
             strict=True,
+            otp=otp,
         )
         self.db.expire_all()
         assignment = self.db.query(DeliveryAssignment).filter_by(id=assignment_id).one()
@@ -921,7 +933,16 @@ class DeliveryAssignmentService:
                 maps_url = f"https://www.google.com/maps/search/?api=1&query={quote(text)}"
         # A partner sees the customer's name only while the job is theirs and open.
         show_customer = (not for_partner) or a.status in _ACTIVE
+        from app.services.delivery_otp import DeliveryOtpService, require_for_delivery
+
+        payment = self.db.query(Payment).filter(Payment.order_id == a.order_id).first()
+        otp_required = require_for_delivery(payment) or (
+            a.status == "DELIVERED"
+            and DeliveryOtpService(self.db).status_for_order(a.order_id).status == "VERIFIED"
+        )
         return AssignmentResponse(
+            otp_required=otp_required,
+            delivery_otp=DeliveryOtpService(self.db).status_for_order(a.order_id),
             id=a.id, order_id=a.order_id, order_number=order.order_number if order else "",
             fulfillment_id=a.fulfillment_id, partner_user_id=a.partner_user_id, status=a.status,
             assigned_at=a.assigned_at, accepted_at=a.accepted_at, picked_up_at=a.picked_up_at,

@@ -8,7 +8,8 @@ import { Screen } from "@/components/Screen";
 import { Text } from "@/components/Text";
 import { Button } from "@/components/Button";
 import { OrderProgress, buildProgressSteps } from "@/features/orders/OrderProgress";
-import { useOrder, useOrderFulfillment, useOrderPayment, useOrderRefund } from "@/features/orders/useOrders";
+import { useDeliveryOtp, useOrder, useOrderFulfillment, useOrderPayment, useOrderRefund } from "@/features/orders/useOrders";
+import { DeliveryOtpCard } from "@/features/orders/DeliveryOtpCard";
 import { cartQueryKey } from "@/features/cart/useCart";
 import { useOnlinePayment } from "@/features/payment/useOnlinePayment";
 import { RazorpayCheckout } from "@/components/payment/RazorpayCheckout";
@@ -87,6 +88,11 @@ export default function OrderDetailsScreen() {
   const { data: payment } = useOrderPayment(orderId);
   const { data: refund } = useOrderRefund(orderId);
   const online = useOnlinePayment();
+  // The COD delivery code only exists for an open or just-completed COD order.
+  const { data: deliveryOtp } = useDeliveryOtp(
+    orderId,
+    payment?.payment_method === "COD" && (order?.status === "CONFIRMED" || order?.status === "COMPLETED"),
+  );
 
   if (isLoading || !order) {
     return (
@@ -227,6 +233,8 @@ export default function OrderDetailsScreen() {
             </View>
           </View>
         </View>
+
+        {deliveryOtp ? <DeliveryOtpCard data={deliveryOtp} /> : null}
 
         {/* Progress */}
         {showSteps ? (

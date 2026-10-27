@@ -23,6 +23,7 @@ export default function DeliveryDetail() {
   const qc = useQueryClient();
   const show = useToastStore((s) => s.show);
   const [cash, setCash] = useState("");
+  const [otp, setOtp] = useState("");
   const [failReason, setFailReason] = useState("");
   const [showFail, setShowFail] = useState(false);
 
@@ -38,10 +39,18 @@ export default function DeliveryDetail() {
   const step = useMutation({ mutationFn: (a: "accept" | "pickup" | "out-for-delivery") => partnerApi.act(aid, a), onSuccess: refresh, onError });
   const reject = useMutation({ mutationFn: () => partnerApi.reject(aid, "Declined by partner"), onSuccess: refresh, onError });
   const fail = useMutation({ mutationFn: () => partnerApi.fail(aid, failReason.trim()), onSuccess: refresh, onError });
-  const deliver = useMutation({
-    mutationFn: () => partnerApi.deliver(aid, job?.cod_status === "COD_PENDING" ? cash.trim() : undefined),
-    onSuccess: (a) => { refresh(a); show("Delivery completed", "success"); },
+  const needsOtp = job?.otp_required === true && job?.cod_status === "COD_PENDING";
+  const sendOtp = useMutation({
+    mutationFn: () => partnerApi.sendOtp(aid),
+    onSuccess: () => { setOtp(""); show("Code sent to the customer", "success"); q.refetch(); },
     onError,
+  });
+  const deliver = useMutation({
+    mutationFn: () =>
+      partnerApi.deliver(aid, job?.cod_status === "COD_PENDING" ? cash.trim() : undefined, needsOtp ? otp : undefined),
+    onSuccess: (a) => { refresh(a); show("Delivery completed", "success"); },
+    // A wrong/expired code changes the attempts left: reload the status after the error toast.
+    onError: (e) => { onError(e); setOtp(""); q.refetch(); },
   });
 
   // Share location only during an active hand-over; stops when the status changes or the screen closes.
@@ -86,6 +95,10 @@ export default function DeliveryDetail() {
         Alert.alert("Check the cash", `Enter exactly ${rupees(job.cod_expected_amount)} - the amount due for this order.`);
         return;
       }
+    }
+    if (needsOtp && !/^\d{6}$/.test(otp)) {
+      Alert.alert("Enter the code", "Ask the customer for the 6-digit delivery code shown in their app.");
+      return;
     }
     Alert.alert("Complete delivery?", "This cannot be undone.", [
       { text: "Cancel", style: "cancel" },
@@ -138,7 +151,43 @@ export default function DeliveryDetail() {
               {job.cod_status === "COD_PENDING" ? (
                 <TextInput value={cash} onChangeText={(t) => setCash(t.replace(/[^0-9.]/g, ""))} keyboardType="decimal-pad" placeholder="Cash collected (Rs)" style={styles.input} accessibilityLabel="Cash collected" />
               ) : null}
-              <Button label="Delivered" onPress={confirmDeliver} loading={deliver.isPending} disabled={job.cod_status === "COD_PENDING" && cash.length === 0} />
+              {needsOtp ? (
+                <View style={styles.otpBox}>
+                  <Text variant="bodyMedium">Delivery code</Text>
+                  <Text variant="bodySmall" color={colors.textSecondary}>
+                    {job.delivery_otp?.status === "ACTIVE"
+                      ? `The customer has the code. Ask them to read it out.${job.delivery_otp.attempts_left != null ? ` ${job.delivery_otp.attempts_left} tries left.` : ""}`
+                      : job.delivery_otp?.status === "LOCKED"
+                        ? "Too many wrong tries. Send a new code."
+                        : job.delivery_otp?.status === "EXPIRED"
+                          ? "The code expired. Send a new code."
+                          : "Tap below when you are at the door; the code goes to the customer's app."}
+                  </Text>
+                  <Button
+                    label={job.delivery_otp?.status === "ACTIVE" ? "Resend code" : "Send code to customer"}
+                    variant="outline"
+                    onPress={() => sendOtp.mutate()}
+                    loading={sendOtp.isPending}
+                  />
+                  <TextInput
+                    value={otp}
+                    onChangeText={(t) => setOtp(t.replace(/\D/g, "").slice(0, 6))}
+                    keyboardType="number-pad"
+                    maxLength={6}
+                    placeholder="6-digit code from customer"
+                    style={[styles.input, styles.otpInput]}
+                    accessibilityLabel="Delivery code"
+                    autoComplete="off"
+                    importantForAutofill="no"
+                  />
+                </View>
+              ) : null}
+              <Button
+                label="Delivered"
+                onPress={confirmDeliver}
+                loading={deliver.isPending}
+                disabled={(job.cod_status === "COD_PENDING" && cash.length === 0) || (needsOtp && otp.length !== 6)}
+              />
             </View>
           ) : null}
 
@@ -165,5 +214,7 @@ const styles = StyleSheet.create({
   content: { padding: spacing.xl, paddingBottom: spacing["2xl"] * 2 },
   gap: { marginTop: spacing.lg },
   cod: { backgroundColor: colors.warningLight, borderRadius: radius.md, padding: spacing.lg, marginTop: spacing.lg },
+  otpBox: { marginBottom: spacing.md },
+  otpInput: { letterSpacing: 6, fontSize: 20, textAlign: "center", marginTop: spacing.md },
   input: { borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, padding: spacing.md, backgroundColor: colors.surface, marginBottom: spacing.md },
 });
