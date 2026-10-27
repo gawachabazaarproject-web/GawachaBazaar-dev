@@ -18,7 +18,7 @@
     },
     "android": {
       "package": "com.gawachabazaar.customer",
-      "versionCode": 1,
+      "versionCode": 2,
       "adaptiveIcon": {
         "backgroundColor": "#000F08",
         "foregroundImage": "./assets/android-icon-foreground.png",
@@ -71,7 +71,7 @@
     "experiments": {
       "typedRoutes": true
     },
-    "runtimeVersion": "1.0.0",
+    "runtimeVersion": "1.1.0",
     "updates": {
       "enabled": true,
       "checkAutomatically": "ON_LOAD",
