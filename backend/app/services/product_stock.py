@@ -21,7 +21,7 @@ warehouse.
 """
 
 from datetime import UTC, datetime, timedelta
-from decimal import ROUND_UP, Decimal
+from decimal import Decimal
 
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -48,12 +48,12 @@ from app.schemas.admin_inventory import (
     ProductStockOperationResponse,
     StockChangeResponse,
 )
+from app.services import units as units_mod
 from app.services.admin_audit import AdminAuditService
 from app.services.inventory import InventoryService
 from app.services.stock_pool import (
     amount_in_base,
     display_amount,
-    to_packs,
     variant_size,
 )
 
@@ -117,13 +117,13 @@ class ProductStockService:
             raise NotFoundError("Product not found.")
         return product
 
-    def _family_sizes(self, product_id: int, family: str, unit: str) -> dict[int, Decimal]:
-        """Size of one pack (in the family's base unit) for each size of the
-        product that is measured in `family`."""
+    def _family_sizes(self, product_id: int, family: str, unit: str) -> dict[int, int]:
+        """Exact size of one pack (integer base units: g / ml / pieces) for each
+        size of the product that is measured in `family`."""
         if family not in _SUPPORTED_FAMILIES:
             raise BusinessValidationError("Use kg, g, L, ml, pieces or dozen for this action.")
         sizes = {
-            v.id: variant_size(v)[1]
+            v.id: v.size_base
             for v in self.db.query(ProductVariant).filter(ProductVariant.product_id == product_id).all()
             if variant_size(v)[0] == family
         }
@@ -135,7 +135,9 @@ class ProductStockService:
 
     def _candidate_lots(self, variant_ids, location_id: int | None = None) -> list[InventoryLot]:
         query = self.db.query(InventoryLot).filter(
-            InventoryLot.variant_id.in_(list(variant_ids)), InventoryLot.status != _INACTIVE
+            InventoryLot.variant_id.in_(list(variant_ids)),
+            InventoryLot.status != _INACTIVE,
+            InventoryLot.quantity_base.is_not(None),  # lots on hold for review are never touched
         )
         if location_id is not None:
             query = query.filter(InventoryLot.location_id == location_id)
@@ -156,8 +158,9 @@ class ProductStockService:
         }
 
     @staticmethod
-    def _available(lot: InventoryLot) -> Decimal:
-        return lot.quantity - lot.reserved_quantity if lot.status == _ACTIVE else Decimal("0")
+    def _available(lot: InventoryLot) -> int:
+        """Exact base units a lot can still give out (not reserved)."""
+        return lot.quantity_base - lot.reserved_base if lot.status == _ACTIVE else 0
 
     @staticmethod
     def _fifo(lots) -> list[InventoryLot]:
@@ -173,10 +176,11 @@ class ProductStockService:
         return sorted(lots, key=lambda lot: (lot.is_share, lot.created_at, lot.id))
 
     @staticmethod
-    def _to_unit(base: Decimal, unit: str) -> Decimal:
-        return (base / amount_in_base(Decimal(1), unit)[1]).quantize(_PACK_STEP)
+    def _to_unit(base: int, unit: str) -> Decimal:
+        """Display only: base units as an amount of `unit`."""
+        return (Decimal(base) / amount_in_base(Decimal(1), unit)[1]).quantize(_PACK_STEP)
 
-    def _amount_text(self, family: str, base: Decimal) -> str:
+    def _amount_text(self, family: str, base: int) -> str:
         amount, label = display_amount(family, base)
         return f"{_fmt(amount)} {label}"
 
@@ -208,23 +212,27 @@ class ProductStockService:
         changes: list[dict],
         lot: InventoryLot,
         movement_type: str,
-        packs: Decimal,
+        base: int,
         user_id: int,
         kind: str,
         operation_id: int,
         remarks: str,
     ) -> StockMovement:
-        movement = self.inventory.apply_movement(
+        movement = self.inventory.apply_movement_base(
             lot,
             movement_type,
-            packs,
+            base,
             user_id,
             reference_type=_MOVEMENT_REFERENCE[kind],
             reference_id=operation_id,
             remarks=remarks,
         )
         changes.append(
-            {"lot": lot, "movement_type": movement_type, "packs": packs}
+            {
+                "lot": lot,
+                "movement_type": movement_type,
+                "packs": units_mod.packs_exact(base, lot.variant.size_base),
+            }
         )
         return movement
 
@@ -289,16 +297,16 @@ class ProductStockService:
         locked = self._lock(lot.id for lot in self._candidate_lots(sizes, location))
         lots = list(locked.values())
 
-        on_hand = sum((lot.quantity * sizes[lot.variant_id] for lot in lots), Decimal("0"))
-        reserved = sum((lot.reserved_quantity * sizes[lot.variant_id] for lot in lots), Decimal("0"))
-        if counted + _TOLERANCE < reserved:
+        on_hand = sum(lot.quantity_base for lot in lots)
+        reserved = sum(lot.reserved_base for lot in lots)
+        if counted < reserved:
             raise BusinessValidationError(
                 f"{self._amount_text(family, reserved)} is reserved for customer orders, "
                 "so the count cannot be lower than that."
             )
         difference = counted - on_hand
         unit_label = _UNIT_LABELS[data.amount_unit]
-        if abs(difference) <= _TOLERANCE:
+        if difference == 0:
             return ProductStockOperationResponse(
                 operation_id=None,
                 kind="correct",
@@ -326,28 +334,20 @@ class ProductStockService:
         if difference < 0:
             need = -difference
             for lot in self._fifo(lots):
-                if need <= _TOLERANCE:
+                if need <= 0:
                     break
-                available = self._available(lot)
-                if available <= 0:
+                take = min(self._available(lot), need)
+                if take <= 0:
                     continue
-                size = sizes[lot.variant_id]
-                packs = min(available, (need / size).quantize(_PACK_STEP, rounding=ROUND_UP))
-                if packs <= 0:
-                    continue
-                self._move(changes, lot, "ADJUSTMENT_OUT", packs, user_id, "correct", entry.id, remarks)
-                need -= packs * size
-            if need > _TOLERANCE:
+                self._move(changes, lot, "ADJUSTMENT_OUT", take, user_id, "correct", entry.id, remarks)
+                need -= take
+            if need > 0:
                 self.db.rollback()
                 raise ConflictError("That much stock could not be taken out because it is reserved for orders.")
         else:
             shared = [lot for lot in lots if not lot.is_share] or lots
             target = max(shared, key=lambda lot: (lot.created_at, lot.id))
-            packs = to_packs(difference, sizes[target.variant_id])
-            if packs <= 0:
-                self.db.rollback()
-                raise BusinessValidationError("That difference is smaller than one pack-thousandth.")
-            self._move(changes, target, "ADJUSTMENT_IN", packs, user_id, "correct", entry.id, remarks)
+            self._move(changes, target, "ADJUSTMENT_IN", difference, user_id, "correct", entry.id, remarks)
 
         sign = "+" if difference > 0 else "-"
         return self._finish(
@@ -383,8 +383,8 @@ class ProductStockService:
         locked = self._lock(lot.id for lot in self._candidate_lots(sizes, data.location_id))
         lots = list(locked.values())
 
-        available = sum((self._available(lot) * sizes[lot.variant_id] for lot in lots), Decimal("0"))
-        if amount > available + _TOLERANCE:
+        available = sum(self._available(lot) for lot in lots)
+        if amount > available:
             raise BusinessValidationError(
                 f"Only {self._amount_text(family, available)} is available to remove right now. "
                 "Stock reserved for customer orders can't be taken."
@@ -395,25 +395,21 @@ class ProductStockService:
             product,
             user_id,
             previous=self._amount_text(family, available),
-            new=self._amount_text(family, max(available - amount, Decimal("0"))),
+            new=self._amount_text(family, max(available - amount, 0)),
             reason=data.reason,
         )
         movement_type = self._removal_type(data.reason)
         changes: list[dict] = []
         need = amount
         for lot in self._fifo(lots):
-            if need <= _TOLERANCE:
+            if need <= 0:
                 break
-            lot_available = self._available(lot)
-            if lot_available <= 0:
+            take = min(self._available(lot), need)
+            if take <= 0:
                 continue
-            size = sizes[lot.variant_id]
-            packs = min(lot_available, (need / size).quantize(_PACK_STEP, rounding=ROUND_UP))
-            if packs <= 0:
-                continue
-            self._move(changes, lot, movement_type, packs, user_id, "remove", entry.id, f"Stock removed: {data.reason}")
-            need -= packs * size
-        if need > _TOLERANCE:
+            self._move(changes, lot, movement_type, take, user_id, "remove", entry.id, f"Stock removed: {data.reason}")
+            need -= take
+        if need > 0:
             self.db.rollback()
             raise ConflictError("That much stock could not be removed because it is reserved for orders.")
 
@@ -461,8 +457,8 @@ class ProductStockService:
             if lot.location_id == data.to_location_id
         }
 
-        available = sum((self._available(lot) * sizes[lot.variant_id] for lot in sources), Decimal("0"))
-        if amount > available + _TOLERANCE:
+        available = sum(self._available(lot) for lot in sources)
+        if amount > available:
             raise BusinessValidationError(
                 f"Only {self._amount_text(family, available)} is available in {source_location.name} right now. "
                 "Stock reserved for customer orders can't be moved."
@@ -480,14 +476,10 @@ class ProductStockService:
         changes: list[dict] = []
         need = amount
         for lot in self._fifo(sources):
-            if need <= _TOLERANCE:
+            if need <= 0:
                 break
-            lot_available = self._available(lot)
-            if lot_available <= 0:
-                continue
-            size = sizes[lot.variant_id]
-            packs = min(lot_available, (need / size).quantize(_PACK_STEP, rounding=ROUND_UP))
-            if packs <= 0:
+            take = min(self._available(lot), need)
+            if take <= 0:
                 continue
             key = (lot.batch_id, lot.variant_id, lot.is_share)
             target = destinations.get(key)
@@ -497,10 +489,10 @@ class ProductStockService:
                 )
                 target = self._lock([created.id])[created.id]
                 destinations[key] = target
-            self._move(changes, lot, "TRANSFER_OUT", packs, user_id, "move", entry.id, remarks)
-            self._move(changes, target, "TRANSFER_IN", packs, user_id, "move", entry.id, remarks)
-            need -= packs * size
-        if need > _TOLERANCE:
+            self._move(changes, lot, "TRANSFER_OUT", take, user_id, "move", entry.id, remarks)
+            self._move(changes, target, "TRANSFER_IN", take, user_id, "move", entry.id, remarks)
+            need -= take
+        if need > 0:
             self.db.rollback()
             raise ConflictError("That much stock could not be moved because it is reserved for orders.")
 
@@ -582,14 +574,24 @@ class ProductStockService:
             if lot is None or inverse is None:
                 self.db.rollback()
                 raise ConflictError(_UNSAFE_UNDO)
-            if inverse.endswith("_OUT") and lot.quantity - lot.reserved_quantity < movement.quantity:
+            if lot.quantity_base is None:
+                self.db.rollback()
+                raise ConflictError(_UNSAFE_UNDO)
+            moved = movement.quantity_base
+            if moved is None:  # a pre-migration movement: its packs must convert exactly
+                exact = Decimal(movement.quantity) * lot.variant.size_base
+                if exact != exact.to_integral_value():
+                    self.db.rollback()
+                    raise ConflictError(_UNSAFE_UNDO)
+                moved = int(exact)
+            if inverse.endswith("_OUT") and lot.quantity_base - lot.reserved_base < moved:
                 self.db.rollback()
                 raise ConflictError(_UNSAFE_UNDO)
             try:
-                self.inventory.apply_movement(
+                self.inventory.apply_movement_base(
                     lot,
                     inverse,
-                    movement.quantity,
+                    moved,
                     user.id,
                     reference_type="product_undo",
                     reference_id=operation_id,

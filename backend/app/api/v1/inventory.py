@@ -32,6 +32,8 @@ from app.schemas.admin_inventory import (
     ReceiveStockRequest,
     ReconcileStockRequest,
     RemoveStockRequest,
+    ResolveLotBaseRequest,
+    SetProductReserveRequest,
     SetStockSharesRequest,
     StockAlertsResponse,
     TransferStockRequest,
@@ -391,6 +393,47 @@ def admin_get_product_stock(
     if card is None:
         raise NotFoundError("Product not found.")
     return card
+
+
+@router.put(
+    "/admin/products/{product_id}/reserve",
+    response_model=ProductStockItemResponse,
+    summary="Set the stock to keep in reserve for a product, as one physical amount (same for every size)",
+)
+def admin_set_product_reserve(
+    product_id: int,
+    payload: SetProductReserveRequest,
+    current_user: User = Depends(require_permission("inventory.adjust")),
+    db: Session = Depends(get_db),
+) -> ProductStockItemResponse:
+    return InventoryService(db).set_product_reserve(product_id, payload.amount, payload.amount_unit, current_user.id)
+
+
+@router.delete(
+    "/admin/products/{product_id}/reserve",
+    response_model=ProductStockItemResponse,
+    summary="Clear the product-level reserve (the per-size reserve levels apply again)",
+)
+def admin_clear_product_reserve(
+    product_id: int,
+    current_user: User = Depends(require_permission("inventory.adjust")),
+    db: Session = Depends(get_db),
+) -> ProductStockItemResponse:
+    return InventoryService(db).set_product_reserve(product_id, None, None, current_user.id)
+
+
+@router.post(
+    "/admin/lots/{lot_id}/resolve-base",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Put a lot the base-unit migration held for review back into service with the confirmed physical amount",
+)
+def admin_resolve_lot_base(
+    lot_id: int,
+    payload: ResolveLotBaseRequest,
+    current_user: User = Depends(require_permission("inventory.reconcile")),
+    db: Session = Depends(get_db),
+) -> None:
+    InventoryService(db).resolve_lot_base(lot_id, payload.quantity_base, payload.reason, current_user.id)
 
 
 @router.post(

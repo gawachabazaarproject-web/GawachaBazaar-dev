@@ -27,17 +27,18 @@ import { Pagination } from "@/components/Pagination";
 import { TableSkeleton } from "@/components/TableSkeleton";
 import { AddStockDialog, CorrectStockDialog, MoveStockDialog, RemoveStockAmountDialog } from "@/components/StockDialogs";
 import type { StockNotice } from "@/components/StockActionBanner";
+import { UNITS } from "@/lib/units";
 
 const PAGE_SIZE = 20;
 const num = (v: string | number) => String(Number(Number(v).toFixed(3)));
 
 // pack unit -> [unit family, size of one unit in the family's base unit]
-const FAMILY: Record<string, [string, number]> = {
-  KG: ["MASS", 1000], G: ["MASS", 1], L: ["VOLUME", 1000], ML: ["VOLUME", 1], UNIT: ["COUNT", 1], DOZEN: ["COUNT", 12],
-};
+const FAMILY: Record<string, [string, number]> = Object.fromEntries(
+  Object.entries(UNITS).map(([k, u]) => [k, [u.dimension, u.factor]]),
+);
 // What an assigned share is typed in, per family: [label, API unit, base units per typed unit].
 const TYPED: Record<string, [string, string, number]> = {
-  MASS: ["kg", "KG", 1000], VOLUME: ["L", "L", 1000], COUNT: ["pieces", "UNIT", 1],
+  MASS: ["kg", "KG", UNITS.KG.factor], VOLUME: ["L", "L", UNITS.L.factor], COUNT: ["pieces", "UNIT", UNITS.UNIT.factor],
 };
 
 const EMPTY_TEXT: Record<StockFilter, { title: string; message: string }> = {

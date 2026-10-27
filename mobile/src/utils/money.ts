@@ -5,6 +5,8 @@
  * trust or compute a client-side total).
  */
 
+import { UNITS, displayUnit, formatSize } from "./units";
+
 const CURRENCY_SYMBOLS: Record<string, string> = {
   INR: "₹",
 };
@@ -22,9 +24,7 @@ export function formatMoney(amount: string | number, currency = "INR"): string {
 
 /** Formats a variant's pack size, e.g. quantity="1.000" unit="KG" -> "1 kg". */
 export function formatVariantSize(quantity: string, unit: string): string {
-  const value = Number.parseFloat(quantity);
-  const trimmed = Number.isInteger(value) ? value.toString() : value.toString();
-  return `${trimmed} ${unit.toLowerCase()}`;
+  return formatSize(quantity, unit);
 }
 
 /** Display-only comparison rate, e.g. price 30, 250 g -> "₹120/kg". Not a
@@ -34,18 +34,12 @@ export function formatRatePerUnit(price: string | number, quantity: string, unit
   const p = typeof price === "string" ? Number.parseFloat(price) : price;
   const q = Number.parseFloat(quantity);
   if (!(p > 0) || !(q > 0)) return null;
-  const perBase: Record<string, [number, string]> = {
-    KG: [1, "kg"],
-    G: [1000, "kg"],
-    L: [1, "L"],
-    ML: [1000, "L"],
-    UNIT: [1, "pc"],
-    DOZEN: [1 / 12, "pc"],
-  };
-  const entry = perBase[unit];
-  if (!entry) return null;
-  const rate = (p / q) * entry[0];
-  return `${formatMoney(Number(rate.toFixed(2)))}/${entry[1]}`;
+  const info = UNITS[unit];
+  if (!info || (info.dimension !== "MASS" && info.dimension !== "VOLUME" && info.dimension !== "COUNT")) return null;
+  const display = displayUnit(info.dimension);
+  const label = info.dimension === "COUNT" ? "pc" : display.label;
+  const rate = (p / q) * (display.factor / info.factor);
+  return `${formatMoney(Number(rate.toFixed(2)))}/${label}`;
 }
 
 export function parseDecimal(value: string): number {

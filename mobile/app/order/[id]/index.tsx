@@ -91,7 +91,7 @@ export default function OrderDetailsScreen() {
   // Every delivery needs the customer's code (prepaid and COD), for an open or just-completed order.
   const { data: deliveryOtp } = useDeliveryOtp(
     orderId,
-    order?.status === "CONFIRMED" || order?.status === "COMPLETED",
+    order?.status === "CONFIRMED",
   );
 
   if (isLoading || !order) {
@@ -234,7 +234,7 @@ export default function OrderDetailsScreen() {
           </View>
         </View>
 
-        {deliveryOtp ? <DeliveryOtpCard data={deliveryOtp} /> : null}
+        {deliveryOtp && order.status === "CONFIRMED" ? <DeliveryOtpCard data={deliveryOtp} /> : null}
 
         {/* Progress */}
         {showSteps ? (

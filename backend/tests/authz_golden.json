@@ -27,6 +27,10 @@
   "DELETE /api/v1/catalog/images/{image_id}": [
    "CATALOG_STAFF"
   ],
+  "DELETE /api/v1/inventory/admin/products/{product_id}/reserve": [
+   "HUB_STAFF",
+   "OPERATIONS"
+  ],
   "DELETE /api/v1/packaging/operations/{operation_id}/inputs/{input_id}": [
    "HUB_STAFF",
    "OPERATIONS"
@@ -468,6 +472,10 @@
    "HUB_STAFF",
    "OPERATIONS"
   ],
+  "POST /api/v1/inventory/admin/lots/{lot_id}/resolve-base": [
+   "HUB_STAFF",
+   "OPERATIONS"
+  ],
   "POST /api/v1/inventory/admin/products/{product_id}/correct": [
    "HUB_STAFF",
    "OPERATIONS"
@@ -593,6 +601,10 @@
   ],
   "PUT /api/v1/bulk-orders/profile": [
    "CUSTOMER"
+  ],
+  "PUT /api/v1/inventory/admin/products/{product_id}/reserve": [
+   "HUB_STAFF",
+   "OPERATIONS"
   ],
   "PUT /api/v1/inventory/admin/products/{product_id}/stock-shares": [
    "HUB_STAFF",

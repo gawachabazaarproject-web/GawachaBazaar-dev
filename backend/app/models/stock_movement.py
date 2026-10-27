@@ -34,7 +34,7 @@ class StockMovement(Base):
             name="ck_stock_movements_movement_type",
         ),
         CheckConstraint(
-            "quantity > 0",
+            "quantity > 0 OR COALESCE(quantity_base, 0) > 0",
             name="ck_stock_movements_quantity",
         ),
         Index("ix_stock_movements_inventory_lot_id", "inventory_lot_id"),
@@ -57,10 +57,12 @@ class StockMovement(Base):
         String(30),
         nullable=False,
     )
+    # Legacy pack count (display); `quantity_base` is the exact amount moved.
     quantity: Mapped[Decimal] = mapped_column(
         Numeric(12, 3),
         nullable=False,
     )
+    quantity_base: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     reference_type: Mapped[str | None] = mapped_column(
         String(50),
         nullable=True,

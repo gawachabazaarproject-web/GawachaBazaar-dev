@@ -35,7 +35,7 @@ class InventoryReservationItem(Base):
 
     __tablename__ = "inventory_reservation_items"
     __table_args__ = (
-        CheckConstraint("quantity > 0", name="ck_inventory_reservation_items_quantity"),
+        CheckConstraint("quantity > 0 OR COALESCE(quantity_base, 0) > 0", name="ck_inventory_reservation_items_quantity"),
         Index("ix_inventory_reservation_items_reservation_id", "reservation_id"),
         Index("ix_inventory_reservation_items_order_item_id", "order_item_id"),
         Index("ix_inventory_reservation_items_inventory_lot_id", "inventory_lot_id"),
@@ -61,10 +61,13 @@ class InventoryReservationItem(Base):
         ForeignKey("inventory_lots.id", ondelete="RESTRICT"),
         nullable=False,
     )
+    # Legacy pack count of the lot's variant (display); `quantity_base` is the
+    # exact reserved amount in base units (NULL only for pre-migration rows).
     quantity: Mapped[Decimal] = mapped_column(
         Numeric(12, 3),
         nullable=False,
     )
+    quantity_base: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),

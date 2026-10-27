@@ -15,6 +15,7 @@ export interface Category {
   created_at: string;
 }
 
+import { UNITS, displayUnit } from "@/lib/units";
 import type { ProductStockItem } from "@/lib/inventory";
 
 export interface AdminProductListItem {
@@ -362,9 +363,7 @@ export async function deleteProduct(accessToken: string, id: number): Promise<vo
   await request<void>(accessToken, `/catalog/products/${id}`, { method: "DELETE" });
 }
 
-const UNIT_LABELS: Record<string, string> = {
-  KG: "kg", G: "g", L: "L", ML: "ml", UNIT: "pc", DOZEN: "dozen", BOX: "box", PACK: "pack",
-};
+const UNIT_LABELS: Record<string, string> = Object.fromEntries(Object.entries(UNITS).map(([k, u]) => [k, u.label]));
 
 function trimNumber(n: number): string {
   return String(Number(n.toFixed(3)));
@@ -382,12 +381,11 @@ export function ratePerBaseUnit(price: string | number, quantity: string | numbe
   const p = Number(price);
   const q = Number(quantity);
   if (!(p > 0) || !(q > 0)) return null;
-  const perBase: Record<string, [number, string]> = {
-    KG: [1, "kg"], G: [1000, "kg"], L: [1, "L"], ML: [1000, "L"], UNIT: [1, "pc"], DOZEN: [1 / 12, "pc"],
-  };
-  const entry = perBase[unit];
-  if (!entry) return null;
-  const [factor, label] = entry;
-  const rate = (p / q) * factor;
+  const info = UNITS[unit];
+  if (!info || (info.dimension !== "MASS" && info.dimension !== "VOLUME" && info.dimension !== "COUNT")) return null;
+  // price per kg / L / piece = price per pack / pack quantity, scaled by display-unit factor / this unit's factor
+  const display = displayUnit(info.dimension);
+  const label = info.dimension === "COUNT" ? "pc" : display.label;
+  const rate = (p / q) * (display.factor / info.factor);
   return `₹${Number(rate.toFixed(2))} per ${label}`;
 }

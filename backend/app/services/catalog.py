@@ -80,12 +80,18 @@ from app.services.admin_audit import AdminAuditService
 from app.services.image_upload import release_image
 from app.services.inventory import InventoryService
 from app.services.pricing import get_current_prices_for_variants
-from app.services.stock_levels import effective_reserve, stock_level
+from app.services.stock_levels import (
+    effective_reserve,
+    product_reserve_bases,
+    variant_stock_level,
+)
 from app.services.stock_pool import (
     amount_in_base,
     available_packs_by_variant,
+    pool_base_amounts,
     variant_size,
 )
+from app.services.units import dimension_of
 
 _ACTIVE = "ACTIVE"
 _UNIT_LABELS = {"KG": "kg", "G": "g", "L": "L", "ML": "ml", "UNIT": "pc", "DOZEN": "dozen", "BOX": "box", "PACK": "pack"}
@@ -841,6 +847,15 @@ class CatalogService:
 
         variant_ids = [v.id for v in product.variants]
         stock_by_variant = self._get_available_stock_for_variants(variant_ids)
+        pool, _, share_base = pool_base_amounts(self.db, {product.id})
+        reserve_bases = product_reserve_bases(self.db, {product.id})
+
+        def _family_total(variant: ProductVariant) -> int:
+            family = dimension_of(variant.unit)
+            return pool[(product.id, family)] + sum(
+                share_base.get(o.id, 0) for o in product.variants if dimension_of(o.unit) == family
+            )
+
         variant_stock = [
             VariantStockResponse(
                 variant_id=v.id,
@@ -850,7 +865,12 @@ class CatalogService:
                 available_quantity=stock_by_variant.get(v.id, Decimal("0")),
                 reserve_level=v.reserve_level,
                 effective_reserve=effective_reserve(v.reserve_level),
-                stock_level=stock_level(stock_by_variant.get(v.id, Decimal("0")), v.reserve_level),
+                stock_level=variant_stock_level(
+                    stock_by_variant.get(v.id, Decimal("0")),
+                    v.reserve_level,
+                    _family_total(v),
+                    reserve_bases.get((product.id, dimension_of(v.unit))),
+                ),
             )
             for v in product.variants
         ]

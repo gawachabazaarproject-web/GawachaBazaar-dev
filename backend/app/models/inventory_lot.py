@@ -7,6 +7,7 @@ from sqlalchemy import (
     Boolean,
     CheckConstraint,
     DateTime,
+    FetchedValue,
     ForeignKey,
     Identity,
     Index,
@@ -31,6 +32,7 @@ class InventoryLot(Base):
     """Current physical inventory balance for Batch + Product Variant + Location."""
 
     __tablename__ = "inventory_lots"
+    __mapper_args__ = {"eager_defaults": True}
     __table_args__ = (
         UniqueConstraint(
             "batch_id",
@@ -50,6 +52,14 @@ class InventoryLot(Base):
         CheckConstraint(
             "reserved_quantity >= 0 AND reserved_quantity <= quantity",
             name="ck_inventory_lots_reserved_quantity",
+        ),
+        # Canonical integer base-unit accounting (grams / ml / pieces / boxes; see
+        # app/services/units.py). Both NULL = a legacy lot whose old pack quantity
+        # could not be converted exactly: quarantined for review, never sellable.
+        CheckConstraint(
+            "(quantity_base IS NULL AND reserved_base IS NULL) OR "
+            "(quantity_base >= 0 AND reserved_base >= 0 AND reserved_base <= quantity_base)",
+            name="ck_inventory_lots_base",
         ),
         Index("ix_inventory_lots_batch_id", "batch_id"),
         Index("ix_inventory_lots_variant_id", "variant_id"),
@@ -86,9 +96,13 @@ class InventoryLot(Base):
         ForeignKey("inventory_locations.id", ondelete="RESTRICT"),
         nullable=False,
     )
+    # LEGACY pack columns (packs of the lot's variant, 3 decimals). Derived from
+    # the base columns by a database trigger for display/back-compat; the
+    # AUTHORITATIVE quantities are quantity_base / reserved_base below.
     quantity: Mapped[Decimal] = mapped_column(
         Numeric(12, 3),
         nullable=False,
+        server_onupdate=FetchedValue(),
     )
     # Physical `quantity` is never decremented by a reservation - only a
     # delivery-confirmation DISPATCH movement changes it. `reserved_quantity`
@@ -99,6 +113,15 @@ class InventoryLot(Base):
         Numeric(12, 3),
         nullable=False,
         server_default="0",
+        server_onupdate=FetchedValue(),
+    )
+    # Authoritative exact integer quantities in the product family's base unit
+    # (g / ml / pieces). `available = quantity_base - reserved_base`.
+    quantity_base: Mapped[int | None] = mapped_column(
+        BigInteger, nullable=True, server_onupdate=FetchedValue()
+    )
+    reserved_base: Mapped[int | None] = mapped_column(
+        BigInteger, nullable=True, server_onupdate=FetchedValue()
     )
     # A share lot holds stock an admin assigned to ONE size of the product
     # (see InventoryService.set_stock_shares): only that size sells from it,

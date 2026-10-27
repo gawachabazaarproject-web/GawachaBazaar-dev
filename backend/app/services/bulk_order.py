@@ -36,7 +36,6 @@ resolves to one winner cleanly rather than a lost update.
 from datetime import UTC, date, datetime
 from decimal import ROUND_HALF_UP, Decimal
 
-from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -89,6 +88,8 @@ from app.services.quote_state import (
     QuoteVersionStatus,
     transition_quote_version_status,
 )
+from app.services.stock_pool import available_packs_by_variant
+from app.services.units import dimension_of, packs_exact
 
 _CENTS = Decimal("0.01")
 _QUOTABLE_STATUSES = (
@@ -542,20 +543,32 @@ class BulkOrderService:
         if variant is None:
             raise NotFoundError("Product variant not found.")
 
-        totals = (
-            self.db.query(
-                func.coalesce(func.sum(InventoryLot.quantity), Decimal("0")),
-                func.coalesce(func.sum(InventoryLot.reserved_quantity), Decimal("0")),
+        # Whole packs this size can sell from the product's shared stock pool (+ its own
+        # share) - the same figure the shop and checkout use. total/reserved are the
+        # variant's family on hand / reserved, shown as packs of this size.
+        available = available_packs_by_variant(self.db, [variant_id])[variant_id]
+        family = dimension_of(variant.unit)
+        sibling_ids = [
+            v.id for v in self.db.query(ProductVariant).filter(ProductVariant.product_id == variant.product_id).all()
+            if dimension_of(v.unit) == family
+        ]
+        lots = (
+            self.db.query(InventoryLot)
+            .filter(
+                InventoryLot.variant_id.in_(sibling_ids),
+                InventoryLot.status == "ACTIVE",
+                InventoryLot.quantity_base.is_not(None),
+                (InventoryLot.is_share.is_(False)) | (InventoryLot.variant_id == variant_id),
             )
-            .filter(InventoryLot.variant_id == variant_id, InventoryLot.status == "ACTIVE")
-            .first()
+            .all()
         )
-        total_quantity, total_reserved = totals
+        on_hand_base = sum(lot.quantity_base for lot in lots)
+        reserved_base = sum(lot.reserved_base for lot in lots)
         return VariantAvailabilityResponse(
             variant_id=variant_id,
-            total_quantity=total_quantity,
-            reserved_quantity=total_reserved,
-            available_quantity=total_quantity - total_reserved,
+            total_quantity=packs_exact(on_hand_base, variant.size_base),
+            reserved_quantity=packs_exact(reserved_base, variant.size_base),
+            available_quantity=Decimal(available).quantize(Decimal("0.001")),
         )
 
     # ------------------------------------------------------------------

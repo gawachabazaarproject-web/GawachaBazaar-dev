@@ -47,6 +47,55 @@
 
 Packaging operations (`DRAFT → IN_PROGRESS → COMPLETED`, or `CANCELLED`) hold input lots and output lots; **completion locks all input and output lots in one id-ordered pass and applies the movements in one transaction** ([`packaging.py`](../../backend/app/services/packaging.py)). Supplier records, supplied products, ADMIN-only evaluations and a performance summary are plain CRUD with row locks on read-modify-write ([`supplier.py`](../../backend/app/services/supplier.py)).
 
+## Quantity model: exact base units (2026-10-27)
+
+**Canonical unit.** Stock is accounted as an exact **integer** in the product family's base unit:
+MASS = grams, VOLUME = millilitres, COUNT = pieces; BOX / PACK are their own unit (1 base unit each,
+no invented conversion). One conversion layer: `backend/app/services/units.py`; clients carry an
+identical copy (`Admin/lib/units.ts` = `mobile/src/utils/units.ts`), and `tests/test_units_parity.py`
+fails if either drifts from the backend table. Mass is never converted to volume or count.
+
+| Thing | Authoritative | Display / legacy |
+|---|---|---|
+| Size of a variant | `product_variants.size_base` (integer base units in ONE pack; follows quantity x unit) | `quantity`, `unit` |
+| Lot stock | `inventory_lots.quantity_base`, `reserved_base` (BIGINT) | `quantity`, `reserved_quantity` (packs, 3 dp) - **derived by a DB trigger**, never the truth |
+| Movement | `stock_movements.quantity_base` | `quantity` (packs, display) |
+| Reservation allocation | `inventory_reservation_items.quantity_base` | `quantity` (packs, display) |
+| Reserve level | `product_stock_reserves.reserve_base` (one physical amount per product & family) | `product_variants.reserve_level` (legacy per-size packs, used only when the product has no reserve row) |
+
+**Invariants (asserted by `tests/test_inventory_base_units.py`):** `0 <= reserved_base <= quantity_base` per lot
+(DB check); `sum(available) == shared pool + size-specific shares` (nothing counted twice, nothing lost); the
+movement ledger sums to physical stock; **unit conversion alone never creates or destroys stock**.
+
+**Sellable packs.** `floor((shared pool + that size's own share) / size_base)` - 68,999 g sells 275 x 250 g or 68 x 1 kg
+(not 343). Shared = ordinary lots; "kept for this size" = share lots (`is_share`), sellable by that size only.
+
+**Exact reservation.** An order for 250 g reserves exactly 250 g from any lot (a 3 kg lot goes 3000 -> 2750); delivery
+consumes exactly the reserved base units; release restores exactly (100 reserve/release cycles are tested for 250 g, 1 pc,
+5 pc, 1 dozen, 250 ml, 1 L). Receiving 5 pieces against a 1-dozen size stores 5, not 0.416 dozen.
+
+**Never rounded.** An amount that is not a whole number of base units (half a gram) is refused (422), not rounded. The
+batch row is a traceability record in the variant's own unit and is not used for accounting.
+
+**Products selling only a dozen** still cannot sell single pieces (unchanged); internally their stock is pieces.
+
+### Migration `e5f6a7b80923` (phase 1, additive) and what it did NOT touch
+
+Adds the base columns, backfills them **only where exact**, creates `product_stock_reserves` and
+`inventory_base_migration_report`, and installs trigger `trg_gb_sync_lot_base`. It **fails with a clear message** (changing
+nothing) if any size is not a whole number of base units. A lot whose pack quantity is not an exact number of base units
+(e.g. 0.416 dozen = 4.992 pieces), or that carries a live reservation that cannot be converted exactly, is **quarantined**
+(`quantity_base` NULL): never sold, never moved, listed in `inventory_base_migration_report` (lot, product, size, old
+quantity, calculated base, nearest representable base, difference, warehouse, batch/expiry) - nothing is rounded. An
+admin confirms the true amount with `POST /inventory/admin/lots/{id}/resolve-base`. Reserve levels: a product whose sizes
+all have an explicit level that agrees physically becomes one product reserve; every other case is reported as
+`RESERVE_LEVEL_AMBIGUOUS` and keeps the legacy per-size rule. **Historical drift already caused by the old rounding
+(2 g per order, fractional dozens) is not recoverable by the migration** - it can only be reported.
+Downgrade drops the base columns (the pack columns stay consistent but lose exactness).
+
+Phase 3 (retire the pack columns) is intentionally NOT done: the trigger still lets legacy writers (tests, scripts) write
+packs; remove it only after confirming no code or consumer writes `quantity` / `reserved_quantity`.
+
 ## Known gaps
 
 - `farms` and `quality_checks` have **no create/read API** or service; only `catalog.py` deletes quality checks with a product. Treat farm traceability as **not implemented** despite the tables ([KNOWN_ISSUES](../10-project-management/KNOWN_ISSUES.md)).

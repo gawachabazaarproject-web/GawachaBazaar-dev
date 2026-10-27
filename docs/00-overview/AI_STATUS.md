@@ -3,6 +3,24 @@
 > **Last verified:** 2026-10-14 (≈ 12:00–13:10 IST), branch `docs-and-primary-testing`, `HEAD` `8d6229e` ("chore(mobile): link EAS project under yash145"), **dirty working tree** (see §5).
 > **Purpose:** the "where are we right now" page for agents and developers: what works (and how that was checked), what is broken or unverified, what changed recently *according to the repository*, and what to do next. **Update this file whenever active development status, blockers or priorities change** ([AGENTS.md](../../AGENTS.md)). It is a snapshot; where it conflicts with the code or a fresh test run, trust those.
 
+## 0a. Inventory canonical base units - status on 2026-10-27 (committed to the feature branch, NOT deployed)
+
+Stock is accounted in exact integer grams / ml / pieces (migration `e5f6a7b80923`; model and rules in [INVENTORY](../05-domains/INVENTORY.md#quantity-model-exact-base-units-2026-10-27)).
+
+| Check | Result |
+|---|---|
+| Full backend suite, first run on the final design | 1696 collected: 1688 passed, 17 skipped, **8 failed** - all caused by this change: a relaxed CHECK let NULL pass (zero/negative movements accepted - real bug), the variant ORM hook pre-empted the DB checks, the bulk availability string format changed ("60" vs "60.000"), and 3 "no database triggers" policy tests did not list the deliberate `trg_gb_sync_lot_base` |
+| After the fixes (complete suite, scratch PostgreSQL 16, `pytest -p no:cacheprovider`) | **1698 passed, 17 skipped, 0 failed** in 40 min 41 s |
+| New tests | `test_units.py` (379), `test_inventory_base_units.py` (50), `test_inventory_final_audit.py` (29), `test_units_parity.py` (2) |
+| Migration semantics | scratch DB, old schema -> upgrade -> app -> downgrade -> upgrade: 24/24 checks (exact lots converted, fractional/ambiguous lots quarantined + reported, quarantined lots never sellable, resolve applies once, idempotent, report not duplicated) |
+| Ruff | repo-wide 7 findings, none in code written for this change (4 `E741` in `inventory_reservation.py`, 2 `F841` in `tests/multiproc`, 1 `I001` in `tests/test_refund_integrity.py`); was 14 before |
+| TypeScript | `Admin/` and `mobile/` `npx tsc --noEmit`: exit 0 |
+| Authz | golden file differs by exactly 3 operations (product reserve PUT/DELETE, lot resolve-base) |
+
+**Not verified:** any browser/UI check (no authenticated session; the deployed Admin predates the change), production database state, a production backup, the migration on production data. The 68,999 g -> 250 g = 275 / 1 kg = 68 figure was verified as client maths under Node only.
+
+**Before production:** confirm a recoverable database backup (Alembic downgrade is NOT a rollback - it drops the base columns), then deploy the backend (it runs `alembic upgrade head` on boot), read the `inventory_base_migration_report` table, and only then deploy Admin and mobile. Test tables 5/6/7 now allow the one deliberate trigger.
+
 ## 0. COD delivery OTP - status on 2026-10-27 (uncommitted, not deployed, not built)
 
 | Check | Result |

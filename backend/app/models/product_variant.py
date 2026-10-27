@@ -12,6 +12,7 @@ from sqlalchemy import (
     Numeric,
     String,
     UniqueConstraint,
+    event,
     func,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -38,6 +39,10 @@ class ProductVariant(Base):
         CheckConstraint(
             "quantity > 0",
             name="ck_product_variants_quantity",
+        ),
+        CheckConstraint(
+            "size_base > 0",
+            name="ck_product_variants_size_base",
         ),
         CheckConstraint(
             "reserve_level IS NULL OR reserve_level >= 0",
@@ -77,6 +82,10 @@ class ProductVariant(Base):
         Numeric(12, 3),
         nullable=False,
     )
+    # Base units (g / ml / pieces) in ONE pack of this size - the exact integer
+    # every stock calculation uses. Maintained from quantity x unit (see the
+    # mapper event at the bottom of this module).
+    size_base: Mapped[int] = mapped_column(BigInteger, nullable=False)
     # Stock the shop wants to keep in reserve; at/below it (or close to it) the
     # admin is alerted. NULL = the default reserve (app/services/stock_levels.py).
     reserve_level: Mapped[Decimal | None] = mapped_column(
@@ -116,3 +125,18 @@ class ProductVariant(Base):
         "OrderItem",
         back_populates="variant",
     )
+
+
+@event.listens_for(ProductVariant, "before_insert")
+@event.listens_for(ProductVariant, "before_update")
+def _sync_size_base(_mapper, _connection, target: ProductVariant) -> None:
+    """size_base always follows quantity x unit, so a size can never drift from
+    the integer the inventory maths uses."""
+    from app.services.units import UNITS, size_base
+
+    if target.unit not in UNITS or target.quantity is None or target.quantity <= 0:
+        # Not a valid size: size_base = 0 is refused by ck_product_variants_size_base, and the
+        # unit / quantity CHECK constraints reject the row too (the database stays the judge).
+        target.size_base = 0
+        return
+    target.size_base = size_base(target.quantity, target.unit)  # 422 if not a whole number of base units

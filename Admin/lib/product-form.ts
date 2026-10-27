@@ -4,6 +4,8 @@
  * operator's remembered choices (browser storage; only a convenience).
  */
 
+import { UNITS, displayUnit } from "@/lib/units";
+
 /** "tomato", "red-onion". A name without Latin letters or digits (e.g. Marathi)
  * has no readable web address, so a short unique one is made instead. */
 export function slugify(value: string): string {
@@ -53,10 +55,11 @@ export function parseSize(text: string): ParsedSize | null {
 export const SIZE_CHIPS = ["250 g", "500 g", "1 kg", "2 kg", "5 kg", "1 L", "6 pc", "1 dozen"];
 
 // unit -> [family, size of one unit in the family's base unit (g / ml / pieces)]
-const FAMILY: Record<string, [string, number]> = {
-  KG: ["MASS", 1000], G: ["MASS", 1], L: ["VOLUME", 1000], ML: ["VOLUME", 1],
-  UNIT: ["COUNT", 1], DOZEN: ["COUNT", 12],
-};
+const FAMILY: Record<string, [string, number]> = Object.fromEntries(
+  Object.entries(UNITS)
+    .filter(([, u]) => u.dimension === "MASS" || u.dimension === "VOLUME" || u.dimension === "COUNT")
+    .map(([k, u]) => [k, [u.dimension, u.factor]]),
+);
 
 export function unitFamily(unit: string): string | null {
   return FAMILY[unit]?.[0] ?? null;
@@ -70,7 +73,7 @@ export const RATE_LABEL: Record<string, string> = { MASS: "kg", VOLUME: "L", COU
 export function priceFromRate(rate: number, quantity: string, unit: string): string {
   const entry = FAMILY[unit];
   if (!entry || !(rate > 0)) return "";
-  const perBaseUnit = entry[0] === "COUNT" ? rate : rate / 1000; // rate per kg -> per g
+  const perBaseUnit = rate / displayUnit(entry[0]).factor; // rate per kg / L / piece -> per base unit (g / ml / pc)
   const price = Math.max(1, Math.round(perBaseUnit * Number(quantity) * entry[1]));
   return String(price);
 }
