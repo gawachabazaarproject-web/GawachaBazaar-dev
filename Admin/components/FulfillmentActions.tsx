@@ -37,6 +37,7 @@ export function FulfillmentActions({
   const { getAccessToken, user } = useAuth();
   const [partners, setPartners] = useState<StaffListItem[] | null>(null);
   const [partnerId, setPartnerId] = useState("");
+  const [otp, setOtp] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -122,9 +123,31 @@ export function FulfillmentActions({
   } else if (status === "OUT_FOR_DELIVERY" && canFulfill) {
     content = (
       <div>
-        <button disabled={busy} onClick={() => run((t) => confirmDelivery(t, fulfillment.id))} className={primary}>
-          {busy ? <BusyLabel>Confirming...</BusyLabel> : isCashOnDelivery ? "Confirm delivered - cash collected" : "Confirm delivered"}
-        </button>
+        <label className="block text-sm font-medium text-neutral-700" htmlFor="delivery-otp">
+          Delivery code from the customer
+        </label>
+        <p className="mb-2 text-xs text-neutral-500">
+          The customer sees a 6-digit code in their app. Ask them to read it out - the order cannot be completed without it.
+        </p>
+        <div className="flex flex-wrap items-center gap-2">
+          <input
+            id="delivery-otp"
+            value={otp}
+            onChange={(e) => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
+            inputMode="numeric"
+            maxLength={6}
+            autoComplete="off"
+            placeholder="6-digit code"
+            className="w-36 rounded border border-neutral-300 px-3 py-2 text-center text-lg tracking-widest"
+          />
+          <button
+            disabled={busy || otp.length !== 6}
+            onClick={() => run(async (t) => { await confirmDelivery(t, fulfillment.id, otp); setOtp(""); })}
+            className={primary}
+          >
+            {busy ? <BusyLabel>Confirming...</BusyLabel> : isCashOnDelivery ? "Confirm delivered - cash collected" : "Confirm delivered"}
+          </button>
+        </div>
         <p className="mt-2 text-xs text-neutral-500">
           This can&apos;t be undone. It deducts the stock
           {isCashOnDelivery ? " and records the Cash on Delivery payment as paid." : "."}

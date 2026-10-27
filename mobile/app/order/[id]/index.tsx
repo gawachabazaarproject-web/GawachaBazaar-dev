@@ -88,10 +88,10 @@ export default function OrderDetailsScreen() {
   const { data: payment } = useOrderPayment(orderId);
   const { data: refund } = useOrderRefund(orderId);
   const online = useOnlinePayment();
-  // The COD delivery code only exists for an open or just-completed COD order.
+  // Every delivery needs the customer's code (prepaid and COD), for an open or just-completed order.
   const { data: deliveryOtp } = useDeliveryOtp(
     orderId,
-    payment?.payment_method === "COD" && (order?.status === "CONFIRMED" || order?.status === "COMPLETED"),
+    order?.status === "CONFIRMED" || order?.status === "COMPLETED",
   );
 
   if (isLoading || !order) {

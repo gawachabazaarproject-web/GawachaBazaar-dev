@@ -21,7 +21,7 @@ function useCountdown(expiresAt: string | null, fallback: number | null): number
   return left;
 }
 
-/** The customer's side of COD proof-of-delivery. The code is shown only while ACTIVE
+/** The customer's side of proof-of-delivery. The code is shown only while ACTIVE
  * and only to the order's owner (the backend enforces both). */
 export function DeliveryOtpCard({ data }: { data: DeliveryOtp }) {
   const left = useCountdown(data.expires_at, data.seconds_left);
@@ -54,7 +54,7 @@ export function DeliveryOtpCard({ data }: { data: DeliveryOtp }) {
         <Text variant="bodySmall" color={colors.textSecondary}>This code has expired. Ask the delivery partner to send a new one.</Text>
       ) : (
         <Text variant="bodySmall" color={colors.textSecondary}>
-          Your code will appear here when the delivery partner reaches you. You will also get a notification.
+          Your code appears here once your order is out for delivery. Give it to the delivery partner only when you receive your order.
         </Text>
       )}
     </View>

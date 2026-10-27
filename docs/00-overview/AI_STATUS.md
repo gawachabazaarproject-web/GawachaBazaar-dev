@@ -14,6 +14,8 @@
 | TypeScript | `mobile/` and `Admin/` `npx tsc --noEmit`: exit 0 |
 | References | `API_REFERENCE` (239 ops) and `DATABASE_SCHEMA` (60 tables) regenerated with `docs/_tools` |
 
+**Update 2026-10-27 (later):** the code is now required for EVERY delivery (prepaid and COD), issued automatically at OUT_FOR_DELIVERY (240 min expiry), with no ADMIN bypass; Admin order page has a code field. `tests/test_delivery_otp.py` 32 passed on a disposable DB; `alembic upgrade head` + `alembic check` clean. Partner apps on old builds cannot complete ANY delivery while enforcement is on.
+
 **Not verified:** any physical Android run; FCM/Expo push delivery of the code; notification tap routing; the customer/partner OTP screens on a device or emulator; Admin in a browser; the production host's environment (`DELIVERY_OTP_SECRET` / `DELIVERY_OTP_ENFORCED` / `REFERRAL_ENABLED` could not be inspected from the repository - the local `.env` is development with no secret).
 
 **Release blockers (as of this note):** set a >= 32-char `DELIVERY_OTP_SECRET` on the real host (production refuses to start without it while enforcement is on); decide rollout order (deploy backend + ship the partner app together - a partner on an old app cannot complete unpaid-COD deliveries once enforcement is on; `DELIVERY_OTP_ENFORCED=false` is the temporary switch); device test. See [COD_OPERATIONS](../05-domains/COD_OPERATIONS.md#delivery-otp-proof-of-delivery---implemented).

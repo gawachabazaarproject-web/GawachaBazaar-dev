@@ -46,8 +46,8 @@ export function markOutForDelivery(accessToken: string, id: number): Promise<voi
   return post(accessToken, `/${id}/out-for-delivery`);
 }
 
-export function confirmDelivery(accessToken: string, id: number): Promise<void> {
-  return post(accessToken, `/${id}/deliver`);
+export function confirmDelivery(accessToken: string, id: number, otp: string): Promise<void> {
+  return post(accessToken, `/${id}/deliver`, { otp });
 }
 
 export interface FulfillmentRow {

@@ -119,42 +119,9 @@ class DeliveryOtpService:
     # generation (partner at the door)
     # ------------------------------------------------------------------
 
-    def send_for_assignment(self, assignment_id: int, user: User) -> OtpStatusSummary:
-        """Issue a fresh code for the caller's own assignment and push it to the
-        customer. Re-sending invalidates the previous code (rate limited)."""
-        from app.services.delivery_assignment import DeliveryAssignmentService
-
-        order, _fulfillment, assignment = DeliveryAssignmentService(self.db)._lock_for_partner(
-            assignment_id, user
-        )
-        if assignment.status != "OUT_FOR_DELIVERY" or order.status != "CONFIRMED":
-            raise OtpError(
-                "ORDER_NOT_ELIGIBLE",
-                "The delivery code can only be sent while the order is out for delivery.",
-                409,
-            )
-        payment = (
-            self.db.query(Payment).filter(Payment.order_id == order.id).populate_existing().first()
-        )
-        if not cod_is_due(payment):
-            raise OtpError(
-                "INVALID_PAYMENT_METHOD",
-                "A delivery code is only used for cash-on-delivery orders that are still unpaid.",
-                409,
-            )
-        now = datetime.now(UTC)
-        window_start = now - timedelta(minutes=settings.DELIVERY_OTP_RESEND_WINDOW_MINUTES)
-        issued = self.db.scalar(
-            select(func.count())
-            .select_from(DeliveryOtp)
-            .where(DeliveryOtp.order_id == order.id, DeliveryOtp.created_at >= window_start)
-        )
-        if issued >= settings.DELIVERY_OTP_RESEND_LIMIT:
-            self.db.rollback()
-            raise RateLimitError(
-                "Too many delivery codes were requested for this order. Please wait a few minutes."
-            )
-
+    def _create(
+        self, order: Order, assignment: DeliveryAssignment, now: datetime, user_id: int | None = None
+    ) -> DeliveryOtp:
         previous = self._active(order.id, lock=True)
         if previous is not None:
             self._invalidate(previous, "REPLACED", now)
@@ -177,7 +144,7 @@ class DeliveryOtpService:
         self.db.refresh(row)
         logger.info(
             "DELIVERY_OTP_GENERATED: order_id=%s assignment_id=%s partner=%s otp_id=%s",
-            order.id, assignment.id, user.id, row.id,
+            order.id, assignment.id, user_id, row.id,
         )
         # Best effort and after the commit: a push failure never affects the code.
         try:
@@ -185,7 +152,65 @@ class DeliveryOtpService:
             logger.info("DELIVERY_OTP_NOTIFICATION_ATTEMPTED: order_id=%s otp_id=%s", order.id, row.id)
         except Exception:  # noqa: BLE001
             logger.exception("DELIVERY_OTP_NOTIFICATION_FAILED: order_id=%s otp_id=%s", order.id, row.id)
+        return row
+
+    def send_for_assignment(self, assignment_id: int, user: User) -> OtpStatusSummary:
+        """Issue a fresh code for the caller's own assignment and push it to the
+        customer. Re-sending invalidates the previous code (rate limited). Every
+        delivery needs a code (prepaid and COD alike)."""
+        from app.services.delivery_assignment import DeliveryAssignmentService
+
+        order, _fulfillment, assignment = DeliveryAssignmentService(self.db)._lock_for_partner(
+            assignment_id, user
+        )
+        if assignment.status != "OUT_FOR_DELIVERY" or order.status != "CONFIRMED":
+            raise OtpError(
+                "ORDER_NOT_ELIGIBLE",
+                "The delivery code can only be sent while the order is out for delivery.",
+                409,
+            )
+        now = datetime.now(UTC)
+        window_start = now - timedelta(minutes=settings.DELIVERY_OTP_RESEND_WINDOW_MINUTES)
+        issued = self.db.scalar(
+            select(func.count())
+            .select_from(DeliveryOtp)
+            .where(DeliveryOtp.order_id == order.id, DeliveryOtp.created_at >= window_start)
+        )
+        if issued >= settings.DELIVERY_OTP_RESEND_LIMIT:
+            self.db.rollback()
+            raise RateLimitError(
+                "Too many delivery codes were requested for this order. Please wait a few minutes."
+            )
+
+        row = self._create(order, assignment, now, user_id=user.id)
         return self._summary(row, now)
+
+    def issue_for_order(self, order_id: int) -> None:
+        """Best effort, called right after an order goes OUT_FOR_DELIVERY: the customer
+        gets the code without anyone tapping anything. Skips quietly when a live code
+        already exists; never raises (the partner/admin can still resend)."""
+        try:
+            if not settings.DELIVERY_OTP_ENFORCED:
+                return
+            order = self.db.query(Order).filter(Order.id == order_id).first()
+            assignment = (
+                self.db.query(DeliveryAssignment)
+                .filter(
+                    DeliveryAssignment.order_id == order_id,
+                    DeliveryAssignment.status == "OUT_FOR_DELIVERY",
+                )
+                .first()
+            )
+            if order is None or assignment is None or order.status != "CONFIRMED":
+                return
+            now = datetime.now(UTC)
+            active = self._active(order_id)
+            if active is not None and now < active.expires_at:
+                return
+            self._create(order, assignment, now)
+        except Exception:  # noqa: BLE001
+            self.db.rollback()
+            logger.exception("DELIVERY_OTP_AUTO_ISSUE_FAILED: order_id=%s", order_id)
 
     # ------------------------------------------------------------------
     # customer view
@@ -197,9 +222,8 @@ class DeliveryOtpService:
         order = self.db.query(Order).filter(Order.id == order_id, Order.user_id == customer_user_id).first()
         if order is None:
             raise NotFoundError("Order not found.")
-        payment = self.db.query(Payment).filter(Payment.order_id == order.id).first()
         now = datetime.now(UTC)
-        if payment is None or payment.payment_method != "COD":
+        if not settings.DELIVERY_OTP_ENFORCED:
             return CustomerDeliveryOtpResponse(required=False, status="NOT_REQUIRED")
         if order.status == "CANCELLED":
             return CustomerDeliveryOtpResponse(required=False, status="CANCELLED")
@@ -324,5 +348,6 @@ class DeliveryOtpService:
 
 
 def require_for_delivery(payment: Payment | None) -> bool:
-    """True when completing this order's delivery needs a verified code."""
-    return settings.DELIVERY_OTP_ENFORCED and cod_is_due(payment)
+    """True when completing this order's delivery needs a verified code: always
+    (prepaid and COD), unless the rollout switch is off."""
+    return settings.DELIVERY_OTP_ENFORCED

@@ -85,7 +85,7 @@ def test_generated_code_is_six_digits_hashed_and_expiring(client, db_session, pu
     assert timedelta(minutes=settings.DELIVERY_OTP_EXPIRY_MINUTES - 1) < life <= timedelta(
         minutes=settings.DELIVERY_OTP_EXPIRY_MINUTES, seconds=5
     )
-    assert pushes and pushes[0]["otp"] == code and pushes[0]["order_id"] == s.order["id"]
+    assert pushes and pushes[-1]["otp"] == code and pushes[-1]["order_id"] == s.order["id"]
 
 
 def test_code_generator_keeps_leading_zeros(monkeypatch) -> None:
@@ -130,11 +130,11 @@ def test_code_never_reaches_the_logs(client, db_session, caplog) -> None:
 
 def test_full_cod_lifecycle_with_otp(client, db_session) -> None:
     s = _out(client, db_session, "v1")
-    # the customer sees "waiting" before the partner sends anything
-    waiting = client.get(f"/api/v1/orders/{s.order['id']}/delivery-otp", headers=s.ch).json()
-    assert waiting["status"] == "WAITING" and waiting["otp"] is None
-    _send(s)
+    # the code is issued automatically when the order goes out for delivery
+    auto = client.get(f"/api/v1/orders/{s.order['id']}/delivery-otp", headers=s.ch).json()
+    assert auto["status"] == "ACTIVE" and len(auto["otp"]) == 6
     code = _code(s)
+    assert code == auto["otp"]
     done = _deliver(s, code)
     assert done.status_code == 200, done.text
     assert done.json()["status"] == "DELIVERED" and done.json()["cod_status"] == "COD_COLLECTED"
@@ -152,7 +152,7 @@ def test_full_cod_lifecycle_with_otp(client, db_session) -> None:
     assert again.status_code in (200, 409)
     db_session.expire_all()
     assert db_session.query(DeliveryPartnerEarning).count() == 1
-    assert db_session.query(DeliveryOtp).filter_by(order_id=s.order["id"]).count() == 1
+    assert db_session.query(DeliveryOtp).filter_by(order_id=s.order["id"]).count() == 1  # auto-issued only
 
 
 def test_delivery_without_or_with_wrong_code_changes_nothing(client, db_session) -> None:
@@ -174,6 +174,8 @@ def test_delivery_without_or_with_wrong_code_changes_nothing(client, db_session)
 
 def test_delivery_with_no_code_issued_is_refused(client, db_session) -> None:
     s = _out(client, db_session, "v3")
+    otp_service.DeliveryOtpService(db_session).invalidate_for_order(s.order["id"], "TEST")
+    db_session.commit()
     r = _deliver(s, "123456")
     assert r.status_code == 409 and r.json()["code"] == "OTP_NOT_FOUND"
     assert db_session.query(DeliveryPartnerEarning).count() == 0
@@ -249,7 +251,7 @@ def test_new_code_invalidates_the_old_one_and_only_one_stays_active(client, db_s
 def test_resend_is_rate_limited_per_order(client, db_session, pushes) -> None:
     s = _out(client, db_session, "r2")
     limit = settings.DELIVERY_OTP_RESEND_LIMIT
-    for _ in range(limit):
+    for _ in range(limit - 1):  # the automatic code counts as the first
         assert _send(s).status_code == 200
     r = _send(s)
     assert r.status_code == 429
@@ -282,16 +284,19 @@ def test_code_can_only_be_sent_while_out_for_delivery(client, db_session) -> Non
     assert db_session.query(DeliveryOtp).count() == 0
 
 
-def test_prepaid_orders_have_no_code_and_need_none(client, db_session) -> None:
+def test_prepaid_orders_also_need_the_code(client, db_session) -> None:
     s = Scene(client, db_session, "s2")
     pay = db_session.query(Payment).filter_by(order_id=s.order["id"]).one()
     pay.payment_method, pay.status = "UPI", "PAID"
     db_session.commit()
     s.to_out()
-    assert _send(s).status_code == 409
     view = client.get(f"/api/v1/orders/{s.order['id']}/delivery-otp", headers=s.ch).json()
-    assert view["required"] is False and view["status"] == "NOT_REQUIRED"
-    assert s.act("deliver", json={}).status_code == 200
+    assert view["required"] is True and view["status"] == "ACTIVE"
+    assert s.act("deliver", json={}).status_code == 422  # no code: refused
+    assert s.act("deliver", json={"otp": _wrong(view["otp"])}).status_code == 422
+    assert s.act("deliver", json={"otp": view["otp"]}).status_code == 200
+    db_session.expire_all()
+    assert db_session.get(Order, s.order["id"]).status == "COMPLETED"
 
 
 def test_cancelled_order_cannot_be_delivered_and_code_dies(client, db_session) -> None:
@@ -387,7 +392,7 @@ def test_legacy_fulfillment_deliver_endpoint_also_requires_the_code(client, db_s
     assert db_session.get(Order, s.order["id"]).status == "COMPLETED"
 
 
-def test_admin_override_completes_consistently_and_is_audited(client, db_session, caplog) -> None:
+def test_admin_needs_the_customer_code_too(client, db_session) -> None:
     from decimal import Decimal
 
     from app.models.inventory_lot import InventoryLot
@@ -395,10 +400,16 @@ def test_admin_override_completes_consistently_and_is_audited(client, db_session
     s = _out(client, db_session, "z4")
     start_qty = s.lot.quantity
     _admin, admin_h = _staff(db_session, ADMIN, "z4a")
-    with caplog.at_level(logging.WARNING):
-        r = client.post(f"/api/v1/fulfillments/{s.fid}/deliver", headers=admin_h)
+    url = f"/api/v1/fulfillments/{s.fid}/deliver"
+    code = _code(s)
+    # no bypass: no code / wrong code is refused and nothing changes
+    assert client.post(url, headers=admin_h).status_code == 422
+    assert client.post(url, headers=admin_h, json={"otp": _wrong(code)}).status_code == 422
+    db_session.expire_all()
+    assert db_session.get(Order, s.order["id"]).status == "CONFIRMED"
+    assert db_session.query(DeliveryPartnerEarning).count() == 0
+    r = client.post(url, headers=admin_h, json={"otp": code})
     assert r.status_code == 200, r.text
-    assert caplog.text.count("DELIVERY_OTP_ADMIN_OVERRIDE") == 1
     db_session.expire_all()
     assert db_session.get(Order, s.order["id"]).status == "COMPLETED"
     assert db_session.query(Payment).filter_by(order_id=s.order["id"]).one().status == "PAID"
@@ -406,11 +417,8 @@ def test_admin_override_completes_consistently_and_is_audited(client, db_session
     assert db_session.query(DeliveryPartnerEarning).count() == 1
     lot = db_session.get(InventoryLot, s.lot.id)
     assert lot.quantity == start_qty - Decimal("3") and lot.reserved_quantity == 0
-    # a second admin call is an idempotent no-op: no second earning, no second audit line
-    caplog.clear()
-    with caplog.at_level(logging.WARNING):
-        client.post(f"/api/v1/fulfillments/{s.fid}/deliver", headers=admin_h)
-    assert "DELIVERY_OTP_ADMIN_OVERRIDE" not in caplog.text
+    # a second call is an idempotent no-op: no second earning
+    client.post(url, headers=admin_h, json={"otp": code})
     db_session.expire_all()
     assert db_session.query(DeliveryPartnerEarning).count() == 1
 
@@ -454,7 +462,7 @@ def test_production_defaults_enforce_the_code() -> None:
     from app.core.config import Settings
 
     assert Settings.model_fields["DELIVERY_OTP_ENFORCED"].default is True
-    assert Settings.model_fields["DELIVERY_OTP_EXPIRY_MINUTES"].default == 10
+    assert Settings.model_fields["DELIVERY_OTP_EXPIRY_MINUTES"].default == 240
     assert Settings.model_fields["DELIVERY_OTP_MAX_ATTEMPTS"].default == 5
 
 
@@ -495,7 +503,7 @@ def test_concurrent_correct_submissions_complete_once(client, db_session) -> Non
     assert db_session.query(DeliveryPartnerEarning).count() == 1
     assert db_session.get(Order, s.order["id"]).status == "COMPLETED"
     assert _row(db_session, s.order["id"]).verified_at is not None
-    assert db_session.query(DeliveryOtp).filter_by(order_id=s.order["id"]).count() == 1
+    assert db_session.query(DeliveryOtp).filter_by(order_id=s.order["id"], verified_at=None).count() <= 1
 
 
 def test_concurrent_wrong_guesses_cannot_exceed_the_attempt_limit(client, db_session) -> None:

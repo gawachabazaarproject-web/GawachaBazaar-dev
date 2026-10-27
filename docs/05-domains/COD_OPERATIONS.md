@@ -19,22 +19,22 @@
 
 > Evidence: `services/delivery_otp.py`, `models/delivery_otp.py`, migration `d3e4f5a60712`, `tests/test_delivery_otp.py`. Runtime verification on a real device/FCM has **not** been done (see Limitations).
 
-**Rule.** An unpaid COD delivery cannot be completed without the 6-digit code the customer holds. The check lives inside `FulfillmentService.confirm_delivery`, i.e. inside the same transaction that consumes stock, marks payment PAID, writes the partner earning and completes the order - so a wrong code changes nothing but its own attempt counter, and a right code can only ever be spent once.
+**Rule.** **Every** delivery (prepaid and COD) cannot be completed without the 6-digit code the customer holds - by the partner or by an ADMIN (no bypass). The check lives inside `FulfillmentService.confirm_delivery`, i.e. inside the same transaction that consumes stock, marks payment PAID, writes the partner earning and completes the order - so a wrong code changes nothing but its own attempt counter, and a right code can only ever be spent once.
 
 **Flow.**
-1. Partner is `OUT_FOR_DELIVERY` and at the door: `POST /delivery-partner/assignments/{id}/otp/send`. (Not at checkout or departure: the code lives 10 minutes.)
+1. The code is issued **automatically** when the order goes `OUT_FOR_DELIVERY` (partner app or `/fulfillments/{id}/out-for-delivery`); `POST /delivery-partner/assignments/{id}/otp/send` resends (replaces) it.
 2. Server generates `secrets.randbelow(10**6)` formatted to 6 digits, stores an **HMAC-SHA256** (key `DELIVERY_OTP_SECRET`, over `order_id:assignment_id:code`) plus a Fernet-encrypted copy that exists only so the *owning customer* can read it in the app; the copy is set to NULL on verify/invalidate/lock. Any older active code for the order is invalidated (`REPLACED`). One active code per order is a partial unique index.
 3. Customer gets a push (type `DELIVERY_OTP`, tap opens the order) and sees the code on the order screen (`GET /orders/{id}/delivery-otp`, owner only, 404 for anyone else; code returned only while ACTIVE).
 4. Partner submits it with the existing `POST /delivery-partner/assignments/{id}/deliver` (`otp` field) - this is the verification endpoint; legacy `POST /fulfillments/{id}/deliver` accepts an optional `{ "otp": "..." }` body.
 
-**Limits.** Expiry `DELIVERY_OTP_EXPIRY_MINUTES` (10); `DELIVERY_OTP_MAX_ATTEMPTS` (5) wrong tries lock the code (even the right code then fails until a new one is sent); at most `DELIVERY_OTP_RESEND_LIMIT` (3) codes per order per `DELIVERY_OTP_RESEND_WINDOW_MINUTES` (15); per-user slowapi limit on send (10/min). Failed attempts are committed before the error is returned, so concurrent guessing cannot exceed the limit.
+**Limits.** Expiry `DELIVERY_OTP_EXPIRY_MINUTES` (240, so a code issued at departure outlives the trip); `DELIVERY_OTP_MAX_ATTEMPTS` (5) wrong tries lock the code (even the right code then fails until a new one is sent); at most `DELIVERY_OTP_RESEND_LIMIT` (3) codes per order per `DELIVERY_OTP_RESEND_WINDOW_MINUTES` (15); per-user slowapi limit on send (10/min). Failed attempts are committed before the error is returned, so concurrent guessing cannot exceed the limit.
 
 **Error codes** (`code` in the error body): `OTP_INVALID` (422), `OTP_NOT_FOUND` (409), `OTP_EXPIRED` (409), `OTP_ATTEMPTS_EXCEEDED` (429), `ORDER_NOT_ELIGIBLE` (409), `INVALID_PAYMENT_METHOD` (409), `DELIVERY_ASSIGNMENT_NOT_FOUND` (409), `RATE_LIMIT_EXCEEDED` (429).
 
-**Not covered by the code.** Prepaid/paid orders (no code). ADMIN completing through `/fulfillments/{id}/deliver` is an audited override that skips the code (logged as `DELIVERY_OTP_ADMIN_OVERRIDE`). `DELIVERY_OTP_ENFORCED=false` disables the requirement entirely (rollout switch / emergency only). Push is best-effort: if it fails the customer still sees the code in the app, and delivery never depends on the push.
+**Admin.** The Admin order page asks for the customer's code before "Confirm delivered"; `/fulfillments/{id}/deliver` requires `{"otp"}` for ADMIN too. `DELIVERY_OTP_ENFORCED=false` disables the requirement entirely (rollout switch / emergency only). Push is best-effort: if it fails the customer still sees the code in the app, and delivery never depends on the push.
 
 **Never logged / never stored:** plaintext codes (logs carry order id and otp row id only). The push *payload* does carry the code (it must reach the lock screen); Expo/FCM transit it.
 
 **Admin visibility.** Partner and admin assignment responses carry `delivery_otp` status (`NOT_GENERATED/ACTIVE/EXPIRED/LOCKED/INVALIDATED/VERIFIED`, attempts left) and never the code.
 
-**Limitations.** A customer without the app or push cannot receive a code (no SMS fallback); they can be helped via support/ADMIN override. The code is shown on a customer's screen, so a shoulder-surfer could read it - the same as any app OTP. Reassigning a delivery invalidates the code (a new assignment needs a new code).
+**Limitations.** A customer without the app or push cannot receive a code (no SMS fallback); support can only complete the order once the customer reads the code out (or an operator switches `DELIVERY_OTP_ENFORCED=false`). The code is shown on a customer's screen, so a shoulder-surfer could read it - the same as any app OTP. Reassigning a delivery invalidates the code (a new assignment needs a new code).
