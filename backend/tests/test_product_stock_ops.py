@@ -270,7 +270,7 @@ def test_correct_rolls_back_everything_when_a_movement_fails(client, db_session)
     _receive(client, headers, sizes["1 kg"].id, main.id, 20)
     before = (db_session.query(StockMovement).count(), db_session.query(AdminActionLog).count())
 
-    real = InventoryService.apply_movement
+    real = InventoryService.apply_movement_base
     calls = {"n": 0}
 
     def flaky(self, *args, **kwargs):
@@ -279,7 +279,7 @@ def test_correct_rolls_back_everything_when_a_movement_fails(client, db_session)
             raise RuntimeError("boom")
         return real(self, *args, **kwargs)
 
-    with patch.object(InventoryService, "apply_movement", flaky):
+    with patch.object(InventoryService, "apply_movement_base", flaky):
         response = client.post(
             f"{BASE}/admin/products/{product.id}/correct",
             json={"physical_amount": "10", "amount_unit": "KG"},  # needs both lots
@@ -364,7 +364,7 @@ def test_remove_rolls_back_on_failure(client, db_session) -> None:
     _, headers, product, sizes, main = _setup(db_session, client)
     _receive(client, headers, sizes["1 kg"].id, main.id, 3)
     _receive(client, headers, sizes["1 kg"].id, main.id, 10)
-    real = InventoryService.apply_movement
+    real = InventoryService.apply_movement_base
     calls = {"n": 0}
 
     def flaky(self, *args, **kwargs):
@@ -373,7 +373,7 @@ def test_remove_rolls_back_on_failure(client, db_session) -> None:
             raise RuntimeError("boom")
         return real(self, *args, **kwargs)
 
-    with patch.object(InventoryService, "apply_movement", flaky):
+    with patch.object(InventoryService, "apply_movement_base", flaky):
         response = client.post(
             f"{BASE}/admin/products/{product.id}/remove",
             json={"amount": "5", "amount_unit": "KG", "reason": "Damaged"},
@@ -473,7 +473,7 @@ def test_move_rolls_back_on_failure(client, db_session) -> None:
     _, headers, product, sizes, main = _setup(db_session, client)
     nagpur = _location(db_session, "NAG")
     _receive(client, headers, sizes["1 kg"].id, main.id, 5)
-    real = InventoryService.apply_movement
+    real = InventoryService.apply_movement_base
     calls = {"n": 0}
 
     def flaky(self, *args, **kwargs):
@@ -482,7 +482,7 @@ def test_move_rolls_back_on_failure(client, db_session) -> None:
             raise RuntimeError("boom")
         return real(self, *args, **kwargs)
 
-    with patch.object(InventoryService, "apply_movement", flaky):
+    with patch.object(InventoryService, "apply_movement_base", flaky):
         response = client.post(
             f"{BASE}/admin/products/{product.id}/move",
             json={"amount": "2", "amount_unit": "KG", "from_location_id": main.id, "to_location_id": nagpur.id},

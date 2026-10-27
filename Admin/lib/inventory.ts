@@ -5,6 +5,8 @@
  * recomputed independently here.
  */
 
+import { AMOUNT_UNITS_BY_DIMENSION, UNITS, convert, dimensionOf, formatSize, packTotalText } from "@/lib/units";
+
 export interface AdminInventoryLotListItem {
   id: number;
   product_id: number;
@@ -232,6 +234,8 @@ export interface ProductStockTotal {
   on_hand_amount: string;
   /** Promised to customer orders. */
   reserved_amount: string;
+  /** The product-level low-stock reserve in `amount_unit` (null = the per-size levels apply). */
+  reserve_amount?: string | null;
 }
 
 export interface ProductWarehouseStock {
@@ -328,6 +332,21 @@ export async function fetchProductStockSummary(
 }
 
 /** "I counted 43 kg": the server works out the difference and picks the lots. */
+export async function setProductReserve(
+  accessToken: string,
+  productId: number,
+  payload: { amount: string; amount_unit: string },
+): Promise<ProductStockItem> {
+  return request(accessToken, `/inventory/admin/products/${productId}/reserve`, {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function clearProductReserve(accessToken: string, productId: number): Promise<ProductStockItem> {
+  return request(accessToken, `/inventory/admin/products/${productId}/reserve`, { method: "DELETE" });
+}
+
 export async function correctProductStock(
   accessToken: string,
   productId: number,
@@ -536,14 +555,6 @@ export async function fetchStockAlerts(accessToken: string, limit?: number): Pro
   return request(accessToken, `/inventory/admin/stock-alerts${limit ? `?limit=${limit}` : ""}`);
 }
 
-const UNIT_BASE: Record<string, [number, string, number, string]> = {
-  // unit -> [base factor, base label, factor of the larger display unit, its label]
-  KG: [1000, "g", 1000, "kg"],
-  G: [1, "g", 1000, "kg"],
-  L: [1000, "ml", 1000, "L"],
-  ML: [1, "ml", 1000, "L"],
-};
-
 function trim(n: number): string {
   return String(Number(n.toFixed(3)));
 }
@@ -558,42 +569,39 @@ export function packCount(packs: string | number): string {
 /** What a number of packs adds up to in real units ("100 kg"), or null
  * when the pack has no meaningful total (a pack counted as "1 pack"). */
 export function packTotal(packs: string | number, packQuantity: string | number, unit: string): string | null {
-  const total = Number(packs) * Number(packQuantity);
-  const conv = UNIT_BASE[unit];
-  if (!conv) return `${trim(total)} ${unit.toLowerCase()}`;
-  const base = total * conv[0];
-  return base >= conv[2] ? `${trim(base / conv[2])} ${conv[3]}` : `${trim(base)} ${conv[1]}`;
+  return packTotalText(packs, packQuantity, unit);
 }
 
 /** Units stock can be entered in for a pack unit - weight/volume first (kg for
  * KG/G packs), or none when the pack can only be counted ("5 packs"). */
 export function amountUnits(unit: string): { value: string; label: string }[] {
-  if (unit === "KG" || unit === "G") return [{ value: "KG", label: "kg" }, { value: "G", label: "g" }];
-  if (unit === "L" || unit === "ML") return [{ value: "L", label: "L" }, { value: "ML", label: "ml" }];
-  if (unit === "UNIT" || unit === "DOZEN") return [{ value: "UNIT", label: "pieces" }, { value: "DOZEN", label: "dozen" }];
-  return [];
+  const dimension = dimensionOf(unit);
+  return (dimension ? AMOUNT_UNITS_BY_DIMENSION[dimension] ?? [] : []).map((value) => ({
+    value,
+    label: UNITS[value].inputLabel,
+  }));
 }
 
 /** Preview of how many packs an entered weight makes (the server does the real conversion). */
 export function amountToPacks(amount: string | number, amountUnit: string, packQuantity: string | number, unit: string): number {
-  const base = (u: string) => (u === "KG" || u === "L" ? 1000 : u === "DOZEN" ? 12 : 1);
-  const packs = (Number(amount) * base(amountUnit)) / (Number(packQuantity) * base(unit));
+  if (!UNITS[amountUnit] || !UNITS[unit]) return 0;
+  const packs = (Number(amount) * UNITS[amountUnit].factor) / (Number(packQuantity) * UNITS[unit].factor);
   return Math.floor(packs * 1000) / 1000;
 }
 
 /** "1 kg" - the size of one pack. */
 export function packSize(packQuantity: string | number, unit: string): string {
-  const label = ({ UNIT: "pc", DOZEN: "dozen" } as Record<string, string>)[unit] ?? unit.toLowerCase();
-  return `${trim(Number(packQuantity))} ${label}`;
+  return formatSize(packQuantity, unit);
 }
 
 // ---- Units staff talk in (kg / L / pieces), per unit family ----------------
 
-export const FAMILY_UNITS: Record<string, { value: string; label: string; factor: number }[]> = {
-  MASS: [{ value: "KG", label: "kg", factor: 1000 }, { value: "G", label: "g", factor: 1 }],
-  VOLUME: [{ value: "L", label: "L", factor: 1000 }, { value: "ML", label: "ml", factor: 1 }],
-  COUNT: [{ value: "UNIT", label: "pieces", factor: 1 }, { value: "DOZEN", label: "dozen", factor: 12 }],
-};
+export const FAMILY_UNITS: Record<string, { value: string; label: string; factor: number }[]> = Object.fromEntries(
+  Object.entries(AMOUNT_UNITS_BY_DIMENSION).map(([dimension, values]) => [
+    dimension,
+    values.map((value) => ({ value, label: UNITS[value].inputLabel, factor: UNITS[value].factor })),
+  ]),
+);
 
 /** Plain number without trailing zeros ("50", "2.5"). */
 export function plain(value: string | number): string {
@@ -607,10 +615,8 @@ export function amountText(amount: string | number, unit: string): string {
 
 /** Convert between the units of one family ("2" kg -> 2000 g). */
 export function convertAmount(amount: number, fromUnit: string, toUnit: string, family: string): number {
-  const units = FAMILY_UNITS[family] ?? [];
-  const from = units.find((u) => u.value === fromUnit)?.factor ?? 1;
-  const to = units.find((u) => u.value === toUnit)?.factor ?? 1;
-  return (amount * from) / to;
+  void family; // kept for callers; the dimension now comes from the units themselves
+  return convert(amount, fromUnit, toUnit) ?? amount;
 }
 
 /** What the server will say went wrong, in words for staff. Never "something went wrong". */

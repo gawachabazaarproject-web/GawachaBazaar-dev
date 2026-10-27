@@ -45,7 +45,7 @@ expiry regardless of how many attempts fail in that window.
 """
 
 from datetime import UTC, datetime, timedelta
-from decimal import ROUND_UP, Decimal
+from decimal import Decimal
 
 from sqlalchemy.orm import Session
 
@@ -64,16 +64,96 @@ from app.schemas.inventory_reservation import (
     InventoryReservationListResponse,
     InventoryReservationResponse,
 )
+from app.services import units as units_mod
 from app.services.fulfillment_state import FulfillmentStatus
 from app.services.reservation_state import (
     ReservationStatus,
     transition_reservation_status,
 )
-from app.services.stock_pool import pool_siblings, to_packs, variant_size
+from app.services.stock_pool import pool_siblings
 
 RESERVATION_WINDOW_MINUTES = 30
 
+
+def item_base(item: InventoryReservationItem, lot: InventoryLot) -> int | None:
+    """Exact base units an allocation holds (None for a quarantined lot)."""
+    if lot.quantity_base is None:
+        return None
+    if item.quantity_base is not None:
+        return item.quantity_base
+    # A row written before base units existed (or by legacy code): its pack count
+    # must be an exact number of base units, never silently rounded.
+    base = Decimal(item.quantity) * lot.variant.size_base
+    if base != base.to_integral_value():
+        raise ConflictError("A reservation row cannot be converted exactly; an admin must review it.")
+    return int(base)
+
+
+def release_reserved(lot: InventoryLot, item: InventoryReservationItem) -> None:
+    """Give an allocation's exact base units back to the lot (lot already locked)."""
+    base = item_base(item, lot)
+    if base is None:  # quarantined lot: stays on legacy pack semantics
+        lot.reserved_quantity = lot.reserved_quantity - item.quantity
+    else:
+        lot.reserved_base = lot.reserved_base - base
+
 _LOT_ACTIVE = "ACTIVE"
+
+
+def consume_reserved(
+    inventory_service,
+    lot: InventoryLot,
+    item: InventoryReservationItem,
+    performed_by_user_id: int,
+    order_id: int,
+    reference_type: str,
+) -> None:
+    """Delivery: turn one reservation allocation into a physical DISPATCH.
+
+    EXACTLY the reserved base units leave the lot (250 g reserved = 250 g
+    dispatched): the reservation is released, then the same base units are taken
+    out of physical stock - one transaction owned by the caller (lot is locked)."""
+    from app.models.stock_movement import StockMovement
+
+    inconsistent = ConflictError(
+        "Cannot confirm delivery: reserved inventory is inconsistent with this order's allocation."
+    )
+    base = item_base(item, lot)
+    if base is None:
+        # Quarantined (pre-migration, not exactly convertible) lot: the old
+        # pack-based consumption, unchanged, until an admin resolves it.
+        if lot.reserved_quantity < item.quantity:
+            raise inconsistent
+        lot.reserved_quantity = lot.reserved_quantity - item.quantity
+        lot.quantity = lot.quantity - item.quantity
+        if lot.quantity == 0:
+            lot.status = "DEPLETED"
+        inventory_service.db.add(
+            StockMovement(
+                inventory_lot_id=lot.id,
+                movement_type="DISPATCH",
+                quantity=item.quantity,
+                reference_type=reference_type,
+                reference_id=order_id,
+                performed_by_user_id=performed_by_user_id,
+                occurred_at=datetime.now(UTC),
+                remarks="Physical inventory consumed at delivery confirmation (legacy lot).",
+            )
+        )
+        return
+    if lot.reserved_base < base:
+        raise inconsistent
+    lot.reserved_base = lot.reserved_base - base
+    inventory_service.apply_movement_base(
+        lot,
+        "DISPATCH",
+        base,
+        performed_by_user_id,
+        reference_type=reference_type,
+        reference_id=order_id,
+        occurred_at=datetime.now(UTC),
+        remarks="Physical inventory consumed at delivery confirmation.",
+    )
 
 
 class InventoryReservationService:
@@ -147,6 +227,7 @@ class InventoryReservationService:
             .filter(
                 InventoryLot.variant_id.in_(list(pool_variants)),
                 InventoryLot.status == _LOT_ACTIVE,
+                InventoryLot.quantity_base.is_not(None),
             )
             .order_by(InventoryLot.id.asc())
             .with_for_update()
@@ -171,43 +252,34 @@ class InventoryReservationService:
         # Allocate (in memory only, against the now-locked, fresh
         # quantities) before writing anything - if any variant can't be
         # fully covered, fail the whole reservation with nothing applied.
-        allocations: list[tuple[OrderItem, InventoryLot, Decimal]] = []
-        remaining_capacity: dict[int, Decimal] = {}
+        # EXACT: everything is integer base units (g / ml / pieces), so an order
+        # for 250 g reserves exactly 250 g whichever size the lot was received as.
+        allocations: list[tuple[OrderItem, InventoryLot, int]] = []
+        remaining_capacity: dict[int, int] = {}
 
         for item in order_items:
-            item_size = variant_size(variants[item.variant_id])[1]
-            need = item.quantity  # in packs of the ordered variant
+            item_size = variants[item.variant_id].size_base
+            wanted = Decimal(item.quantity) * item_size
+            if wanted != wanted.to_integral_value():
+                raise ConflictError(
+                    f"{item.product_name} ({item.variant_name}) cannot be ordered in that quantity."
+                )
+            need = int(wanted)  # base units still to cover for this item
             for lot in candidates(item.variant_id):
                 if need <= 0:
                     break
-                capacity = remaining_capacity.get(
-                    lot.id, lot.quantity - lot.reserved_quantity
-                )
+                capacity = remaining_capacity.get(lot.id, lot.quantity_base - lot.reserved_base)
                 if capacity <= 0:
                     remaining_capacity[lot.id] = capacity
                     continue
-                if lot.variant_id == item.variant_id:
-                    take = min(capacity, need)
-                    need_taken = take
-                else:
-                    lot_size = variant_size(pool_variants[lot.variant_id])[1]
-                    capacity_packs = to_packs(capacity * lot_size, item_size)
-                    need_taken = min(capacity_packs, need)
-                    if need_taken <= 0:
-                        continue
-                    take = min(
-                        capacity,
-                        (need_taken * item_size / lot_size).quantize(
-                            Decimal("0.001"), rounding=ROUND_UP
-                        ),
-                    )
+                take = min(capacity, need)
                 allocations.append((item, lot, take))
                 remaining_capacity[lot.id] = capacity - take
-                need -= need_taken
+                need -= take
             if need > 0:
                 logger.warning(
                     "INVENTORY_RESERVATION_INSUFFICIENT_STOCK: variant_id=%s "
-                    "requested=%s short_by=%s",
+                    "requested=%s short_by_base=%s",
                     item.variant_id, item.quantity, need,
                 )
                 raise ConflictError(
@@ -233,13 +305,14 @@ class InventoryReservationService:
         self.db.flush()  # assign reservation.id
 
         for item, lot, qty in allocations:
-            lot.reserved_quantity = lot.reserved_quantity + qty
+            lot.reserved_base = lot.reserved_base + qty
             self.db.add(
                 InventoryReservationItem(
                     reservation_id=reservation.id,
                     order_item_id=item.id,
                     inventory_lot_id=lot.id,
-                    quantity=qty,
+                    quantity=units_mod.packs_exact(qty, pool_variants[lot.variant_id].size_base),
+                    quantity_base=qty,
                 )
             )
 
@@ -544,7 +617,7 @@ class InventoryReservationService:
         }
         for item in items:
             lot = lots[item.inventory_lot_id]
-            lot.reserved_quantity = lot.reserved_quantity - item.quantity
+            release_reserved(lot, item)
 
         result = transition_reservation_status(
             ReservationStatus(reservation.status), target

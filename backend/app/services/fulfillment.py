@@ -84,6 +84,7 @@ from app.services.fulfillment_state import (
     transition_fulfillment_status,
 )
 from app.services.inventory import InventoryService
+from app.services.inventory_reservation import consume_reserved
 from app.services.payment_state import (
     IllegalTransitionError,
     PaymentStatus,
@@ -644,22 +645,14 @@ class FulfillmentService:
         inventory_service = InventoryService(self.db)
         for item in items:
             lot = lots.get(item.inventory_lot_id)
-            if lot is None or lot.reserved_quantity < item.quantity:
+            if lot is None:
                 raise ConflictError(
                     "Cannot confirm delivery: reserved inventory is inconsistent "
                     "with this order's allocation."
                 )
-            inventory_service.apply_movement(
-                lot,
-                _DELIVERY_MOVEMENT_TYPE,
-                item.quantity,
-                current_user.id,
-                reference_type=_DELIVERY_REFERENCE_TYPE,
-                reference_id=order.id,
-                occurred_at=datetime.now(UTC),
-                remarks="Physical inventory consumed at delivery confirmation.",
+            consume_reserved(
+                inventory_service, lot, item, current_user.id, order.id, _DELIVERY_REFERENCE_TYPE
             )
-            lot.reserved_quantity = lot.reserved_quantity - item.quantity
 
         # Order is already locked above, so Payment is locked second -
         # the same Order -> Payment order PaymentService uses everywhere.

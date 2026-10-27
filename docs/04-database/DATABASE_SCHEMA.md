@@ -1,7 +1,7 @@
 # Database Schema
 
 > **Status:** Verified (generated from the ORM models). **Generated:** 2026-10-27 by [`docs/_tools/gen_schema_reference.py`](../_tools/gen_schema_reference.py).
-> **Evidence:** [`backend/app/models/`](../../backend/app/models) (SQLAlchemy 2 declarative models, 60 tables) and the migration history in [`backend/alembic/versions/`](../../backend/alembic/versions). The models were compared with a database migrated to head using `alembic check` (see [MIGRATIONS.md](MIGRATIONS.md)). `alembic_version` is Alembic's own table and is not listed.
+> **Evidence:** [`backend/app/models/`](../../backend/app/models) (SQLAlchemy 2 declarative models, 62 tables) and the migration history in [`backend/alembic/versions/`](../../backend/alembic/versions). The models were compared with a database migrated to head using `alembic check` (see [MIGRATIONS.md](MIGRATIONS.md)). `alembic_version` is Alembic's own table and is not listed.
 
 Relationships between tables: [ENTITY_RELATIONSHIPS.md](ENTITY_RELATIONSHIPS.md). Retention and lifecycle: [DATA_RETENTION.md](DATA_RETENTION.md). Business meaning of statuses: the domain documents in [`../05-domains/`](../05-domains).
 
@@ -21,7 +21,7 @@ Timestamps show as `DATETIME` here (the ORM type) but are `timestamp with time z
 | Promotions | [`promotions`](#promotions), [`promotion_targets`](#promotion_targets), [`promotion_eligible_customers`](#promotion_eligible_customers), [`promotion_redemptions`](#promotion_redemptions) |
 | Bulk commerce | [`bulk_customer_profiles`](#bulk_customer_profiles), [`bulk_order_requests`](#bulk_order_requests), [`bulk_order_request_items`](#bulk_order_request_items), [`quotes`](#quotes), [`quote_versions`](#quote_versions), [`quote_items`](#quote_items) |
 | Audit | [`admin_action_logs`](#admin_action_logs) |
-| Other (not grouped) | [`delivery_assignments`](#delivery_assignments), [`delivery_otps`](#delivery_otps), [`delivery_partner_earnings`](#delivery_partner_earnings), [`delivery_partner_locations`](#delivery_partner_locations), [`delivery_partner_profiles`](#delivery_partner_profiles), [`notification_events`](#notification_events), [`product_categories`](#product_categories), [`referral_codes`](#referral_codes), [`referral_reward_ledger`](#referral_reward_ledger), [`referrals`](#referrals) |
+| Other (not grouped) | [`delivery_assignments`](#delivery_assignments), [`delivery_otps`](#delivery_otps), [`delivery_partner_earnings`](#delivery_partner_earnings), [`delivery_partner_locations`](#delivery_partner_locations), [`delivery_partner_profiles`](#delivery_partner_profiles), [`inventory_base_migration_report`](#inventory_base_migration_report), [`notification_events`](#notification_events), [`product_categories`](#product_categories), [`product_stock_reserves`](#product_stock_reserves), [`referral_codes`](#referral_codes), [`referral_reward_ledger`](#referral_reward_ledger), [`referrals`](#referrals) |
 
 ## Identity and access
 
@@ -204,6 +204,7 @@ Constraints and indexes:
 | `sku` | VARCHAR(100) | no |  |  |
 | `unit` | VARCHAR(20) | no |  |  |
 | `quantity` | NUMERIC(12, 3) | no |  |  |
+| `size_base` | BIGINT | no |  |  |
 | `reserve_level` | NUMERIC(12, 3) | yes |  |  |
 | `status` | VARCHAR(30) | no |  |  |
 | `created_at` | DATETIME | no | now() |  |
@@ -214,6 +215,7 @@ Constraints and indexes:
 - UNIQUE `uq_product_variants_sku`: (sku)
 - CHECK `ck_product_variants_quantity`: `quantity > 0`
 - CHECK `ck_product_variants_reserve_level`: `reserve_level IS NULL OR reserve_level >= 0`
+- CHECK `ck_product_variants_size_base`: `size_base > 0`
 - CHECK `ck_product_variants_status`: `status IN ('ACTIVE', 'INACTIVE', 'ARCHIVED')`
 - CHECK `ck_product_variants_unit`: `unit IN ('KG', 'G', 'L', 'ML', 'UNIT', 'DOZEN', 'BOX', 'PACK')`
 - INDEX `ix_product_variants_product_id`: (product_id)
@@ -558,6 +560,8 @@ Constraints and indexes:
 | `location_id` | BIGINT | no |  | FK -> inventory_locations.id (ON DELETE RESTRICT) |
 | `quantity` | NUMERIC(12, 3) | no |  |  |
 | `reserved_quantity` | NUMERIC(12, 3) | no | 0 |  |
+| `quantity_base` | BIGINT | yes |  |  |
+| `reserved_base` | BIGINT | yes |  |  |
 | `is_share` | BOOLEAN | no | false |  |
 | `status` | VARCHAR(30) | no |  |  |
 | `created_at` | DATETIME | no | now() |  |
@@ -566,6 +570,7 @@ Constraints and indexes:
 Constraints and indexes:
 
 - UNIQUE `uq_inventory_lots_batch_variant_location`: (batch_id, variant_id, location_id, is_share)
+- CHECK `ck_inventory_lots_base`: `(quantity_base IS NULL AND reserved_base IS NULL) OR (quantity_base >= 0 AND reserved_base >= 0 AND reserved_base <= quantity_base)`
 - CHECK `ck_inventory_lots_quantity`: `quantity >= 0`
 - CHECK `ck_inventory_lots_reserved_quantity`: `reserved_quantity >= 0 AND reserved_quantity <= quantity`
 - CHECK `ck_inventory_lots_status`: `status IN ('ACTIVE', 'INACTIVE', 'DEPLETED')`
@@ -583,6 +588,7 @@ Constraints and indexes:
 | `inventory_lot_id` | BIGINT | no |  | FK -> inventory_lots.id (ON DELETE RESTRICT) |
 | `movement_type` | VARCHAR(30) | no |  |  |
 | `quantity` | NUMERIC(12, 3) | no |  |  |
+| `quantity_base` | BIGINT | yes |  |  |
 | `reference_type` | VARCHAR(50) | yes |  |  |
 | `reference_id` | BIGINT | yes |  |  |
 | `performed_by_user_id` | BIGINT | no |  | FK -> users.id (ON DELETE RESTRICT) |
@@ -593,7 +599,7 @@ Constraints and indexes:
 Constraints and indexes:
 
 - CHECK `ck_stock_movements_movement_type`: `movement_type IN ('RECEIPT', 'ADJUSTMENT_IN', 'ADJUSTMENT_OUT', 'DAMAGE', 'WASTE', 'TRANSFER_IN', 'TRANSFER_OUT', 'DISPATCH')`
-- CHECK `ck_stock_movements_quantity`: `quantity > 0`
+- CHECK `ck_stock_movements_quantity`: `quantity > 0 OR quantity_base > 0`
 - INDEX `ix_stock_movements_inventory_lot_id`: (inventory_lot_id)
 - INDEX `ix_stock_movements_movement_type`: (movement_type)
 - INDEX `ix_stock_movements_occurred_at`: (occurred_at)
@@ -627,11 +633,12 @@ Constraints and indexes:
 | `order_item_id` | BIGINT | no |  | FK -> order_items.id (ON DELETE RESTRICT) |
 | `inventory_lot_id` | BIGINT | no |  | FK -> inventory_lots.id (ON DELETE RESTRICT) |
 | `quantity` | NUMERIC(12, 3) | no |  |  |
+| `quantity_base` | BIGINT | yes |  |  |
 | `created_at` | DATETIME | no | now() |  |
 
 Constraints and indexes:
 
-- CHECK `ck_inventory_reservation_items_quantity`: `quantity > 0`
+- CHECK `ck_inventory_reservation_items_quantity`: `quantity > 0 OR quantity_base > 0`
 - INDEX `ix_inventory_reservation_items_inventory_lot_id`: (inventory_lot_id)
 - INDEX `ix_inventory_reservation_items_order_item_id`: (order_item_id)
 - INDEX `ix_inventory_reservation_items_reservation_id`: (reservation_id)
@@ -1286,6 +1293,19 @@ Constraints and indexes:
 - CHECK `ck_dpp_status`: `status IN ('ACTIVE', 'INACTIVE', 'SUSPENDED')`
 - CHECK `ck_dpp_vehicle`: `vehicle_type IN ('BIKE', 'SCOOTER', 'BICYCLE', 'VAN', 'OTHER')`
 
+### inventory_base_migration_report
+
+| Column | Type | Null | Default | Key / reference |
+|---|---|---|---|---|
+| `id` | BIGINT | no | identity | PK |
+| `kind` | VARCHAR(40) | no |  |  |
+| `lot_id` | BIGINT | yes |  |  |
+| `product_id` | BIGINT | yes |  |  |
+| `variant_id` | BIGINT | yes |  |  |
+| `details` | JSONB | no |  |  |
+| `resolved_at` | DATETIME | yes |  |  |
+| `created_at` | DATETIME | no | now() |  |
+
 ### notification_events
 
 | Column | Type | Null | Default | Key / reference |
@@ -1311,6 +1331,19 @@ Constraints and indexes:
 Constraints and indexes:
 
 - INDEX `ix_product_categories_category_id`: (category_id)
+
+### product_stock_reserves
+
+| Column | Type | Null | Default | Key / reference |
+|---|---|---|---|---|
+| `product_id` | BIGINT | no |  | PK; FK -> products.id (ON DELETE CASCADE) |
+| `family` | VARCHAR(20) | no |  | PK |
+| `reserve_base` | BIGINT | no |  |  |
+| `updated_at` | DATETIME | no | now() |  |
+
+Constraints and indexes:
+
+- CHECK `ck_product_stock_reserves_base`: `reserve_base >= 0`
 
 ### referral_codes
 

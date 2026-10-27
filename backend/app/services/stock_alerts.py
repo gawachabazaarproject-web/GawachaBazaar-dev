@@ -11,16 +11,18 @@ from sqlalchemy.orm import Session
 
 from app.models.product import Product
 from app.models.product_variant import ProductVariant
+from app.services import units as units_mod
 from app.services.stock_levels import (
     ALERT_LEVELS,
     BELOW,
     NEAR,
     OUT,
     effective_reserve,
+    product_reserve_bases,
     product_status,
-    stock_level,
+    variant_stock_level,
 )
-from app.services.stock_pool import available_packs_by_variant
+from app.services.stock_pool import available_packs_by_variant, pool_base_amounts
 
 _SEVERITY = {OUT: 0, BELOW: 1, NEAR: 2}
 
@@ -60,15 +62,29 @@ def list_stock_alerts(db: Session) -> list[StockAlert]:
         .all()
     )
     packs = available_packs_by_variant(db, [r[1] for r in rows])
+    product_ids = {r[0] for r in rows}
+    pool, all_variants, shares = pool_base_amounts(db, product_ids)
+    reserves = product_reserve_bases(db, product_ids)
+    size_of = {v.id: v.size_base for v in all_variants}
     alerts: list[StockAlert] = []
     for product_id, variant_id, product_name, variant_name, unit, quantity, reserve in rows:
         avail = max(packs.get(variant_id, Decimal("0")), Decimal("0"))
-        level = stock_level(avail, reserve)
+        family = units_mod.dimension_of(unit)
+        family_total = pool[(product_id, family)] + sum(
+            shares.get(v.id, 0) for v in all_variants if v.product_id == product_id and units_mod.dimension_of(v.unit) == family
+        )
+        reserve_base = reserves.get((product_id, family))
+        level = variant_stock_level(avail, reserve, family_total, reserve_base)
         if level in ALERT_LEVELS:
+            # the reserve in force, shown as packs of THIS size (a product-level reserve is
+            # one physical amount: 5000 g reads as 20 packs of 250 g, 5 packs of 1 kg)
+            reserve_packs = (
+                units_mod.packs_exact(reserve_base, size_of[variant_id]) if reserve_base is not None else effective_reserve(reserve)
+            )
             alerts.append(
                 StockAlert(
                     product_id, variant_id, product_name, variant_name, unit, quantity, avail,
-                    effective_reserve(reserve), level,
+                    reserve_packs, level,
                 )
             )
     alerts.sort(key=lambda a: (_SEVERITY[a.level], a.available / (a.reserve_level or Decimal("1")), a.variant_id))

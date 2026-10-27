@@ -1,78 +1,84 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
-import { CatalogApiError, ProductVariant, updateVariant } from "@/lib/products";
+import { CatalogApiError, ProductVariant } from "@/lib/products";
+import {
+  clearProductReserve,
+  fetchProductStockCard,
+  InventoryApiError,
+  setProductReserve,
+  type ProductStockTotal,
+} from "@/lib/inventory";
+import { AMOUNT_UNITS_BY_DIMENSION, UNITS, convert, dimensionOf } from "@/lib/units";
 
-// pack unit -> [family, size of one unit in the family's base unit (g / ml / pieces)]
-const FAMILY: Record<string, [string, number]> = {
-  KG: ["MASS", 1000], G: ["MASS", 1], L: ["VOLUME", 1000], ML: ["VOLUME", 1],
-  UNIT: ["COUNT", 1], DOZEN: ["COUNT", 12],
-};
-const UNITS: Record<string, { value: string; label: string; factor: number }[]> = {
-  MASS: [{ value: "KG", label: "kg", factor: 1000 }, { value: "G", label: "g", factor: 1 }],
-  VOLUME: [{ value: "L", label: "L", factor: 1000 }, { value: "ML", label: "ml", factor: 1 }],
-  COUNT: [{ value: "UNIT", label: "pieces", factor: 1 }, { value: "DOZEN", label: "dozen", factor: 12 }],
-};
 const fmt = (n: number) => String(Number(n.toFixed(3)));
 
 /**
- * One low-stock alert for the whole product, in kg / L / pieces ("tell me
- * when tomatoes are down to 10 kg"). It is stored the way the backend keeps it,
- * as a number of packs on every size of that unit family, so each size
- * alerts at the same real amount.
+ * One low-stock alert for the whole product, as ONE physical amount ("tell me
+ * when tomatoes are down to 10 kg"). The server stores it in grams / ml / pieces
+ * and judges every size against that same amount, so 5 kg is 20 x 250 g, 10 x
+ * 500 g or 5 x 1 kg. Without it the older per-size levels (below) still apply.
  */
 export function ProductAlertEditor({
+  productId,
   variants,
-  reserves,
   canEdit,
   onSaved,
 }: {
+  productId: number;
   variants: ProductVariant[];
-  /** Each size's own alert in packs (null = default), by variant id. */
-  reserves: Record<number, string | null>;
   canEdit: boolean;
   onSaved: () => void;
 }) {
   const { getAccessToken } = useAuth();
-  const counted = variants.filter((v) => FAMILY[v.unit]);
-  const family = counted[0] ? FAMILY[counted[0].unit][0] : null;
-  const sized = counted.filter((v) => FAMILY[v.unit][0] === family);
-  const units = family ? UNITS[family] : [];
-
-  // The alert in base units for each size that has its own setting.
-  const baseOf = (v: ProductVariant, reserve: string) => Number(reserve) * Number(v.quantity) * FAMILY[v.unit][1];
-  const own = sized.filter((v) => reserves[v.id] != null);
-  const reserveOf = (v: ProductVariant) => reserves[v.id] as string;
-  const bases = own.map((v) => baseOf(v, reserveOf(v)));
-  const consistent = own.length === sized.length && bases.length > 0 && bases.every((b) => Math.abs(b - bases[0]) < 0.01);
-
-  const [unit, setUnit] = useState(units[0]?.value ?? "");
-  const factor = units.find((u) => u.value === unit)?.factor ?? 1;
-  const current = consistent ? fmt(bases[0] / factor) : "";
-  const [value, setValue] = useState(current);
+  const family = variants.map((v) => dimensionOf(v.unit)).find((d) => d === "MASS" || d === "VOLUME" || d === "COUNT") ?? null;
+  const unitValues = family ? AMOUNT_UNITS_BY_DIMENSION[family] : [];
+  const [unit, setUnit] = useState(unitValues[0] ?? "");
+  const [stored, setStored] = useState<ProductStockTotal | null>(null);
+  const [value, setValue] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  if (!family || sized.length === 0) return null;
-  const dirty = value !== current;
+  const load = useCallback(async () => {
+    const token = getAccessToken();
+    if (!token || !family) return;
+    try {
+      const card = await fetchProductStockCard(token, productId);
+      const total = card.totals.find((t) => t.family === family) ?? null;
+      setStored(total);
+      // The server reports the reserve in kg / L / pcs; show it in the chosen unit.
+      const shownUnit = unitValues[0];
+      const reserve = total?.reserve_amount != null ? Number(total.reserve_amount) : null;
+      setValue(reserve === null ? "" : fmt(convert(reserve, shownUnit, unit) ?? reserve));
+    } catch {
+      setStored(null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [productId, family, getAccessToken]);
 
-  const save = async (clear: boolean) => {
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  if (!family || unitValues.length === 0) return null;
+  const has = stored?.reserve_amount != null;
+  const serverValue = has ? fmt(convert(Number(stored!.reserve_amount), unitValues[0], unit) ?? 0) : "";
+  const dirty = value !== serverValue;
+
+  const run = async (clear: boolean) => {
     const token = getAccessToken();
     if (!token) return;
-    const amountBase = Number(value) * factor;
-    if (!clear && !(amountBase >= 0)) return;
+    if (!clear && !(Number(value) >= 0 && value !== "")) return;
     setSaving(true);
     setError(null);
     try {
-      for (const v of sized) {
-        const packBase = Number(v.quantity) * FAMILY[v.unit][1];
-        await updateVariant(token, v.id, { reserve_level: clear || value === "" ? null : fmt(amountBase / packBase) });
-      }
-      if (clear) setValue("");
+      if (clear) await clearProductReserve(token, productId);
+      else await setProductReserve(token, productId, { amount: value, amount_unit: unit });
+      await load();
       onSaved();
     } catch (err) {
-      setError(err instanceof CatalogApiError ? err.message : "Unable to save the alert.");
+      setError(err instanceof InventoryApiError || err instanceof CatalogApiError ? err.message : "Unable to save the alert.");
     } finally {
       setSaving(false);
     }
@@ -96,27 +102,26 @@ export function ProductAlertEditor({
         value={unit}
         disabled={!canEdit || saving}
         onChange={(e) => {
-          const next = units.find((u) => u.value === e.target.value);
-          if (next && value !== "") setValue(fmt((Number(value) * factor) / next.factor));
-          setUnit(e.target.value);
+          const next = e.target.value;
+          if (value !== "") setValue(fmt(convert(Number(value), unit, next) ?? Number(value)));
+          setUnit(next);
         }}
         aria-label="Alert unit"
         className="rounded border border-neutral-300 bg-white px-2 py-1 text-xs"
       >
-        {units.map((u) => <option key={u.value} value={u.value}>{u.label}</option>)}
+        {unitValues.map((u) => <option key={u} value={u}>{UNITS[u].inputLabel}</option>)}
       </select>
-      {canEdit && dirty && (
-        <button onClick={() => save(false)} disabled={saving} className="rounded bg-primary-800 px-2.5 py-1 text-xs font-semibold text-white disabled:opacity-40">
+      {canEdit && dirty && value !== "" && (
+        <button onClick={() => run(false)} disabled={saving} className="rounded bg-primary-800 px-2.5 py-1 text-xs font-semibold text-white disabled:opacity-40">
           {saving ? "Saving..." : "Save"}
         </button>
       )}
-      {canEdit && !dirty && own.length > 0 && (
-        <button onClick={() => save(true)} disabled={saving} className="text-xs font-semibold text-neutral-500 hover:underline">
-          Use default
+      {canEdit && !dirty && has && (
+        <button onClick={() => run(true)} disabled={saving} className="text-xs font-semibold text-neutral-500 hover:underline">
+          Use the per-size levels
         </button>
       )}
-      {!consistent && own.length > 0 && !dirty && <span className="text-xs text-neutral-400">Sizes have different alerts (see Advanced)</span>}
-      {own.length === 0 && !dirty && <span className="text-xs text-neutral-400">Using the default</span>}
+      {!has && !dirty && <span className="text-xs text-neutral-400">Using the per-size levels below</span>}
       {error && <span className="text-xs text-status-danger">{error}</span>}
     </div>
   );

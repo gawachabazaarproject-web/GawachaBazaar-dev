@@ -54,6 +54,11 @@ class AdminInventoryLotListItemResponse(BaseSchema):
     on_hand: Decimal
     reserved: Decimal
     available: Decimal
+    # Exact amounts in base units (g / ml / pieces) - the authoritative figures; the pack
+    # numbers above are derived for display. null = a lot on hold for review.
+    on_hand_base: int | None = None
+    reserved_base: int | None = None
+    size_base: int | None = None
     lot_status: str
     operational_status: LotOperationalStatus
     # Stock to keep in reserve for this item (None = default) and the value in force.
@@ -101,6 +106,11 @@ class AdminInventoryLotDetailResponse(BaseSchema):
     on_hand: Decimal
     reserved: Decimal
     available: Decimal
+    # Exact amounts in base units (g / ml / pieces) - the authoritative figures; the pack
+    # numbers above are derived for display. null = a lot on hold for review.
+    on_hand_base: int | None = None
+    reserved_base: int | None = None
+    size_base: int | None = None
     lot_status: str
     operational_status: LotOperationalStatus
     reserve_level: Decimal | None = None
@@ -264,6 +274,8 @@ class ProductStockTotalResponse(BaseSchema):
     # the part promised to customer orders, in `amount_unit`.
     on_hand_amount: Decimal = Decimal("0")
     reserved_amount: Decimal = Decimal("0")
+    # The product-level reserve in `amount_unit` (null = the legacy per-size rule).
+    reserve_amount: Decimal | None = None
 
 
 class ProductWarehouseStockResponse(BaseSchema):
@@ -338,6 +350,22 @@ class ProductStockListResponse(BaseSchema):
 # amount ("I counted 43 kg"); the server picks the lots. Each is one atomic
 # transaction through the same movement core as every other stock change.
 # ---------------------------------------------------------------------------
+
+
+class SetProductReserveRequest(BaseSchema):
+    """The stock to keep in reserve for a product as ONE physical amount (5 kg means
+    20 x 250 g, 10 x 500 g or 5 x 1 kg), whichever size customers buy."""
+
+    amount: Decimal = Field(..., ge=0, max_digits=12, decimal_places=3)
+    amount_unit: AmountUnit
+
+
+class ResolveLotBaseRequest(BaseSchema):
+    """An admin states the true physical amount of a lot that the base-unit migration put
+    on hold (its old pack quantity was not a whole number of grams / ml / pieces)."""
+
+    quantity_base: int = Field(..., ge=0, le=10**12)
+    reason: str = Field(..., min_length=3, max_length=200)
 
 
 class ProductCorrectStockRequest(BaseSchema):

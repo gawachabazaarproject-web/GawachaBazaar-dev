@@ -18,7 +18,7 @@ not whether the transaction was opened explicitly or implicitly.
 
 import secrets
 from datetime import UTC, date, datetime
-from decimal import ROUND_DOWN, ROUND_UP, Decimal
+from decimal import Decimal
 
 from sqlalchemy import func, or_
 from sqlalchemy.exc import IntegrityError
@@ -74,6 +74,7 @@ from app.schemas.inventory import (
     StockMovementResponse,
     UpdateInventoryLocationRequest,
 )
+from app.services import units as units_mod
 from app.services.admin_audit import AdminAuditService
 from app.services.stock_alerts import count_by_level, count_products, list_stock_alerts
 from app.services.stock_levels import (
@@ -81,16 +82,16 @@ from app.services.stock_levels import (
     DEFAULT_RESERVE,
     NEAR,
     effective_reserve,
+    product_reserve_bases,
     product_status,
     stock_level,
+    variant_stock_level,
 )
 from app.services.stock_pool import (
     amount_in_base,
     display_amount,
     pool_base_amounts,
-    to_packs,
     variant_size,
-    weight_to_packs,
 )
 
 _ACTIVE = "ACTIVE"
@@ -199,7 +200,12 @@ class InventoryService:
         location = self.get_location_or_404(location_id)
         holds_stock = (
             self.db.query(InventoryLot.id)
-            .filter(InventoryLot.location_id == location.id, InventoryLot.quantity > 0)
+            .filter(
+                InventoryLot.location_id == location.id,
+                # exact base units (1 g of a 3 kg size shows 0.000 in the legacy pack column);
+                # a lot on hold for review still counts as holding stock
+                or_(InventoryLot.quantity_base > 0, InventoryLot.quantity_base.is_(None) & (InventoryLot.quantity > 0)),
+            )
             .first()
         )
         if holds_stock:
@@ -403,6 +409,10 @@ class InventoryService:
             variant_id=data.variant_id,
             location_id=data.location_id,
             quantity=data.quantity,
+            # the legacy pack input must be an exact number of base units (422 otherwise);
+            # the base columns, not the pack column, are what the lot is accounted in
+            quantity_base=self._packs_to_base(variant, data.quantity),
+            reserved_base=0,
             status=status,
         )
         self.db.add(lot)
@@ -466,28 +476,66 @@ class InventoryService:
         occurred_at: datetime | None = None,
         remarks: str | None = None,
     ) -> StockMovement:
-        """Validate and apply one movement against an already row-locked lot.
+        """Legacy entry point: `quantity` is a number of packs of the lot's own
+        size. It must be an exact number of base units (else a clear error);
+        the movement itself is applied in base units by `apply_movement_base`."""
+        return self.apply_movement_base(
+            lot,
+            movement_type,
+            self._packs_to_base(lot.variant, quantity),
+            performed_by_user_id,
+            reference_type=reference_type,
+            reference_id=reference_id,
+            occurred_at=occurred_at,
+            remarks=remarks,
+        )
+
+    def apply_movement_base(
+        self,
+        lot: InventoryLot,
+        movement_type: str,
+        base_quantity: int,
+        performed_by_user_id: int,
+        *,
+        reference_type: str | None = None,
+        reference_id: int | None = None,
+        occurred_at: datetime | None = None,
+        remarks: str | None = None,
+    ) -> StockMovement:
+        """Validate and apply one movement of EXACT base units (g / ml / pieces)
+        against an already row-locked lot.
 
         Does NOT commit - the caller owns the transaction boundary and must
         have already locked `lot` via `.with_for_update()` in the same
         transaction. This is the shared core other services (e.g. Packaging
-        completion) reuse to participate in a larger atomic transaction
-        instead of each movement committing independently.
+        completion, delivery) reuse to participate in a larger atomic
+        transaction instead of each movement committing independently.
         """
         if lot.status == _INACTIVE:
             raise BusinessValidationError(
                 "Cannot record a movement against an INACTIVE inventory lot."
             )
+        if lot.quantity_base is None:
+            raise BusinessValidationError(
+                "This lot is on hold for review (its old quantity could not be converted exactly). "
+                "An admin must resolve it first."
+            )
+        if base_quantity <= 0:
+            raise BusinessValidationError("A stock movement must be larger than zero.")
 
         direction = _MOVEMENT_DIRECTION[movement_type]
-        new_quantity = lot.quantity + (direction * quantity)
+        new_quantity = lot.quantity_base + (direction * base_quantity)
 
         if new_quantity < 0:
             raise ConflictError(
                 "Insufficient stock: this movement would result in negative quantity."
             )
+        if new_quantity < lot.reserved_base:
+            raise ConflictError(
+                "Insufficient stock: the rest is reserved for customer orders."
+            )
 
-        lot.quantity = new_quantity
+        lot.quantity_base = new_quantity
         if new_quantity == 0:
             lot.status = _DEPLETED
         elif direction > 0 and lot.status == _DEPLETED:
@@ -498,7 +546,8 @@ class InventoryService:
         movement = StockMovement(
             inventory_lot_id=lot.id,
             movement_type=movement_type,
-            quantity=quantity,
+            quantity=units_mod.packs_exact(base_quantity, lot.variant.size_base),
+            quantity_base=base_quantity,
             reference_type=reference_type,
             reference_id=reference_id,
             performed_by_user_id=performed_by_user_id,
@@ -507,6 +556,16 @@ class InventoryService:
         )
         self.db.add(movement)
         return movement
+
+    @staticmethod
+    def _packs_to_base(variant: ProductVariant, packs: Decimal) -> int:
+        base = Decimal(packs) * variant.size_base
+        if base != base.to_integral_value():
+            raise BusinessValidationError(
+                f"{packs} packs is not a whole number of base units for this size; "
+                "enter the amount in grams / ml / pieces instead."
+            )
+        return int(base)
 
     def get_or_create_lot_no_commit(
         self, batch_id: int, variant_id: int, location_id: int, *, is_share: bool = False
@@ -551,6 +610,8 @@ class InventoryService:
             variant_id=variant_id,
             location_id=location_id,
             quantity=Decimal("0"),
+            quantity_base=0,
+            reserved_base=0,
             status=_DEPLETED,
             is_share=is_share,
         )
@@ -577,20 +638,29 @@ class InventoryService:
         if not lot:
             raise NotFoundError("Inventory lot not found.")
 
-        quantity = data.quantity
-        if quantity is None:
-            quantity = weight_to_packs(lot.variant, data.amount, data.amount_unit)
-
-        movement = self.apply_movement(
-            lot,
-            data.movement_type,
-            quantity,
-            performed_by_user_id,
-            reference_type=data.reference_type,
-            reference_id=data.reference_id,
-            occurred_at=data.occurred_at,
-            remarks=data.remarks,
-        )
+        if data.quantity is None:
+            units_mod.ensure_same_dimension(data.amount_unit, lot.variant.unit)
+            movement = self.apply_movement_base(
+                lot,
+                data.movement_type,
+                units_mod.to_base(data.amount, data.amount_unit),
+                performed_by_user_id,
+                reference_type=data.reference_type,
+                reference_id=data.reference_id,
+                occurred_at=data.occurred_at,
+                remarks=data.remarks,
+            )
+        else:
+            movement = self.apply_movement(
+                lot,
+                data.movement_type,
+                data.quantity,
+                performed_by_user_id,
+                reference_type=data.reference_type,
+                reference_id=data.reference_id,
+                occurred_at=data.occurred_at,
+                remarks=data.remarks,
+            )
 
         try:
             self.db.commit()
@@ -701,6 +771,9 @@ class InventoryService:
             on_hand=lot.quantity,
             reserved=lot.reserved_quantity,
             available=lot.quantity - lot.reserved_quantity,
+            on_hand_base=lot.quantity_base,
+            reserved_base=lot.reserved_base,
+            size_base=variant.size_base,
             lot_status=lot.status,
             operational_status=self._operational_status(
                 lot.status, lot.quantity, lot.reserved_quantity, batch.expiry_date, variant.reserve_level
@@ -786,10 +859,10 @@ class InventoryService:
         """On hand / reserved per (product, family), available per (product,
         family, warehouse), and the soonest expiry - from ACTIVE lots, in the
         families' base units."""
-        on_hand: dict[tuple[int, str], Decimal] = {}
-        reserved: dict[tuple[int, str], Decimal] = {}
-        per_location: dict[tuple[int, str, int], tuple[str, Decimal, Decimal]] = {}
-        expiry: dict[int, tuple[date, str, Decimal]] = {}
+        on_hand: dict[tuple[int, str], int] = {}
+        reserved: dict[tuple[int, str], int] = {}
+        per_location: dict[tuple[int, str, int], tuple[str, int, int]] = {}
+        expiry: dict[int, tuple[date, str, int]] = {}
         if not product_ids:
             return on_hand, reserved, per_location, expiry
         rows = (
@@ -797,31 +870,37 @@ class InventoryService:
             .join(ProductVariant, ProductVariant.id == InventoryLot.variant_id)
             .join(Batch, Batch.id == InventoryLot.batch_id)
             .join(InventoryLocation, InventoryLocation.id == InventoryLot.location_id)
-            .filter(ProductVariant.product_id.in_(list(product_ids)), InventoryLot.status == _ACTIVE)
+            .filter(
+                ProductVariant.product_id.in_(list(product_ids)),
+                InventoryLot.status == _ACTIVE,
+                InventoryLot.quantity_base.is_not(None),
+            )
             .all()
         )
         for lot, variant, expiry_date, location_name in rows:
-            family, size = variant_size(variant)
+            family = units_mod.dimension_of(variant.unit)
             key = (variant.product_id, family)
-            on_hand[key] = on_hand.get(key, Decimal("0")) + lot.quantity * size
-            reserved[key] = reserved.get(key, Decimal("0")) + lot.reserved_quantity * size
-            available = (lot.quantity - lot.reserved_quantity) * size
-            if lot.quantity > 0:
+            held = lot.quantity_base
+            on_hand[key] = on_hand.get(key, 0) + held
+            reserved[key] = reserved.get(key, 0) + lot.reserved_base
+            available = held - lot.reserved_base
+            if held > 0:
                 loc_key = (variant.product_id, family, lot.location_id)
-                name, avail_sum, held_sum = per_location.get(loc_key, (location_name, Decimal("0"), Decimal("0")))
-                per_location[loc_key] = (name, avail_sum + max(available, Decimal("0")), held_sum + lot.quantity * size)
-            if expiry_date is not None and lot.quantity > 0:
+                name, avail_sum, held_sum = per_location.get(loc_key, (location_name, 0, 0))
+                per_location[loc_key] = (name, avail_sum + max(available, 0), held_sum + held)
+            if expiry_date is not None and held > 0:
                 current = expiry.get(variant.product_id)
                 if current is None or expiry_date < current[0]:
-                    expiry[variant.product_id] = (expiry_date, family, lot.quantity * size)
+                    expiry[variant.product_id] = (expiry_date, family, held)
                 elif expiry_date == current[0]:
-                    expiry[variant.product_id] = (current[0], family, current[2] + lot.quantity * size)
+                    expiry[variant.product_id] = (current[0], family, current[2] + held)
         return on_hand, reserved, per_location, expiry
 
     def _product_stock_items(self, rows: list[tuple[Product, str]]) -> list[ProductStockItemResponse]:
         product_ids = {p.id for p, _ in rows}
         pool, variants, shares = pool_base_amounts(self.db, product_ids)
         on_hand, reserved, per_location, expiry = self._stock_details(product_ids)
+        reserves = product_reserve_bases(self.db, product_ids)
         today = business_today()
         variants_by_product: dict[int, list[ProductVariant]] = {}
         for v in sorted(variants, key=lambda v: v.id):
@@ -833,14 +912,20 @@ class InventoryService:
             variant_items = []
             levels: list[str] = []
             for v in variants_by_product.get(product.id, []):
-                family, size = variant_size(v)
+                family = units_mod.dimension_of(v.unit)
+                size = v.size_base
                 if family not in families:
                     families.append(family)
-                share_base = shares.get(v.id, Decimal("0"))
-                packs = to_packs(pool[(product.id, family)] + share_base, size).to_integral_value(rounding=ROUND_DOWN)
+                share_base = shares.get(v.id, 0)
+                family_total = pool[(product.id, family)] + sum(
+                    shares.get(o.id, 0) for o in variants_by_product[product.id] if units_mod.dimension_of(o.unit) == family
+                )
+                packs = Decimal(units_mod.packs_for(pool[(product.id, family)] + share_base, size))
                 if v.status == _ACTIVE:
-                    levels.append(stock_level(packs, v.reserve_level))
-                amount, amount_unit = display_amount(family, packs * size)
+                    levels.append(
+                        variant_stock_level(packs, v.reserve_level, family_total, reserves.get((product.id, family)))
+                    )
+                amount, amount_unit = display_amount(family, int(packs) * size)
                 share_amount, _ = display_amount(family, share_base)
                 variant_items.append(
                     ProductStockVariantResponse(
@@ -854,16 +939,15 @@ class InventoryService:
                         available_amount=amount,
                         amount_unit=amount_unit,
                         share_amount=share_amount,
-                        share_packs=to_packs(share_base, size).to_integral_value(rounding=ROUND_DOWN),
+                        share_packs=Decimal(units_mod.packs_for(share_base, size)),
                     )
                 )
             totals = []
-            sellable_base = Decimal("0")
+            sellable_base = 0
             for family in families:
                 unassigned = pool[(product.id, family)]
                 assigned = sum(
-                    (shares.get(v.id, Decimal("0")) for v in variants_by_product[product.id] if variant_size(v)[0] == family),
-                    Decimal("0"),
+                    shares.get(v.id, 0) for v in variants_by_product[product.id] if units_mod.dimension_of(v.unit) == family
                 )
                 sellable_base += unassigned + assigned
                 amount, amount_unit = display_amount(family, unassigned + assigned)
@@ -873,8 +957,13 @@ class InventoryService:
                         amount=amount,
                         amount_unit=amount_unit,
                         unassigned_amount=display_amount(family, unassigned)[0],
-                        on_hand_amount=display_amount(family, on_hand.get((product.id, family), Decimal("0")))[0],
-                        reserved_amount=display_amount(family, reserved.get((product.id, family), Decimal("0")))[0],
+                        on_hand_amount=display_amount(family, on_hand.get((product.id, family), 0))[0],
+                        reserved_amount=display_amount(family, reserved.get((product.id, family), 0))[0],
+                        reserve_amount=(
+                            display_amount(family, reserves[(product.id, family)])[0]
+                            if (product.id, family) in reserves
+                            else None
+                        ),
                     )
                 )
             warehouses = []
@@ -923,6 +1012,88 @@ class InventoryService:
             return None
         return self._product_stock_item(product_id)
 
+    def set_product_reserve(
+        self, product_id: int, amount: Decimal | None, amount_unit: str | None, admin_user_id: int
+    ) -> ProductStockItemResponse:
+        """Set (or, with amount=None, clear) the product-level reserve: one physical
+        amount in the family's base unit, independent of the size sold. Clearing it
+        returns the product to the legacy per-size rule."""
+        from app.models.product_stock_reserve import ProductStockReserve
+
+        product = self.db.query(Product).filter(Product.id == product_id).first()
+        if not product:
+            raise NotFoundError("Product not found.")
+        if amount is None:
+            self.db.query(ProductStockReserve).filter(ProductStockReserve.product_id == product_id).delete()
+            AdminAuditService(self.db).record(
+                admin_user_id=admin_user_id, action="inventory.reserve", resource_type="product",
+                resource_id=product_id, reason="product reserve cleared (per-size rule applies)",
+            )
+        else:
+            family = units_mod.dimension_of(amount_unit)
+            if family not in units_mod.CONVERTIBLE:
+                raise BusinessValidationError("A reserve can be set in kg, g, L, ml, pieces or dozen.")
+            if not any(
+                units_mod.dimension_of(v.unit) == family
+                for v in self.db.query(ProductVariant).filter(ProductVariant.product_id == product_id).all()
+            ):
+                raise BusinessValidationError("This product has no size measured in that unit.")
+            base = units_mod.to_base(amount, amount_unit)
+            row = self.db.get(ProductStockReserve, (product_id, family))
+            if row is None:
+                self.db.add(ProductStockReserve(product_id=product_id, family=family, reserve_base=base))
+            else:
+                row.reserve_base = base
+            AdminAuditService(self.db).record(
+                admin_user_id=admin_user_id, action="inventory.reserve", resource_type="product",
+                resource_id=product_id, reason=f"product reserve = {base} {family} base units",
+            )
+        self.db.commit()
+        return self._product_stock_item(product_id)
+
+    def resolve_lot_base(self, lot_id: int, quantity_base: int, reason: str, admin_user_id: int) -> None:
+        """Put a lot that the migration quarantined (NULL base) back into service with the
+        physical amount an admin confirmed. Refused while any live reservation on the lot
+        could not be converted exactly - those orders must be resolved first."""
+        from app.models.inventory_base_migration_report import (
+            InventoryBaseMigrationReport,
+        )
+        from app.models.inventory_reservation import InventoryReservation
+        from app.models.inventory_reservation_item import InventoryReservationItem
+
+        lot = self.db.query(InventoryLot).filter(InventoryLot.id == lot_id).with_for_update().first()
+        if not lot:
+            raise NotFoundError("Inventory lot not found.")
+        if lot.quantity_base is not None:
+            raise BusinessValidationError("This lot is not on hold.")
+        live = (
+            self.db.query(InventoryReservationItem)
+            .join(InventoryReservation, InventoryReservation.id == InventoryReservationItem.reservation_id)
+            .filter(
+                InventoryReservationItem.inventory_lot_id == lot_id,
+                InventoryReservation.status.in_(("ACTIVE", "COMMITTED")),
+            )
+            .all()
+        )
+        if any(i.quantity_base is None for i in live):
+            raise ConflictError("Orders reserved against this lot must be resolved first.")
+        reserved = sum(i.quantity_base for i in live)
+        if quantity_base < reserved:
+            raise BusinessValidationError("That amount is lower than what is reserved for customer orders.")
+        lot.quantity_base = quantity_base
+        lot.reserved_base = reserved
+        if lot.status == _DEPLETED and quantity_base > 0:
+            lot.status = _ACTIVE
+        AdminAuditService(self.db).record(
+            admin_user_id=admin_user_id, action="inventory.resolve_lot", resource_type="inventory_lot",
+            resource_id=lot_id, previous_state="on hold", new_state=f"{quantity_base} base", reason=reason,
+        )
+        for report in self.db.query(InventoryBaseMigrationReport).filter(
+            InventoryBaseMigrationReport.lot_id == lot_id, InventoryBaseMigrationReport.resolved_at.is_(None)
+        ):
+            report.resolved_at = datetime.now(UTC)
+        self.db.commit()
+
     def _product_stock_item(self, product_id: int) -> ProductStockItemResponse:
         row = (
             self.db.query(Product, Category.name)
@@ -953,7 +1124,7 @@ class InventoryService:
         )
         by_id = {v.id: v for v in variants}
 
-        wanted: dict[int, Decimal] = {}
+        wanted: dict[int, int] = {}
         family: str | None = None
         for share in data.shares:
             variant = by_id.get(share.variant_id)
@@ -972,7 +1143,7 @@ class InventoryService:
         if family not in {"MASS", "VOLUME", "COUNT"}:
             raise BusinessValidationError("Only weight, volume or piece-counted sizes can be assigned.")
         family_variants = [v for v in variants if variant_size(v)[0] == family]
-        size_of = {v.id: variant_size(v)[1] for v in family_variants}
+        size_of = {v.id: v.size_base for v in family_variants}
 
         # Lock every lot of the family up front, ascending id.
         lots = (
@@ -986,78 +1157,76 @@ class InventoryService:
             .all()
         )
 
-        def avail(lot: InventoryLot) -> Decimal:
-            return lot.quantity - lot.reserved_quantity if lot.status == _ACTIVE else Decimal("0")
+        def avail(lot: InventoryLot) -> int:
+            if lot.status != _ACTIVE or lot.quantity_base is None:
+                return 0
+            return lot.quantity_base - lot.reserved_base
 
         def locked(lot: InventoryLot) -> InventoryLot:
             return self.db.query(InventoryLot).filter(InventoryLot.id == lot.id).with_for_update().first()
 
         def free_lots() -> list[InventoryLot]:
-            return sorted((l for l in lots if not l.is_share and avail(l) > 0), key=lambda l: (l.created_at, l.id))
+            return sorted((lot for lot in lots if not lot.is_share and avail(lot) > 0), key=lambda lot: (lot.created_at, lot.id))
 
+        # Everything below is exact integer base units (g / ml / pieces): a share
+        # moves the SAME number of base units out of one lot and into the other.
         current = {
-            vid: sum((avail(l) * size_of[vid] for l in lots if l.variant_id == vid and l.is_share), Decimal("0"))
+            vid: sum(avail(lot) for lot in lots if lot.variant_id == vid and lot.is_share)
             for vid in wanted
         }
         if data.add:  # amounts are increments on top of what each size already has
             wanted = {vid: current[vid] + amount for vid, amount in wanted.items()}
-        free_base = sum((avail(l) * size_of[l.variant_id] for l in free_lots()), Decimal("0"))
+        free_base = sum(avail(lot) for lot in free_lots())
         release = {vid: current[vid] - wanted[vid] for vid in wanted if current[vid] > wanted[vid]}
         need = {vid: wanted[vid] - current[vid] for vid in wanted if wanted[vid] > current[vid]}
-        if sum(need.values(), Decimal("0")) > free_base + sum(release.values(), Decimal("0")) + Decimal("0.5"):
-            free_amount, unit_label = display_amount(family, free_base + sum(release.values(), Decimal("0")))
+        if sum(need.values()) > free_base + sum(release.values()):
+            free_amount, unit_label = display_amount(family, free_base + sum(release.values()))
             raise BusinessValidationError(
-                f"Only {free_amount} {unit_label} is unassigned, which is not enough for those shares."
+                f"Only {free_amount.normalize():f} {unit_label} is unassigned, which is not enough for those shares."
             )
 
         # 1) Lowered shares go back to the size's ordinary lots (same batch, warehouse).
         for vid, amount in sorted(release.items()):
-            for share_lot in sorted((l for l in lots if l.variant_id == vid and l.is_share and avail(l) > 0), key=lambda l: l.id):
+            for share_lot in sorted((lot for lot in lots if lot.variant_id == vid and lot.is_share and avail(lot) > 0), key=lambda lot: lot.id):
                 if amount <= 0:
                     break
-                packs = min(avail(share_lot), (amount / size_of[vid]).quantize(Decimal("0.001"), rounding=ROUND_DOWN))
-                if packs <= 0:
-                    continue
+                move = min(avail(share_lot), amount)
                 back = locked(self.get_or_create_lot_no_commit(share_lot.batch_id, vid, share_lot.location_id))
                 if back not in lots:
                     lots.append(back)
-                self.apply_movement(
-                    share_lot, "TRANSFER_OUT", packs, admin_user_id,
+                self.apply_movement_base(
+                    share_lot, "TRANSFER_OUT", move, admin_user_id,
                     reference_type="stock_share", reference_id=back.id, remarks="Stock share released",
                 )
-                self.apply_movement(
-                    back, "TRANSFER_IN", packs, admin_user_id,
+                self.apply_movement_base(
+                    back, "TRANSFER_IN", move, admin_user_id,
                     reference_type="stock_share", reference_id=share_lot.id, remarks="Stock share released",
                 )
-                amount -= packs * size_of[vid]
+                amount -= move
 
         # 2) Raised shares are filled from the unassigned stock - the size's own
         #    ordinary lots first, then the siblings' (FIFO).
         for vid, amount in sorted(need.items()):
-            dest_size = size_of[vid]
-            for src in sorted(free_lots(), key=lambda l: (l.variant_id != vid, l.created_at, l.id)):
+            for src in sorted(free_lots(), key=lambda lot: (lot.variant_id != vid, lot.created_at, lot.id)):
                 if amount <= 0:
                     break
-                src_size = size_of[src.variant_id]
-                dest_packs = to_packs(min(avail(src) * src_size, amount), dest_size)
-                if dest_packs <= 0:
+                move = min(avail(src), amount)
+                if move <= 0:
                     continue
-                moved = dest_packs * dest_size
-                src_packs = min(avail(src), (moved / src_size).quantize(Decimal("0.001"), rounding=ROUND_UP))
                 dest = locked(self.get_or_create_lot_no_commit(src.batch_id, vid, src.location_id, is_share=True))
                 if dest not in lots:
                     lots.append(dest)
-                self.apply_movement(
-                    src, "TRANSFER_OUT", src_packs, admin_user_id,
+                self.apply_movement_base(
+                    src, "TRANSFER_OUT", move, admin_user_id,
                     reference_type="stock_share", reference_id=dest.id, remarks="Stock assigned to a size",
                 )
-                self.apply_movement(
-                    dest, "TRANSFER_IN", dest_packs, admin_user_id,
+                self.apply_movement_base(
+                    dest, "TRANSFER_IN", move, admin_user_id,
                     reference_type="stock_share", reference_id=src.id, remarks="Stock assigned to a size",
                 )
-                amount -= moved
+                amount -= move
             need[vid] = amount
-        if any(left > max(Decimal("0.5"), size_of[vid] * Decimal("0.001")) for vid, left in need.items()):
+        if any(left > 0 for left in need.values()):
             self.db.rollback()
             raise ConflictError(
                 "That much stock could not be assigned (stock reserved for customer orders cannot be moved). "
@@ -1218,6 +1387,9 @@ class InventoryService:
             on_hand=lot.quantity,
             reserved=lot.reserved_quantity,
             available=lot.quantity - lot.reserved_quantity,
+            on_hand_base=lot.quantity_base,
+            reserved_base=lot.reserved_base,
+            size_base=variant.size_base,
             lot_status=lot.status,
             operational_status=self._operational_status(
                 lot.status, lot.quantity, lot.reserved_quantity, batch.expiry_date, lot.variant.reserve_level
@@ -1243,6 +1415,8 @@ class InventoryService:
         total_skus = len({lot.variant_id for lot in active_lots})
         total_on_hand = sum((lot.quantity for lot in active_lots), Decimal("0"))
         total_reserved = sum((lot.reserved_quantity for lot in active_lots), Decimal("0"))
+        # (legacy pack totals: packs of different sizes are not comparable; the exact
+        # per-product amounts live on the Inventory page and in the stock alerts)
         total_available = total_on_hand - total_reserved
 
         today = business_today()
@@ -1256,14 +1430,22 @@ class InventoryService:
         expired_batches_count = 0
         seen_batches_expiring: set[int] = set()
         seen_batches_expired: set[int] = set()
-        reserve_by_variant = {
-            vid: reserve
-            for vid, reserve in self.db.query(ProductVariant.id, ProductVariant.reserve_level)
+        variant_info = {
+            vid: (reserve, size)
+            for vid, reserve, size in self.db.query(
+                ProductVariant.id, ProductVariant.reserve_level, ProductVariant.size_base
+            )
             .filter(ProductVariant.id.in_({lot.variant_id for lot in active_lots}))
             .all()
         } if active_lots else {}
+        reserve_by_variant = {vid: info[0] for vid, info in variant_info.items()}
         for lot in active_lots:
-            available = lot.quantity - lot.reserved_quantity
+            # whole packs this lot could still sell, from exact base units
+            available = (
+                lot.quantity - lot.reserved_quantity
+                if lot.quantity_base is None
+                else Decimal(units_mod.packs_for(lot.quantity_base - lot.reserved_base, variant_info[lot.variant_id][1]))
+            )
             if available <= 0:
                 out_of_stock_count += 1
             elif stock_level(available, reserve_by_variant.get(lot.variant_id)) in (BELOW, NEAR):
@@ -1292,7 +1474,13 @@ class InventoryService:
             self.db.query(InventoryLocation.id)
             .join(InventoryLot, InventoryLot.location_id == InventoryLocation.id)
             .filter(InventoryLot.status != _INACTIVE)
-            .filter((InventoryLot.quantity - InventoryLot.reserved_quantity) <= 0)
+            .filter(
+                func.coalesce(
+                    InventoryLot.quantity_base - InventoryLot.reserved_base,
+                    InventoryLot.quantity - InventoryLot.reserved_quantity,
+                )
+                <= 0
+            )
             .distinct()
             .count()
         )
@@ -1318,10 +1506,15 @@ class InventoryService:
         if not variant:
             raise NotFoundError("Product variant not found.")
         self.get_location_or_404(data.location_id)
-        quantity = (
-            data.quantity
-            if data.quantity is not None
-            else weight_to_packs(variant, data.amount, data.amount_unit)
+        if data.quantity is None:
+            units_mod.ensure_same_dimension(data.amount_unit, variant.unit)
+            receive_base = units_mod.to_base(data.amount, data.amount_unit)
+        else:
+            receive_base = self._packs_to_base(variant, data.quantity)
+        # The batch row is a traceability record in the variant's own unit (informational,
+        # never used for accounting): what arrived, e.g. 1 g into a kg size is 0.001 kg.
+        quantity = max(
+            units_mod.base_to_amount(receive_base, variant.unit).quantize(Decimal("0.001")), Decimal("0.001")
         )
         batch_id = data.batch_id
         if batch_id is None:
@@ -1338,14 +1531,14 @@ class InventoryService:
             self.db.flush()
             batch_id = batch.id
 
-        lot = self.get_or_create_lot_no_commit(batch_id, data.variant_id, data.location_id)
+        lot = self.get_or_create_lot_no_commit(batch_id, variant.id, data.location_id)
         lot = (
             self.db.query(InventoryLot).filter(InventoryLot.id == lot.id).with_for_update().first()
         )
-        self.apply_movement(
+        self.apply_movement_base(
             lot,
             "RECEIPT",
-            quantity,
+            receive_base,
             admin_user_id,
             reference_type="admin_receive",
             remarks=data.remarks,
@@ -1384,19 +1577,23 @@ class InventoryService:
         if not lot:
             raise NotFoundError("Inventory lot not found.")
 
+        if lot.quantity_base is None:
+            raise BusinessValidationError("This lot is on hold for review; resolve it before reconciling.")
         system_count = lot.quantity
-        difference = data.physical_count - system_count
+        system_base = lot.quantity_base
+        physical_base = self._packs_to_base(lot.variant, data.physical_count)
+        difference = physical_base - system_base
         remarks = f"Reconciliation: system={system_count} physical={data.physical_count} reason={data.reason}"
         if data.notes:
             remarks += f" notes={data.notes}"
 
         if difference > 0:
-            self.apply_movement(
+            self.apply_movement_base(
                 lot, "ADJUSTMENT_IN", difference, admin_user_id,
                 reference_type="reconciliation", remarks=remarks,
             )
         elif difference < 0:
-            self.apply_movement(
+            self.apply_movement_base(
                 lot, "ADJUSTMENT_OUT", abs(difference), admin_user_id,
                 reference_type="reconciliation", remarks=remarks,
             )
@@ -1453,17 +1650,21 @@ class InventoryService:
         lot = self.db.query(InventoryLot).filter(InventoryLot.id == lot_id).with_for_update().first()
         if not lot:
             raise NotFoundError("Inventory lot not found.")
-        available = lot.quantity - lot.reserved_quantity
-        if available <= 0:
+        if lot.quantity_base is None:
+            raise BusinessValidationError("This lot is on hold for review; resolve it before removing stock.")
+        available_base = lot.quantity_base - lot.reserved_base
+        if available_base <= 0:
             raise BusinessValidationError("There is no available stock in this lot to remove.")
-        quantity = data.quantity if data.quantity is not None else available
-        if quantity > available:
+        remove_base = self._packs_to_base(lot.variant, data.quantity) if data.quantity is not None else available_base
+        if remove_base > available_base:
             raise BusinessValidationError(
-                f"Only {available} is available to remove - the rest is reserved for customer orders."
+                f"Only {units_mod.packs_exact(available_base, lot.variant.size_base)} is available to remove - "
+                "the rest is reserved for customer orders."
             )
+        quantity = units_mod.packs_exact(remove_base, lot.variant.size_base)
 
-        self.apply_movement(
-            lot, "ADJUSTMENT_OUT", quantity, admin_user_id,
+        self.apply_movement_base(
+            lot, "ADJUSTMENT_OUT", remove_base, admin_user_id,
             reference_type="stock_removal", remarks=f"Stock removed: {data.reason}",
         )
         AdminAuditService(self.db).record(

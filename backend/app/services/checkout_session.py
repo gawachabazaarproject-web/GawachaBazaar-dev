@@ -21,7 +21,7 @@ Every step is idempotent: completing twice returns the same order.
 
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import func, text
+from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -34,7 +34,6 @@ from app.exceptions.base import (
     NotFoundError,
 )
 from app.models.checkout_session import CheckoutSession
-from app.models.inventory_lot import InventoryLot
 from app.models.payment import Payment
 from app.models.payment_transaction import PaymentTransaction
 from app.models.user import User
@@ -50,6 +49,7 @@ from app.services.payment import OnlinePaymentsUnavailableError, PaymentService
 from app.services.payment_gateway import GatewayError, PaymentGateway
 from app.services.payment_state import PaymentStatus, TransactionStatus
 from app.services.razorpay_gateway import to_paise
+from app.services.stock_pool import available_packs_by_variant
 
 _PENDING = "PENDING"
 _START_LOCK_NS = 7001  # advisory-lock namespace for CheckoutSessionService.start
@@ -169,16 +169,10 @@ class CheckoutSessionService:
             wanted[variant_id] = wanted.get(variant_id, 0) + quantity
         if not wanted:
             return
-        rows = (
-            self.db.query(
-                InventoryLot.variant_id,
-                func.sum(InventoryLot.quantity - InventoryLot.reserved_quantity),
-            )
-            .filter(InventoryLot.variant_id.in_(list(wanted)), InventoryLot.status == "ACTIVE")
-            .group_by(InventoryLot.variant_id)
-            .all()
-        )
-        available = {variant_id: total for variant_id, total in rows}
+        # Same number the product page shows: whole packs of the shared stock pool
+        # plus the size's own share (stock received as a 1 kg lot still covers a
+        # 250 g order). Not a reservation - the binding check is at order creation.
+        available = available_packs_by_variant(self.db, list(wanted))
         names = {row["variant_id"]: row for row in plan.order_item_rows}
         for variant_id, quantity in wanted.items():
             if (available.get(variant_id) or 0) < quantity:

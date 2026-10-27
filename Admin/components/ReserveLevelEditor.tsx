@@ -3,13 +3,14 @@
 import React, { useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { CatalogApiError, updateVariant } from "@/lib/products";
+import { UNITS } from "@/lib/units";
 
 // Units a reserve can be typed in, per unit family: [label, factor to the family's base unit].
-const FAMILIES: Record<string, { family: string; factor: number }> = {
-  KG: { family: "MASS", factor: 1000 }, G: { family: "MASS", factor: 1 },
-  L: { family: "VOLUME", factor: 1000 }, ML: { family: "VOLUME", factor: 1 },
-  UNIT: { family: "COUNT", factor: 1 }, DOZEN: { family: "COUNT", factor: 12 },
-};
+const FAMILIES: Record<string, { family: string; factor: number }> = Object.fromEntries(
+  Object.entries(UNITS)
+    .filter(([, u]) => u.dimension === "MASS" || u.dimension === "VOLUME" || u.dimension === "COUNT")
+    .map(([k, u]) => [k, { family: u.dimension as string, factor: u.factor }]),
+);
 const CHOICES: Record<string, { value: string; label: string }[]> = {
   MASS: [{ value: "KG", label: "kg" }, { value: "G", label: "g" }],
   VOLUME: [{ value: "L", label: "litres" }, { value: "ML", label: "ml" }],

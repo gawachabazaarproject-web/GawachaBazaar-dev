@@ -3,9 +3,9 @@
 import React, { useEffect, useId, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { hasPermission } from "@/lib/permissions";
+import { UNITS } from "@/lib/units";
 import {
   amountText,
-  amountToPacks,
   convertAmount,
   correctProductStock,
   fetchProductStockCard,
@@ -36,7 +36,9 @@ export function stockFamily(product: ProductStockItem): string | null {
   return product.totals.find((t) => FAMILY_UNITS[t.family])?.family ?? null;
 }
 
-const FAMILY_OF_PACK: Record<string, string> = { KG: "MASS", G: "MASS", L: "VOLUME", ML: "VOLUME", UNIT: "COUNT", DOZEN: "COUNT" };
+const FAMILY_OF_PACK: Record<string, string> = Object.fromEntries(
+  Object.entries(UNITS).filter(([, u]) => u.dimension === "MASS" || u.dimension === "VOLUME" || u.dimension === "COUNT").map(([k, u]) => [k, u.dimension]),
+);
 
 /**
  * After a refused stock action: if the numbers moved while the dialog was open
@@ -286,13 +288,21 @@ export function AddStockDialog({
       ? Math.round((convertAmount(Number(currentTotal.amount), unitValueForLabel(family, currentTotal.amount_unit), unit, family) + amountNum) * 1000) / 1000
       : null;
   const afterText = afterAmount !== null ? `${plain(afterAmount)} ${unitLabel}` : null;
-  // Stock set aside for one size makes the pool arithmetic inexact, so then the
-  // sizes show the current packs plus this delivery's packs.
-  const anyShare = sizes.some((v) => Number(v.share_packs) > 0);
-  const packsAfter = (v: (typeof sizes)[number]) =>
-    anyShare || afterAmount === null
-      ? Number(v.available_packs) + Math.floor(amountToPacks(amountNum, unit, v.pack_quantity, v.pack_unit))
-      : Math.floor(amountToPacks(afterAmount, unit, v.pack_quantity, v.pack_unit));
+  // Same arithmetic as the server (stock_pool.py): a size sells whole packs of
+  // (shared pool + what is kept for that size alone). This delivery goes into the
+  // shared pool, except the part kept for one size below.
+  const baseOf = (value: number, unitKey: string) => {
+    const list = family ? FAMILY_UNITS[family] : [];
+    const u = list.find((x) => x.value === unitKey || x.label === unitKey || (unitKey === "pcs" && x.value === "UNIT"));
+    return Math.round(value * (u?.factor ?? 1));
+  };
+  const poolBefore = baseOf(Number(currentTotal?.unassigned_amount ?? 0), currentTotal?.amount_unit ?? unit);
+  const poolAfter = poolBefore + baseOf(amountNum, unit) - baseOf(shareSum, unit);
+  const packsAfter = (v: (typeof sizes)[number]) => {
+    const own = baseOf(Number(v.share_amount), v.amount_unit) + baseOf(Number(shares[v.variant_id]) > 0 ? Number(shares[v.variant_id]) : 0, unit);
+    const size = baseOf(Number(v.pack_quantity), v.pack_unit);
+    return size > 0 ? Math.floor((Math.max(poolAfter, 0) + own) / size) : 0;
+  };
 
   const submit = async () => {
     const token = getAccessToken();

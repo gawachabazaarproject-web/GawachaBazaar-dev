@@ -429,9 +429,8 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
           <div>
             <h3 className="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">Low-stock level</h3>
             <ProductAlertEditor
-              key={product.variant_stock.map((x) => `${x.variant_id}:${x.reserve_level ?? ""}`).join("|")}
+              productId={product.id}
               variants={product.variants}
-              reserves={Object.fromEntries(product.variant_stock.map((x) => [x.variant_id, x.reserve_level]))}
               canEdit={canSetStockLevels}
               onSaved={load}
             />

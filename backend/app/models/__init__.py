@@ -32,6 +32,7 @@ from app.models.delivery_partner import (
 from app.models.farm import Farm
 from app.models.fulfillment import Fulfillment
 from app.models.home_slide import HomeSlide
+from app.models.inventory_base_migration_report import InventoryBaseMigrationReport
 from app.models.inventory_location import InventoryLocation
 from app.models.inventory_lot import InventoryLot
 from app.models.inventory_reservation import InventoryReservation
@@ -50,6 +51,7 @@ from app.models.price import Price
 from app.models.product import Product
 from app.models.product_category import ProductCategory
 from app.models.product_image import ProductImage
+from app.models.product_stock_reserve import ProductStockReserve
 from app.models.product_variant import ProductVariant
 from app.models.promotion import Promotion
 from app.models.promotion_eligible_customer import PromotionEligibleCustomer
@@ -121,6 +123,8 @@ __all__ = [
     "ReferralCode",
     "ReferralRewardLedger",
     "DeliveryOtp",
+    "InventoryBaseMigrationReport",
+    "ProductStockReserve",
     "DeliveryAssignment",
     "DeliveryPartnerEarning",
     "DeliveryPartnerLocation",
