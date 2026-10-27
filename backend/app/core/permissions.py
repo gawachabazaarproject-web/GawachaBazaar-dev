@@ -181,6 +181,22 @@ AD_PERMISSIONS = {
     "ads.manage",
 }
 
+# Refer & Earn administration (list referrals, reverse/cancel, ledger). ADMIN
+# only: rewards are money, same precedent as Promotions/Refunds.
+REFERRAL_PERMISSIONS = {
+    "referrals.read",
+    "referrals.manage",
+}
+
+# Delivery-partner administration (profiles, assignments, COD reconciliation,
+# earnings). `partners.read` is also given to OPERATIONS; managing partners and
+# reconciling cash stays ADMIN-only (money + who may deliver).
+PARTNER_PERMISSIONS = {
+    "partners.read",
+    "partners.manage",
+    "partners.cod_reconcile",
+}
+
 ALL_PERMISSIONS: frozenset[str] = frozenset(
     CATALOG_PERMISSIONS
     | INVENTORY_PERMISSIONS
@@ -195,6 +211,8 @@ ALL_PERMISSIONS: frozenset[str] = frozenset(
     | AUDIT_PERMISSIONS
     | STAFF_PERMISSIONS
     | AD_PERMISSIONS
+    | REFERRAL_PERMISSIONS
+    | PARTNER_PERMISSIONS
 )
 
 # ADMIN is the top role until a dedicated SUPER_ADMIN role is introduced
@@ -209,6 +227,7 @@ ROLE_PERMISSIONS: dict[str, frozenset[str]] = {
         | {"orders.read"}
         | DELIVERY_PERMISSIONS
         | REPORT_PERMISSIONS
+        | {"partners.read"}
     ),
     HUB_STAFF: frozenset(
         INVENTORY_PERMISSIONS

@@ -60,7 +60,7 @@ def test_quote_valid_address(client: TestClient, db_session: Session, stub) -> N
     assert body["available"] is True
     assert body["distance_meters"] == 4700 and body["distance_km"] == 4.7
     assert body["estimated_duration_minutes"] == 10  # stub: 600 s
-    assert Decimal(body["delivery_fee"]) == Decimal("67")
+    assert Decimal(body["delivery_fee"]) == Decimal("70")
     assert body["currency"] == "INR"
     # second call is served from the route cache
     client.post(QUOTE, json={"address_id": address.id}, headers=headers)
@@ -121,7 +121,7 @@ def test_quote_rejects_client_supplied_amounts(client: TestClient, db_session: S
         QUOTE, json={"address_id": address.id, "delivery_fee": 1, "distance_km": 0.1}, headers=headers
     )
     assert r.status_code == 200
-    assert Decimal(r.json()["delivery_fee"]) == Decimal("67")
+    assert Decimal(r.json()["delivery_fee"]) == Decimal("70")
     assert r.json()["distance_meters"] == 4700
 
 
@@ -206,12 +206,17 @@ def test_checkout_ignores_client_fee_and_stores_route_audit(
     # fee is the SERVER's (regression test for client fee tampering).
     assert r.status_code == 201, r.text
     body = r.json()
-    assert Decimal(body["delivery_fee"]) == Decimal("67.00")
-    assert Decimal(body["total_amount"]) == Decimal("50.00") + Decimal("67.00")
+    assert Decimal(body["delivery_fee"]) == Decimal("70.00")
+    assert Decimal(body["total_amount"]) == Decimal("50.00") + Decimal("70.00")
     order = db_session.get(Order, body["id"])
     assert order.delivery_distance_meters == 4700
     assert order.routing_provider == "stub"
     assert order.warehouse_id != 999
+    # Pricing snapshot: the exact rule and inputs the fee was derived from.
+    assert order.delivery_pricing_version == "ceil-km-v1"
+    assert (order.delivery_base_fee, order.delivery_per_km, order.delivery_billable_km) == (
+        Decimal("20.00"), Decimal("10.00"), 5)  # 4700 m bills as 5 km
+    assert order.delivery_fee == order.delivery_base_fee + order.delivery_per_km * order.delivery_billable_km
 
 
 def test_checkout_fails_safe_when_routing_down(client: TestClient, db_session: Session, stub) -> None:

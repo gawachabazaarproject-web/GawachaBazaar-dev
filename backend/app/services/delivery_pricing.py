@@ -6,18 +6,28 @@ here from `PricingRules`. Rules are read from settings (environment) today;
 admin-panel source later.
 
 How to change a rule (environment variables, then restart the backend):
-  base delivery fee        DELIVERY_BASE_FEE         (Rs, default 40)
+  base delivery fee        DELIVERY_BASE_FEE         (Rs, default 20)
   per-km price             DELIVERY_PER_KM           (Rs/km, default 10)
   km that stop being billed DELIVERY_MAX_CHARGED_KM  (default 30)
+
+Rule (pricing version PRICING_VERSION):
+  billable_km = max(1, ceil(distance_meters / 1000))   (integer arithmetic)
+  billable_km = min(billable_km, floor(DELIVERY_MAX_CHARGED_KM))
+  fee         = DELIVERY_BASE_FEE + DELIVERY_PER_KM x billable_km
+Example with base 20 / per-km 10: 0-1000 m -> Rs 30, 1001-2000 m -> Rs 40,
+5200 m -> Rs 80, 10100 m -> Rs 130.
   maximum delivery radius  DELIVERY_MAX_DISTANCE_KM  (km; 0 = no limit)
   free-delivery threshold  FREE_DELIVERY_MIN_ITEMS   (distinct products, 15)
   minimum order value      DELIVERY_MIN_ORDER_VALUE  (Rs, 0 = off)
 """
 
 from dataclasses import dataclass
-from decimal import ROUND_CEILING, Decimal
+from decimal import Decimal
 
 from app.core.config import settings
+
+# Stored on every order so a later rule change can never reinterpret history.
+PRICING_VERSION = "ceil-km-v1"
 
 
 @dataclass(frozen=True)
@@ -44,8 +54,14 @@ class PricingRules:
         return self.max_distance_km > 0 and Decimal(distance_meters) / 1000 > self.max_distance_km
 
 
+def billable_km_for_distance(distance_meters: int, rules: PricingRules) -> int:
+    """Whole kilometres charged: rounded UP, at least 1, capped. Integer math only."""
+    if distance_meters < 0:
+        raise ValueError("distance_meters must not be negative")
+    km = max(1, (distance_meters + 999) // 1000)
+    return min(km, max(1, int(rules.max_charged_km)))
+
+
 def price_for_distance(distance_meters: int, rules: PricingRules) -> Decimal:
-    """fee = ceil(base + per_km x min(km, max_charged_km)), whole rupees."""
-    km = Decimal(distance_meters) / 1000
-    charged_km = min(km, rules.max_charged_km)
-    return (rules.base_fee + rules.per_km * charged_km).to_integral_value(rounding=ROUND_CEILING)
+    """fee = base + per_km x billable_km (whole km, rounded up), Decimal rupees."""
+    return rules.base_fee + rules.per_km * billable_km_for_distance(distance_meters, rules)

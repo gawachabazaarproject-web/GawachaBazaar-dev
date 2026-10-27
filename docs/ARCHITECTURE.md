@@ -152,7 +152,7 @@ they cannot disagree.
 
 ```
 distinct products in basket >= FREE_DELIVERY_MIN_ITEMS (15)  ->  fee = 0  ("a Bazaar")
-otherwise  fee = ceil( DELIVERY_BASE_FEE (40) + DELIVERY_PER_KM (10) x road_km )
+otherwise  fee = ceil( DELIVERY_BASE_FEE (20) + DELIVERY_PER_KM (10) x road_km )
              road_km capped at DELIVERY_MAX_CHARGED_KM (30)
 ```
 

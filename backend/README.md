@@ -58,7 +58,7 @@ thin; put every rule in a service; express lifecycles in the matching `*_state.p
 # 1. Virtual environment + dependencies
 python -m venv venv
 .\venv\Scripts\Activate.ps1            # Linux/macOS: source venv/bin/activate
-pip install -r requirements.txt -r requirements-dev.txt
+pip install -r requirements.in -r requirements-dev.txt   # Windows/macOS dev; Linux/CI/Docker use the hashed lock: pip install --require-hashes -r requirements.txt
 
 # 2. Configuration
 cp .env.example .env                    # then edit; never commit .env
@@ -94,7 +94,7 @@ All values are environment variables (see `.env.example`; production template is
 | `CLOUDINARY_CLOUD_NAME` / `_API_KEY` / `_API_SECRET` | - | Image uploads (unset = clear error) |
 | `ALLOWED_ORIGINS` | localhost dev origins | CORS allow-list (JSON array or comma list) |
 | `FREE_DELIVERY_MIN_ITEMS` | `15` | Distinct products needed for free delivery |
-| `DELIVERY_BASE_FEE` | `40` | Rs, always charged below the threshold |
+| `DELIVERY_BASE_FEE` | `20` | Rs, always charged below the threshold |
 | `DELIVERY_PER_KM` | `10` | Rs per road km |
 | `DELIVERY_MAX_CHARGED_KM` | `30` | Distance cap |
 | `PACKING_POINT_LATITUDE` / `_LONGITUDE` | - | **Fallback** origin; the warehouse chosen in Admin -> Settings wins |

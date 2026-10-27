@@ -1041,7 +1041,8 @@ class TestDatabaseCatalogAudit:
                 "SELECT tgname, relname FROM pg_trigger tg "
                 "JOIN pg_class c ON c.oid = tg.tgrelid "
                 "JOIN pg_namespace n ON n.oid = c.relnamespace "
-                "WHERE n.nspname = 'public' AND NOT tg.tgisinternal;"
+                "WHERE n.nspname = 'public' AND NOT tg.tgisinternal "
+                "AND tg.tgname NOT IN ('trg_referral_ledger_immutable', 'trg_partner_earnings_immutable');"
             )
         ).fetchall()
         assert len(result) == 0, f"Expected 0 non-internal triggers, found: {result}"

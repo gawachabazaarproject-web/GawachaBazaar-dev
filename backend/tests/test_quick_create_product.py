@@ -6,11 +6,12 @@ requests and could leave a half-built draft. Every failure test below checks
 that NOTHING was saved.
 """
 
-from datetime import date, timedelta
+from datetime import timedelta
 from decimal import Decimal
 
 from sqlalchemy.orm import Session
 
+from app.core.business_time import business_today
 from app.core.roles import ADMIN, CATALOG_STAFF, CUSTOMER, HUB_STAFF
 from app.models.admin_action_log import AdminActionLog
 from app.models.batch import Batch
@@ -79,7 +80,7 @@ def test_creates_the_whole_product_in_one_request(client, db_session) -> None:
     admin, headers = _user(db_session, ADMIN, "admin@example.com")
     category = _category(db_session)
     warehouse = _warehouse(db_session)
-    expiry = (date.today() + timedelta(days=3)).isoformat()
+    expiry = (business_today() + timedelta(days=3)).isoformat()
 
     response = client.post(
         URL,

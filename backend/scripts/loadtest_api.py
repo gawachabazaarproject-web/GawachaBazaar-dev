@@ -171,8 +171,16 @@ def run(args) -> None:
 
     def sampler():
         proc = psutil.Process(args.server_pid) if args.server_pid else None
+        known: dict[int, psutil.Process] = {}  # psutil needs the SAME object for cpu_percent deltas
+
+        def server_procs():
+            for p in [proc, *proc.children(recursive=True)]:
+                known.setdefault(p.pid, p)
+            return list(known.values())
+
         if proc:
-            proc.cpu_percent(None)
+            for p in server_procs():
+                p.cpu_percent(None)
         r = None
         if args.redis:
             import redis
@@ -181,8 +189,10 @@ def run(args) -> None:
         while not stop.is_set():
             time.sleep(1)
             if proc:
-                samples["rss_mb"].append(proc.memory_info().rss / 1048576)
-                samples["cpu"].append(proc.cpu_percent(None))
+                procs = server_procs()  # uvicorn workers are children
+                alive = [p for p in procs if p.is_running()]
+                samples["rss_mb"].append(sum(p.memory_info().rss for p in alive) / 1048576)
+                samples["cpu"].append(sum(p.cpu_percent(None) for p in alive))
             with eng.connect() as conn:
                 samples["db_conns"].append(
                     conn.execute(text("select count(*) from pg_stat_activity where datname = current_database()")).scalar())

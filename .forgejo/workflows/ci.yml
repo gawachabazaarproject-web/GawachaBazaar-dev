@@ -31,7 +31,9 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - run: pip install -r requirements.txt -r requirements-dev.txt
+      # production lock first (hash-checked), dev tools second (a hashed file cannot be mixed with an unhashed one)
+      - run: pip install --require-hashes -r requirements.txt
+      - run: pip install -r requirements-dev.txt
       - name: Mark the CI database as disposable (tests refuse any other database)
         run: |
           PGPASSWORD=ci psql -h 127.0.0.1 -p 15432 -U postgres -c "COMMENT ON DATABASE gb_ci_test IS 'gb-disposable-test-db'"

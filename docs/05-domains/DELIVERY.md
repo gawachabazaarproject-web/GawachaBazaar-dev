@@ -11,7 +11,7 @@ otherwise  fee = ceil( DELIVERY_BASE_FEE + DELIVERY_PER_KM x charged_km )
              charged_km = min(road_km, DELIVERY_MAX_CHARGED_KM)
 ```
 
-Defaults (all environment-configurable, [ENVIRONMENT_VARIABLES](../06-development/ENVIRONMENT_VARIABLES.md)): `FREE_DELIVERY_MIN_ITEMS=15`, **`DELIVERY_BASE_FEE=40`** (changed from 20 on 2026-10-14, uncommitted — see warning below), `DELIVERY_PER_KM=10`, `DELIVERY_MAX_CHARGED_KM=30`. The result is rounded **up** to a whole rupee (`ROUND_CEILING`). Maximum fee at defaults: 40 + 10 × 30 = **Rs 340**.
+Defaults (all environment-configurable, [ENVIRONMENT_VARIABLES](../06-development/ENVIRONMENT_VARIABLES.md)): `FREE_DELIVERY_MIN_ITEMS=15`, **`DELIVERY_BASE_FEE=20`** (owner decision 2026-10-27; it was briefly 40), `DELIVERY_PER_KM=10`, `DELIVERY_MAX_CHARGED_KM=30`. The result is rounded **up** to a whole rupee (`ROUND_CEILING`). Maximum fee at defaults: 20 + 10 × 30 = **Rs 320**.
 
 - **"Items" are distinct products** (`product_id`), not units and not variants: the same product in two sizes counts once (`distinct_product_count`).
 - **Order of use:** one pure function, `calculate_delivery_fee`, is called by the cart quote (`GET /bazaar/delivery-quote`) and by checkout, so the two cannot drift.
@@ -117,3 +117,15 @@ docker run -d -p 5000:5000 -v $PWD:/data ghcr.io/project-osrm/osrm-backend osrm-
 # then: OSRM_BASE_URL=http://<host>:5000   (ROUTING_PROVIDER=osrm unchanged)
 ```
 Measured on a 8 GB Docker VM: extract+partition+customize about 13 min, peak 2.2 GB RAM while building; `osrm-routed` steady state 1.75 GB RAM; 2.8 GB disk including the download. Route Zero Mile Stone -> Ambazari: 6 713.7 m (public: 6 714 m). The whole live suite (17 tests) passes against it with only `OSRM_BASE_URL` changed: OSRM call 43 ms (public 480-600 ms), quote miss 65 ms, cache hit ~1 ms. Sizing for production: 2 vCPU / 4 GB RAM / 10 GB disk is a reasonable starting point (extrapolated from this trial, not load-tested). Map data is a static snapshot: schedule a re-extract (e.g. monthly). Keep the OSRM port private (backend network only) - it has no authentication.
+
+## Pricing rule v2 `ceil-km-v1` (2026-10-27)
+
+`billable_km = max(1, ceil(distance_meters / 1000))` (integer arithmetic), capped at `floor(DELIVERY_MAX_CHARGED_KM)`; `fee = DELIVERY_BASE_FEE + DELIVERY_PER_KM x billable_km` (Decimal; free for a 15+ product Bazaar). Distance is the server-side OSRM road distance only. This **replaces** the earlier "base + per_km x exact km, rounded up to a rupee" rule: a 1.5 km trip now bills 2 km. With base 20 / per-km 10: 0-1000 m = Rs 30, 1001-2000 m = Rs 40, 5200 m = Rs 80, 10100 m = Rs 130 (tested: 0, 1, 999, 1000, 1001, 1999, 2000, 2001, 5000, 5200, 10000, 10100 m).
+
+Every order stores `delivery_distance_meters`, `routing_provider`, `warehouse_id`, `delivery_fee` and the snapshot `delivery_pricing_version`, `delivery_base_fee`, `delivery_per_km`, `delivery_billable_km` (migration `b1c2d3e4f501`; null on older and free orders). The server recomputes at checkout; client-sent `delivery_fee`, `distance_km`, `total_amount`, `warehouse_id` are ignored (regression test).
+
+**Base fee decided (2026-10-27, owner): Rs 20 everywhere** - code default, `.env.production.example`, both compose files and `backend/.env.example`. A hosting environment that still sets `DELIVERY_BASE_FEE=40` would override it: check the live host's variables on release. The 30 km billing cap and free delivery for 15+ different products are retained.
+
+## Delivery partners and COD
+
+See [DELIVERY_PARTNER](DELIVERY_PARTNER.md) and [COD_OPERATIONS](COD_OPERATIONS.md). Assigning a partner (`POST /fulfillments/{id}/assign`) now also creates a `delivery_assignments` row; `POST /fulfillments/{id}/reassign` is new; the legacy out-for-delivery / deliver endpoints keep the assignment in step.

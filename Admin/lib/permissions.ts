@@ -60,6 +60,8 @@ const SETTINGS_PERMISSIONS = ["settings.manage"] as const;
 const AUDIT_PERMISSIONS = ["audit.read"] as const;
 const STAFF_PERMISSIONS = ["staff.read", "staff.manage"] as const;
 const AD_PERMISSIONS = ["ads.read", "ads.manage"] as const;
+const REFERRAL_PERMISSIONS = ["referrals.read", "referrals.manage"] as const;
+const PARTNER_PERMISSIONS = ["partners.read", "partners.manage", "partners.cod_reconcile"] as const;
 
 export type Permission =
   | (typeof CATALOG_PERMISSIONS)[number]
@@ -68,6 +70,8 @@ export type Permission =
   | (typeof REFUND_PERMISSIONS)[number]
   | (typeof REVIEW_PERMISSIONS)[number]
   | (typeof PROMOTION_PERMISSIONS)[number]
+  | (typeof REFERRAL_PERMISSIONS)[number]
+  | (typeof PARTNER_PERMISSIONS)[number]
   | (typeof CUSTOMER_PERMISSIONS)[number]
   | (typeof DELIVERY_PERMISSIONS)[number]
   | (typeof REPORT_PERMISSIONS)[number]
@@ -99,6 +103,7 @@ const ROLE_PERMISSIONS: Record<string, Permission[]> = {
     "orders.read",
     ...DELIVERY_PERMISSIONS,
     ...REPORT_PERMISSIONS,
+    "partners.read",
   ],
   [HUB_STAFF]: [...INVENTORY_PERMISSIONS, "orders.read", "delivery.read", "delivery.assign"],
   [DELIVERY_PARTNER]: ["delivery.read", "delivery.fulfill"],

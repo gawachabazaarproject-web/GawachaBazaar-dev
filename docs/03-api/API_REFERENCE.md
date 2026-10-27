@@ -5,11 +5,11 @@
 
 Conventions (envelope, errors, pagination): [API_CONVENTIONS.md](API_CONVENTIONS.md). Webhook: [WEBHOOKS.md](WEBHOOKS.md). Roles and permissions: [USER_ROLES_AND_PERMISSIONS](../01-requirements/USER_ROLES_AND_PERMISSIONS.md).
 
-**208 HTTP operations + 1 WebSocket.** Interactive docs (`/docs`, `/redoc`, `/openapi.json`) are served only when `APP_ENV` is not `production` ([`main.py`](../../backend/app/main.py)).
+**237 HTTP operations + 1 WebSocket.** Interactive docs (`/docs`, `/redoc`, `/openapi.json`) are served only when `APP_ENV` is not `production` ([`main.py`](../../backend/app/main.py)).
 
 How to read the **Auth** column: `roles A/B` = caller must hold at least one of those roles (checked live against `user_roles`); `perm x.y` = the caller's roles must grant that permission in the static map ([`permissions.py`](../../backend/app/core/permissions.py)); `signed-in user` = any ACTIVE user whose token verified (email/password users also need a verified email). Router-level role gates apply to every route in that router. **Request** column: `name(p|q|h)` are path/query/header parameters; the schema name is the JSON body model. **Response** lists declared success responses (`code: Schema`); every error uses the uniform envelope.
 
-Field-level request/response schemas live in the OpenAPI document (228 schemas at generation time) and the Pydantic models in [`backend/app/schemas/`](../../backend/app/schemas); they are not repeated here to avoid drift.
+Field-level request/response schemas live in the OpenAPI document (265 schemas at generation time) and the Pydantic models in [`backend/app/schemas/`](../../backend/app/schemas); they are not repeated here to avoid drift.
 
 ## Index
 
@@ -25,7 +25,8 @@ Field-level request/response schemas live in the OpenAPI document (228 schemas a
 | [customers](#customers) | 13 |
 | [dashboard](#dashboard) | 1 |
 | [delivery](#delivery) | 2 |
-| [fulfillments](#fulfillments) | 7 |
+| [delivery_partner](#delivery-partner) | 21 |
+| [fulfillments](#fulfillments) | 8 |
 | [home_slides](#home-slides) | 6 |
 | [inventory](#inventory) | 33 |
 | [offers](#offers) | 1 |
@@ -35,6 +36,7 @@ Field-level request/response schemas live in the OpenAPI document (228 schemas a
 | [promotions](#promotions) | 11 |
 | [push](#push) | 2 |
 | [realtime](#realtime) | 1 |
+| [referrals](#referrals) | 7 |
 | [staff](#staff) | 6 |
 | [suppliers](#suppliers) | 10 |
 | [wishlist](#wishlist) | 3 |
@@ -140,26 +142,26 @@ Source: [`backend/app/api/v1/catalog.py`](../../backend/app/api/v1/catalog.py)
 | DELETE | `/api/v1/catalog/categories/{category_id}` | perm categories.delete | category_id(p) | 204 | Delete a category that has no products or subcategories [L277](../../backend/app/api/v1/catalog.py#L277) |
 | GET | `/api/v1/catalog/categories/{category_id}` | Public | category_id(p) | 200: CategoryDetailResponse | Get an active category (with direct active children) [L194](../../backend/app/api/v1/catalog.py#L194) |
 | PATCH | `/api/v1/catalog/categories/{category_id}` | perm categories.update | category_id(p), UpdateCategoryRequest | 200: CategoryResponse | Update a category (including lifecycle status) [L263](../../backend/app/api/v1/catalog.py#L263) |
-| DELETE | `/api/v1/catalog/categories/{category_id}/image` | perm categories.update | category_id(p) | 200: CategoryResponse | Remove a category's image [L309](../../backend/app/api/v1/catalog.py#L309) |
+| DELETE | `/api/v1/catalog/categories/{category_id}/image` | perm categories.update | category_id(p) | 200: CategoryResponse | Remove a category's image [L311](../../backend/app/api/v1/catalog.py#L311) |
 | POST | `/api/v1/catalog/categories/{category_id}/image` | perm categories.update | category_id(p), multipart: Body_upload_category_image_api_v1_catalog_categories__category_id__image_post | 200: CategoryResponse | Upload (or replace) a category's image via Cloudinary [L290](../../backend/app/api/v1/catalog.py#L290) |
-| DELETE | `/api/v1/catalog/images/{image_id}` | perm products.manage_media | image_id(p) | 204 | Delete a product image [L463](../../backend/app/api/v1/catalog.py#L463) |
-| PATCH | `/api/v1/catalog/images/{image_id}` | perm products.manage_media | image_id(p), UpdateProductImageRequest | 200: ProductImageResponse | Update a product image, including primary image handoff [L449](../../backend/app/api/v1/catalog.py#L449) |
-| PATCH | `/api/v1/catalog/prices/{price_id}` | perm products.manage_pricing | price_id(p), UpdatePriceRequest | 200: PriceResponse | Activate/deactivate or end a price's validity window [L517](../../backend/app/api/v1/catalog.py#L517) |
+| DELETE | `/api/v1/catalog/images/{image_id}` | perm products.manage_media | image_id(p) | 204 | Delete a product image [L469](../../backend/app/api/v1/catalog.py#L469) |
+| PATCH | `/api/v1/catalog/images/{image_id}` | perm products.manage_media | image_id(p), UpdateProductImageRequest | 200: ProductImageResponse | Update a product image, including primary image handoff [L455](../../backend/app/api/v1/catalog.py#L455) |
+| PATCH | `/api/v1/catalog/prices/{price_id}` | perm products.manage_pricing | price_id(p), UpdatePriceRequest | 200: PriceResponse | Activate/deactivate or end a price's validity window [L523](../../backend/app/api/v1/catalog.py#L523) |
 | GET | `/api/v1/catalog/products` | Public | category_id(q), q(q), page(q), page_size(q) | 200: ProductListResponse | List active products, optionally filtered by category and/or name search [L205](../../backend/app/api/v1/catalog.py#L205) |
-| POST | `/api/v1/catalog/products` | perm products.create | CreateProductRequest | 201: ProductResponse | Create a product [L325](../../backend/app/api/v1/catalog.py#L325) |
+| POST | `/api/v1/catalog/products` | perm products.create | CreateProductRequest | 201: ProductResponse | Create a product [L331](../../backend/app/api/v1/catalog.py#L331) |
 | GET | `/api/v1/catalog/products/admin` | perm products.read | page(q), page_size(q), status(q), category_id(q), q(q), price_min(q), price_max(q), created_from(q), created_to(q), updated_from(q), updated_to(q) | 200: AdminProductListResponse | List/search/filter every product regardless of status (admin panel) [L67](../../backend/app/api/v1/catalog.py#L67) |
 | GET | `/api/v1/catalog/products/admin/{product_id}` | perm products.read | product_id(p) | 200: AdminProductDetailResponse | Get the complete admin detail for any product regardless of status [L102](../../backend/app/api/v1/catalog.py#L102) |
 | GET | `/api/v1/catalog/products/admin/{product_id}/activity` | perm products.read | product_id(p) | 200: ProductActivityResponse | Real audit-log activity for this product and its variants/prices [L115](../../backend/app/api/v1/catalog.py#L115) |
-| POST | `/api/v1/catalog/products/quick-create` | perm products.create | QuickCreateProductRequest | 201: ProductResponse | Create a whole product - sizes, prices, photo, opening stock - in one transaction [L339](../../backend/app/api/v1/catalog.py#L339) |
-| DELETE | `/api/v1/catalog/products/{product_id}` | perm products.delete | product_id(p) | 204 | Permanently delete a product (refused if it has order/quote/supplier history - archive it instead) [L360](../../backend/app/api/v1/catalog.py#L360) |
+| POST | `/api/v1/catalog/products/quick-create` | perm products.create | QuickCreateProductRequest | 201: ProductResponse | Create a whole product - sizes, prices, photo, opening stock - in one transaction [L345](../../backend/app/api/v1/catalog.py#L345) |
+| DELETE | `/api/v1/catalog/products/{product_id}` | perm products.delete | product_id(p) | 204 | Permanently delete a product (refused if it has order/quote/supplier history - archive it instead) [L366](../../backend/app/api/v1/catalog.py#L366) |
 | GET | `/api/v1/catalog/products/{product_id}` | Public | product_id(p) | 200: ProductResponse | Get an active product with images, active variants, and current prices [L220](../../backend/app/api/v1/catalog.py#L220) |
-| PATCH | `/api/v1/catalog/products/{product_id}` | perm products.update | product_id(p), UpdateProductRequest | 200: ProductResponse | Update a product (including lifecycle status) [L373](../../backend/app/api/v1/catalog.py#L373) |
-| POST | `/api/v1/catalog/products/{product_id}/images` | perm products.manage_media | product_id(p), CreateProductImageRequest | 201: ProductImageResponse | Add a product image [L435](../../backend/app/api/v1/catalog.py#L435) |
-| POST | `/api/v1/catalog/products/{product_id}/images/upload` | perm products.manage_media | product_id(p), multipart: Body_upload_product_image_api_v1_catalog_products__product_id__images_upload_post | 201: ProductImageResponse | Upload a product image via Cloudinary and attach it to the product [L477](../../backend/app/api/v1/catalog.py#L477) |
-| POST | `/api/v1/catalog/products/{product_id}/variants` | perm products.update | product_id(p), CreateProductVariantRequest | 201: ProductVariantResponse | Create a product variant [L388](../../backend/app/api/v1/catalog.py#L388) |
-| DELETE | `/api/v1/catalog/variants/{variant_id}` | perm products.delete | variant_id(p) | 204 | Delete a size that was only just added: no orders, quotes, stock, carts or price changes (hide it instead otherwise) [L421](../../backend/app/api/v1/catalog.py#L421) |
-| PATCH | `/api/v1/catalog/variants/{variant_id}` | perm products.update | variant_id(p), UpdateProductVariantRequest | 200: ProductVariantResponse | Update a product variant (including lifecycle status) [L402](../../backend/app/api/v1/catalog.py#L402) |
-| POST | `/api/v1/catalog/variants/{variant_id}/prices` | perm products.manage_pricing | variant_id(p), CreatePriceRequest | 201: PriceResponse | Create a new price for a variant (preserves price history) [L503](../../backend/app/api/v1/catalog.py#L503) |
+| PATCH | `/api/v1/catalog/products/{product_id}` | perm products.update | product_id(p), UpdateProductRequest | 200: ProductResponse | Update a product (including lifecycle status) [L379](../../backend/app/api/v1/catalog.py#L379) |
+| POST | `/api/v1/catalog/products/{product_id}/images` | perm products.manage_media | product_id(p), CreateProductImageRequest | 201: ProductImageResponse | Add a product image [L441](../../backend/app/api/v1/catalog.py#L441) |
+| POST | `/api/v1/catalog/products/{product_id}/images/upload` | perm products.manage_media | product_id(p), multipart: Body_upload_product_image_api_v1_catalog_products__product_id__images_upload_post | 201: ProductImageResponse | Upload a product image via Cloudinary and attach it to the product [L483](../../backend/app/api/v1/catalog.py#L483) |
+| POST | `/api/v1/catalog/products/{product_id}/variants` | perm products.update | product_id(p), CreateProductVariantRequest | 201: ProductVariantResponse | Create a product variant [L394](../../backend/app/api/v1/catalog.py#L394) |
+| DELETE | `/api/v1/catalog/variants/{variant_id}` | perm products.delete | variant_id(p) | 204 | Delete a size that was only just added: no orders, quotes, stock, carts or price changes (hide it instead otherwise) [L427](../../backend/app/api/v1/catalog.py#L427) |
+| PATCH | `/api/v1/catalog/variants/{variant_id}` | perm products.update | variant_id(p), UpdateProductVariantRequest | 200: ProductVariantResponse | Update a product variant (including lifecycle status) [L408](../../backend/app/api/v1/catalog.py#L408) |
+| POST | `/api/v1/catalog/variants/{variant_id}/prices` | perm products.manage_pricing | variant_id(p), CreatePriceRequest | 201: PriceResponse | Create a new price for a variant (preserves price history) [L509](../../backend/app/api/v1/catalog.py#L509) |
 
 ## customers
 
@@ -198,19 +200,48 @@ Source: [`backend/app/api/v1/delivery.py`](../../backend/app/api/v1/delivery.py)
 | POST | `/api/v1/delivery/geocode` | roles CUSTOMER | GeocodeRequest | 200: GeocodeResponse | rate limit 10/minute per client IP (in-process); Search an address and return map locations to confirm (not autocomplete) [L48](../../backend/app/api/v1/delivery.py#L48) |
 | POST | `/api/v1/delivery/quote` | roles CUSTOMER | DeliveryQuoteRequest | 200: app__schemas__delivery__DeliveryQuoteResponse | rate limit 30/minute per client IP (in-process); Road-distance delivery quote for one of the caller's saved addresses [L33](../../backend/app/api/v1/delivery.py#L33) |
 
+## delivery-partner
+
+Source: [`backend/app/api/v1/delivery_partner.py`](../../backend/app/api/v1/delivery_partner.py)
+
+| Method | Path | Auth | Request | Response | Notes |
+|---|---|---|---|---|---|
+| GET | `/api/v1/delivery-partner/assignments` | roles DELIVERY_PARTNER | scope(q), status(q), date_from(q), date_to(q), page(q), page_size(q) | 200: AssignmentListResponse | My deliveries (active or history) [L79](../../backend/app/api/v1/delivery_partner.py#L79) |
+| GET | `/api/v1/delivery-partner/assignments/{assignment_id}` | roles DELIVERY_PARTNER | assignment_id(p) | 200: AssignmentResponse | One of my deliveries [L97](../../backend/app/api/v1/delivery_partner.py#L97) |
+| POST | `/api/v1/delivery-partner/assignments/{assignment_id}/accept` | roles DELIVERY_PARTNER | assignment_id(p) | 200: AssignmentResponse | Accept (ASSIGNED -> ACCEPTED) [L108](../../backend/app/api/v1/delivery_partner.py#L108) |
+| POST | `/api/v1/delivery-partner/assignments/{assignment_id}/deliver` | roles DELIVERY_PARTNER | assignment_id(p), DeliverRequest | 200: AssignmentResponse | rate limit 30/minute per client IP (in-process); Complete the delivery; confirms COD cash (must equal the amount due) [L160](../../backend/app/api/v1/delivery_partner.py#L160) |
+| POST | `/api/v1/delivery-partner/assignments/{assignment_id}/fail` | roles DELIVERY_PARTNER | assignment_id(p), FailRequest | 200: AssignmentResponse | Delivery could not be completed (back to the dispatch queue) [L175](../../backend/app/api/v1/delivery_partner.py#L175) |
+| POST | `/api/v1/delivery-partner/assignments/{assignment_id}/location` | roles DELIVERY_PARTNER | assignment_id(p), LocationUpdateRequest | 200: LocationAck | rate limit 120/minute per client IP (in-process); Share current location (only during an active delivery; rate limited) [L190](../../backend/app/api/v1/delivery_partner.py#L190) |
+| POST | `/api/v1/delivery-partner/assignments/{assignment_id}/out-for-delivery` | roles DELIVERY_PARTNER | assignment_id(p) | 200: AssignmentResponse | Leave for the customer (PICKED_UP -> OUT_FOR_DELIVERY) [L146](../../backend/app/api/v1/delivery_partner.py#L146) |
+| POST | `/api/v1/delivery-partner/assignments/{assignment_id}/pickup` | roles DELIVERY_PARTNER | assignment_id(p) | 200: AssignmentResponse | Picked up (ACCEPTED -> PICKED_UP) [L133](../../backend/app/api/v1/delivery_partner.py#L133) |
+| POST | `/api/v1/delivery-partner/assignments/{assignment_id}/reject` | roles DELIVERY_PARTNER | assignment_id(p), RejectRequest | 200: AssignmentResponse | Decline before accepting (back to the dispatch queue) [L121](../../backend/app/api/v1/delivery_partner.py#L121) |
+| GET | `/api/v1/delivery-partner/earnings` | roles DELIVERY_PARTNER | date_from(q), date_to(q), page(q), page_size(q) | 200: EarningsResponse | My earnings ledger [L204](../../backend/app/api/v1/delivery_partner.py#L204) |
+| GET | `/api/v1/delivery-partner/me` | roles DELIVERY_PARTNER | - | 200: PartnerMeResponse | My partner profile and today's numbers [L59](../../backend/app/api/v1/delivery_partner.py#L59) |
+| PATCH | `/api/v1/delivery-partner/me/availability` | roles DELIVERY_PARTNER | SetAvailabilityRequest | 200: PartnerMeResponse | Go online / offline [L68](../../backend/app/api/v1/delivery_partner.py#L68) |
+| GET | `/api/v1/delivery-partners` | perm partners.read | status(q), availability(q), page(q), page_size(q) | 200: AdminPartnerListResponse | List delivery partners (partners.read) [L239](../../backend/app/api/v1/delivery_partner.py#L239) |
+| POST | `/api/v1/delivery-partners` | perm partners.manage | AdminCreatePartnerRequest | 201: PartnerProfileResponse | Create a partner profile (partners.manage) [L251](../../backend/app/api/v1/delivery_partner.py#L251) |
+| GET | `/api/v1/delivery-partners/active` | perm partners.read | - | 200: array | Active deliveries with last position (partners.read) [L277](../../backend/app/api/v1/delivery_partner.py#L277) |
+| GET | `/api/v1/delivery-partners/assignments` | perm partners.read | status(q), partner_user_id(q), page(q), page_size(q) | 200: AssignmentListResponse | All assignments (partners.read) [L262](../../backend/app/api/v1/delivery_partner.py#L262) |
+| POST | `/api/v1/delivery-partners/assignments/{assignment_id}/cod-reconcile` | perm partners.cod_reconcile | assignment_id(p), CodReconcileRequest | 200: CodSummaryItem | Mark collected cash as handed over (partners.cod_reconcile) [L300](../../backend/app/api/v1/delivery_partner.py#L300) |
+| GET | `/api/v1/delivery-partners/cod` | perm partners.read | reconciled(q), partner_user_id(q), page(q), page_size(q) | 200: CodListResponse | COD cash collected / outstanding (partners.read) [L284](../../backend/app/api/v1/delivery_partner.py#L284) |
+| GET | `/api/v1/delivery-partners/earnings` | perm partners.read | date_from(q), date_to(q) | 200: array | Earnings per partner (partners.read) [L310](../../backend/app/api/v1/delivery_partner.py#L310) |
+| PATCH | `/api/v1/delivery-partners/{user_id}` | perm partners.manage | user_id(p), AdminUpdatePartnerRequest | 200: PartnerProfileResponse | Update a partner (partners.manage) [L320](../../backend/app/api/v1/delivery_partner.py#L320) |
+| GET | `/api/v1/orders/{order_id}/delivery-tracking` | roles CUSTOMER | order_id(p) | 200: CustomerTrackingResponse | Where is my delivery (own order, only while it is being delivered) [L225](../../backend/app/api/v1/delivery_partner.py#L225) |
+
 ## fulfillments
 
 Source: [`backend/app/api/v1/fulfillments.py`](../../backend/app/api/v1/fulfillments.py)
 
 | Method | Path | Auth | Request | Response | Notes |
 |---|---|---|---|---|---|
-| GET | `/api/v1/fulfillments` | roles ADMIN/HUB_STAFF/OPERATIONS/DELIVERY_PARTNER | status(q), delivery_partner_user_id(q), page(q), page_size(q) | 200: FulfillmentListResponse | List fulfillments (staff see all, a delivery partner sees only their own assignments) [L53](../../backend/app/api/v1/fulfillments.py#L53) |
-| GET | `/api/v1/fulfillments/{fulfillment_id}` | roles ADMIN/HUB_STAFF/OPERATIONS/DELIVERY_PARTNER | fulfillment_id(p) | 200: FulfillmentResponse | Get a fulfillment (a delivery partner may only view their own assignment) [L75](../../backend/app/api/v1/fulfillments.py#L75) |
-| POST | `/api/v1/fulfillments/{fulfillment_id}/assign` | roles ADMIN/HUB_STAFF/OPERATIONS | fulfillment_id(p), AssignDeliveryPartnerRequest | 200: FulfillmentResponse | Assign a delivery partner (READY_FOR_DELIVERY -> ASSIGNED) [L119](../../backend/app/api/v1/fulfillments.py#L119) |
-| POST | `/api/v1/fulfillments/{fulfillment_id}/deliver` | roles ADMIN/DELIVERY_PARTNER | fulfillment_id(p) | 200: FulfillmentResponse | Confirm delivery - the only action that consumes physical inventory [L148](../../backend/app/api/v1/fulfillments.py#L148) |
-| GET | `/api/v1/fulfillments/{fulfillment_id}/order` | roles ADMIN/HUB_STAFF/OPERATIONS/DELIVERY_PARTNER | fulfillment_id(p) | 200: FulfillmentOrderDetailResponse | Get what to pick/pack and where to deliver for a fulfillment (order items, address, customer name, payment method/amount) - a delivery partner may only view their own assignment [L92](../../backend/app/api/v1/fulfillments.py#L92) |
-| POST | `/api/v1/fulfillments/{fulfillment_id}/out-for-delivery` | roles ADMIN/DELIVERY_PARTNER | fulfillment_id(p) | 200: FulfillmentResponse | Mark out for delivery (ASSIGNED -> OUT_FOR_DELIVERY; assigned partner or ADMIN only) [L135](../../backend/app/api/v1/fulfillments.py#L135) |
-| POST | `/api/v1/fulfillments/{fulfillment_id}/status` | roles ADMIN/HUB_STAFF/OPERATIONS | fulfillment_id(p), UpdateFulfillmentStatusRequest | 200: FulfillmentResponse | Advance warehouse status one step (PICKING/PACKED/READY_FOR_DELIVERY) [L105](../../backend/app/api/v1/fulfillments.py#L105) |
+| GET | `/api/v1/fulfillments` | roles ADMIN/HUB_STAFF/OPERATIONS/DELIVERY_PARTNER | status(q), delivery_partner_user_id(q), page(q), page_size(q) | 200: FulfillmentListResponse | List fulfillments (staff see all, a delivery partner sees only their own assignments) [L54](../../backend/app/api/v1/fulfillments.py#L54) |
+| GET | `/api/v1/fulfillments/{fulfillment_id}` | roles ADMIN/HUB_STAFF/OPERATIONS/DELIVERY_PARTNER | fulfillment_id(p) | 200: FulfillmentResponse | Get a fulfillment (a delivery partner may only view their own assignment) [L76](../../backend/app/api/v1/fulfillments.py#L76) |
+| POST | `/api/v1/fulfillments/{fulfillment_id}/assign` | roles ADMIN/HUB_STAFF/OPERATIONS | fulfillment_id(p), AssignDeliveryPartnerRequest | 200: FulfillmentResponse | Assign a delivery partner (READY_FOR_DELIVERY -> ASSIGNED) [L120](../../backend/app/api/v1/fulfillments.py#L120) |
+| POST | `/api/v1/fulfillments/{fulfillment_id}/deliver` | roles ADMIN/DELIVERY_PARTNER | fulfillment_id(p) | 200: FulfillmentResponse | Confirm delivery - the only action that consumes physical inventory [L165](../../backend/app/api/v1/fulfillments.py#L165) |
+| GET | `/api/v1/fulfillments/{fulfillment_id}/order` | roles ADMIN/HUB_STAFF/OPERATIONS/DELIVERY_PARTNER | fulfillment_id(p) | 200: FulfillmentOrderDetailResponse | Get what to pick/pack and where to deliver for a fulfillment (order items, address, customer name, payment method/amount) - a delivery partner may only view their own assignment [L93](../../backend/app/api/v1/fulfillments.py#L93) |
+| POST | `/api/v1/fulfillments/{fulfillment_id}/out-for-delivery` | roles ADMIN/DELIVERY_PARTNER | fulfillment_id(p) | 200: FulfillmentResponse | Mark out for delivery (ASSIGNED -> OUT_FOR_DELIVERY; assigned partner or ADMIN only) [L152](../../backend/app/api/v1/fulfillments.py#L152) |
+| POST | `/api/v1/fulfillments/{fulfillment_id}/reassign` | roles ADMIN/HUB_STAFF/OPERATIONS | fulfillment_id(p), ReassignRequest | 200: FulfillmentResponse | Reassign to another delivery partner (assignment history is kept) [L136](../../backend/app/api/v1/fulfillments.py#L136) |
+| POST | `/api/v1/fulfillments/{fulfillment_id}/status` | roles ADMIN/HUB_STAFF/OPERATIONS | fulfillment_id(p), UpdateFulfillmentStatusRequest | 200: FulfillmentResponse | Advance warehouse status one step (PICKING/PACKED/READY_FOR_DELIVERY) [L106](../../backend/app/api/v1/fulfillments.py#L106) |
 
 ## home-slides
 
@@ -343,12 +374,12 @@ Source: [`backend/app/api/v1/promotions.py`](../../backend/app/api/v1/promotions
 | GET | `/api/v1/promotions/dashboard` | perm promotions.read | - | 200: PromotionsDashboardResponse | Promotions overview: status counts, redemption totals, ending-soon/most-used [L35](../../backend/app/api/v1/promotions.py#L35) |
 | GET | `/api/v1/promotions/{promotion_id}` | perm promotions.read | promotion_id(p) | 200: PromotionDetailResponse | Get full promotion detail including performance [L80](../../backend/app/api/v1/promotions.py#L80) |
 | PATCH | `/api/v1/promotions/{promotion_id}` | perm promotions.update | promotion_id(p), UpdatePromotionRequest | 200: PromotionDetailResponse | Update a promotion's rules/schedule/targets [L93](../../backend/app/api/v1/promotions.py#L93) |
-| POST | `/api/v1/promotions/{promotion_id}/activate` | perm promotions.manage_status | promotion_id(p) | 200: PromotionDetailResponse | Activate a promotion (DRAFT/PAUSED -> ACTIVE) [L164](../../backend/app/api/v1/promotions.py#L164) |
-| POST | `/api/v1/promotions/{promotion_id}/disable` | perm promotions.manage_status | promotion_id(p) | 200: PromotionDetailResponse | Disable a promotion permanently (any status -> DISABLED; never usable again, never deleted) [L190](../../backend/app/api/v1/promotions.py#L190) |
-| POST | `/api/v1/promotions/{promotion_id}/duplicate` | perm promotions.manage_status | promotion_id(p) | 201: PromotionDetailResponse | Duplicate a promotion as a new DRAFT (no code, no accrued usage) [L132](../../backend/app/api/v1/promotions.py#L132) |
+| POST | `/api/v1/promotions/{promotion_id}/activate` | perm promotions.manage_status | promotion_id(p) | 200: PromotionDetailResponse | Activate a promotion (DRAFT/PAUSED -> ACTIVE) [L166](../../backend/app/api/v1/promotions.py#L166) |
+| POST | `/api/v1/promotions/{promotion_id}/disable` | perm promotions.manage_status | promotion_id(p) | 200: PromotionDetailResponse | Disable a promotion permanently (any status -> DISABLED; never usable again, never deleted) [L192](../../backend/app/api/v1/promotions.py#L192) |
+| POST | `/api/v1/promotions/{promotion_id}/duplicate` | perm promotions.manage_status | promotion_id(p) | 201: PromotionDetailResponse | Duplicate a promotion as a new DRAFT (no code, no accrued usage) [L134](../../backend/app/api/v1/promotions.py#L134) |
 | POST | `/api/v1/promotions/{promotion_id}/image` | perm promotions.update | promotion_id(p), multipart: Body_upload_promotion_image_api_v1_promotions__promotion_id__image_post | 200: PromotionDetailResponse | Upload the banner photo shown on this promotion's card in the app's offers carousel [L107](../../backend/app/api/v1/promotions.py#L107) |
-| POST | `/api/v1/promotions/{promotion_id}/pause` | perm promotions.manage_status | promotion_id(p) | 200: PromotionDetailResponse | Pause a promotion (ACTIVE -> PAUSED; no new redemptions until reactivated) [L177](../../backend/app/api/v1/promotions.py#L177) |
-| GET | `/api/v1/promotions/{promotion_id}/redemptions` | perm promotions.read | promotion_id(p), page(q), page_size(q) | 200: PromotionRedemptionListResponse | Coupon usage history for one promotion [L203](../../backend/app/api/v1/promotions.py#L203) |
+| POST | `/api/v1/promotions/{promotion_id}/pause` | perm promotions.manage_status | promotion_id(p) | 200: PromotionDetailResponse | Pause a promotion (ACTIVE -> PAUSED; no new redemptions until reactivated) [L179](../../backend/app/api/v1/promotions.py#L179) |
+| GET | `/api/v1/promotions/{promotion_id}/redemptions` | perm promotions.read | promotion_id(p), page(q), page_size(q) | 200: PromotionRedemptionListResponse | Coupon usage history for one promotion [L205](../../backend/app/api/v1/promotions.py#L205) |
 
 ## push
 
@@ -366,6 +397,20 @@ Source: [`backend/app/api/v1/realtime.py`](../../backend/app/api/v1/realtime.py)
 | Method | Path | Auth | Request | Response | Notes |
 |---|---|---|---|---|---|
 | WS | `/api/v1/ws/events` | Firebase ID token in `?token=` (checked in handler) | - | - |  [L36](../../backend/app/api/v1/realtime.py#L36) |
+
+## referrals
+
+Source: [`backend/app/api/v1/referrals.py`](../../backend/app/api/v1/referrals.py)
+
+| Method | Path | Auth | Request | Response | Notes |
+|---|---|---|---|---|---|
+| GET | `/api/v1/referrals/admin` | perm referrals.read | status(q), user_id(q), page(q), page_size(q) | 200: AdminReferralListResponse | Admin: list referrals (referrals.read) [L82](../../backend/app/api/v1/referrals.py#L82) |
+| GET | `/api/v1/referrals/admin/{referral_id}` | perm referrals.read | referral_id(p) | 200: AdminReferralDetailResponse | Admin: referral with its ledger (referrals.read) [L100](../../backend/app/api/v1/referrals.py#L100) |
+| POST | `/api/v1/referrals/admin/{referral_id}/reverse` | perm referrals.manage | referral_id(p), AdminReferralActionRequest | 200: AdminReferralDetailResponse | Admin: reverse rewards / cancel a referral (referrals.manage) [L113](../../backend/app/api/v1/referrals.py#L113) |
+| POST | `/api/v1/referrals/apply` | roles CUSTOMER | ApplyReferralRequest | 200: ApplyReferralResponse | rate limit 10/minute per client IP (in-process); Apply a friend's referral code (once, before the first order) [L48](../../backend/app/api/v1/referrals.py#L48) |
+| GET | `/api/v1/referrals/history` | roles CUSTOMER | page(q), page_size(q) | 200: ReferralHistoryResponse | People I referred [L58](../../backend/app/api/v1/referrals.py#L58) |
+| GET | `/api/v1/referrals/me` | roles CUSTOMER | - | 200: ReferralMeResponse | rate limit 60/minute per client IP (in-process); My referral code, program rules and stats [L34](../../backend/app/api/v1/referrals.py#L34) |
+| GET | `/api/v1/referrals/rewards` | roles CUSTOMER | page(q), page_size(q) | 200: RewardsResponse | My reward ledger and balance [L68](../../backend/app/api/v1/referrals.py#L68) |
 
 ## staff
 

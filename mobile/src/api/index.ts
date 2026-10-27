@@ -15,3 +15,6 @@ export { wishlistApi } from "./wishlistApi";
 export { bazaarApi } from "./bazaarApi";
 export { deliveryApi } from "./deliveryApi";
 export { offersApi } from "./offersApi";
+export { referralApi } from "./referralApi";
+export { partnerApi } from "./partnerApi";
+export type { Assignment, AssignmentStatus, PartnerMe } from "./partnerApi";

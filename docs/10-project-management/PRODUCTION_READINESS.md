@@ -29,7 +29,7 @@
 | Money integrity under concurrency | Evidence | double-spend, replay, last-unit, refund races tested; PAY-001 is the known exception |
 | Fresh database migrates to head and the app boots | Evidence | verified on a disposable DB ([LOCAL_SETUP](../06-development/LOCAL_SETUP.md)) |
 | Model/migration drift | Evidence | `alembic check` clean |
-| Delivery fee correct and configured | Partial | Logic tested; value is **Rs 40 by code default** (uncommitted change) and may be overridden by unseen host settings; routing uses the public OSRM demo by default |
+| Delivery fee correct and configured | Partial | Logic tested; base fee is **Rs 20** (owner decision 2026-10-27, code default and deploy files); verify the live host does not override it with an old value; routing uses the public OSRM demo by default |
 | Admin pages complete | Gap | Reports, Reviews, Audit Log are placeholders |
 
 ### Payments

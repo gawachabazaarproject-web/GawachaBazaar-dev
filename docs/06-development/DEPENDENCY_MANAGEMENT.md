@@ -13,7 +13,15 @@
 | Redundant / indirect entries | `PyJWT` and `python-dotenv` are listed but no `app/`, `scripts/` or `alembic/` file imports them (leftover from the pre-Firebase design; `firebase-admin` and `pydantic-settings` need them anyway). `email-validator` is needed by `EmailStr` (`schemas/staff.py`); `python-multipart` is needed by FastAPI for file uploads |
 | Python version | `requires-python >=3.11`; image `python:3.11-slim`; the system interpreter on the audit machine was 3.14.7 (not used) |
 
-How to change a dependency: edit `requirements.txt` (and `pyproject.toml` if it appears there), reinstall in the venv, run `ruff` and the full suite against a disposable database ([TESTING_GUIDE](../07-testing/TESTING_GUIDE.md)), and rebuild the image. Upper bounds are `<1.0`/`<2.0`/`<3.0` major caps, so minor/patch drift is expected — consider a lockfile (`pip-compile`/`uv`) as a hardening step (**proposal**).
+**Reproducible builds (DEL-16, 2026-10-27).** `backend/requirements.in` holds the version *ranges* (edit this); `backend/requirements.txt` is the **generated lock** - every direct and transitive package pinned with SHA-256 hashes, compiled on Linux/Python 3.11 with `pip-tools`. The Dockerfile installs it with `--require-hashes` and its base image is pinned by digest (`python:3.11-slim@sha256:b7a9e5f6...`). Render, Docker and CI all use the lock. **Windows developers** cannot install the Linux lock (`uvloop`): use `pip install -r requirements.in -r requirements-dev.txt` locally and rely on CI/Docker for the locked set. Dev tools (`requirements-dev.txt`) are installed in a second `pip install` because a hashed file cannot be mixed with an unhashed one.
+
+**Update procedure** (monthly, or for a security advisory):
+1. Edit ranges in `requirements.in` if needed.
+2. Regenerate the lock in the same environment as production:
+   `docker run --rm -v "$PWD:/w" -w /w python:3.11-slim@sha256:<pinned> sh -c "pip install pip-tools==7.4.1 && pip-compile --generate-hashes --strip-extras --allow-unsafe --upgrade --output-file requirements.txt requirements.in"`
+3. Rebuild the image, run the full suite **inside the new image** (CI does this) plus the live integration suite, and read the diff of `requirements.txt` for major jumps.
+4. Update the base-image digest the same way (`docker pull python:3.11-slim`, copy `RepoDigests`) and do steps 3 again; commit lock + Dockerfile together.
+5. Rollback = revert that commit (the previous lock and digest are in Git).
 
 ## JavaScript apps
 

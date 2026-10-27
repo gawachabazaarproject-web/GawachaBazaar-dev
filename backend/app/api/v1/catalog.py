@@ -43,7 +43,7 @@ from app.schemas.catalog import (
     UpdateProductVariantRequest,
 )
 from app.services.catalog import CatalogService
-from app.services.image_upload import upload_image
+from app.services.image_upload import release_image, upload_image
 
 router = APIRouter()
 
@@ -294,11 +294,13 @@ def upload_category_image(
     db: Session = Depends(get_db),
 ) -> CategoryResponse:
     service = CatalogService(db)
-    service.get_category_or_404(category_id)
+    old_url = service.get_category_or_404(category_id).image_url
     result = upload_image(file, folder=f"gawachabazaar/categories/{category_id}")
-    return service.update_category(
+    updated = service.update_category(
         category_id, UpdateCategoryRequest(image_url=result["secure_url"]), current_user.id
     )
+    release_image(old_url)  # after the DB commit; best effort
+    return updated
 
 
 @router.delete(
@@ -311,9 +313,13 @@ def delete_category_image(
     current_user: User = Depends(require_permission("categories.update")),
     db: Session = Depends(get_db),
 ) -> CategoryResponse:
-    return CatalogService(db).update_category(
+    service = CatalogService(db)
+    old_url = service.get_category_or_404(category_id).image_url
+    updated = service.update_category(
         category_id, UpdateCategoryRequest(image_url=None), current_user.id
     )
+    release_image(old_url)
+    return updated
 
 
 @router.post(

@@ -120,6 +120,9 @@ export default function RootLayout() {
               <Stack.Screen name="address/index" options={{ presentation: "card" }} />
               <Stack.Screen name="address/add" options={{ presentation: "modal" }} />
               <Stack.Screen name="address/edit/[id]" options={{ presentation: "modal" }} />
+              <Stack.Screen name="partner/index" />
+              <Stack.Screen name="partner/[id]" options={{ presentation: "card" }} />
+              <Stack.Screen name="account/refer" options={{ presentation: "card" }} />
               <Stack.Screen name="account/profile" options={{ presentation: "card" }} />
               <Stack.Screen name="account/support" options={{ presentation: "card" }} />
               <Stack.Screen name="account/settings" options={{ presentation: "card" }} />

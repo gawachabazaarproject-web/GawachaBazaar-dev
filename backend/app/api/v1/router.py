@@ -18,6 +18,9 @@ from app.api.v1.catalog import router as catalog_router
 from app.api.v1.customers import router as customers_router
 from app.api.v1.dashboard import router as dashboard_router
 from app.api.v1.delivery import router as delivery_router
+from app.api.v1.delivery_partner import admin_router as delivery_partner_admin_router
+from app.api.v1.delivery_partner import partner_router as delivery_partner_router
+from app.api.v1.delivery_partner import tracking_router as delivery_tracking_router
 from app.api.v1.fulfillments import router as fulfillments_router
 from app.api.v1.home_slides import router as home_slides_router
 from app.api.v1.inventory import router as inventory_router
@@ -32,6 +35,7 @@ from app.api.v1.payments import webhook_router as payments_webhook_router
 from app.api.v1.promotions import router as promotions_router
 from app.api.v1.push import router as push_router
 from app.api.v1.realtime import router as realtime_router
+from app.api.v1.referrals import router as referrals_router
 from app.api.v1.staff import router as staff_router
 from app.api.v1.suppliers import router as suppliers_router
 from app.api.v1.wishlist import router as wishlist_router
@@ -71,6 +75,7 @@ api_router.include_router(cart_router, prefix="/cart", tags=["cart"])
 # would swallow `GET /orders/admin` as an attempt to parse "admin" as an
 # order id (422) before the staff route is ever tried.
 api_router.include_router(orders_staff_router, prefix="/orders", tags=["orders"])
+api_router.include_router(delivery_tracking_router, prefix="/orders", tags=["delivery-partner"])
 api_router.include_router(orders_router, prefix="/orders", tags=["orders"])
 api_router.include_router(orders_admin_router, prefix="/orders", tags=["orders"])
 
@@ -140,6 +145,13 @@ api_router.include_router(home_slides_router, prefix="/home-slides", tags=["home
 api_router.include_router(bazaar_router, prefix="/bazaar", tags=["bazaar"])
 api_router.include_router(delivery_router, prefix="/delivery", tags=["delivery"])
 api_router.include_router(offers_router, prefix="/offers", tags=["offers"])
+api_router.include_router(referrals_router, prefix="/referrals", tags=["referrals"])
+api_router.include_router(
+    delivery_partner_router, prefix="/delivery-partner", tags=["delivery-partner"]
+)
+api_router.include_router(
+    delivery_partner_admin_router, prefix="/delivery-partners", tags=["delivery-partner-admin"]
+)
 
 # Live order/fulfillment/payment/refund status events (WebSocket). See
 # app/core/realtime.py for the in-process connection registry and message

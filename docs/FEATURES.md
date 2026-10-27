@@ -50,7 +50,7 @@ For how it is built see [ARCHITECTURE.md](ARCHITECTURE.md). **Corrections (2026-
 
 ### Delivery fee and the Bazaar offer
 - A basket with **15 or more different products** ships **free** - a "Bazaar".
-- Smaller baskets pay **Rs 40 + Rs 10 per km of road distance** from the packing point to the
+- Smaller baskets pay **Rs 20 + Rs 10 per whole km of road distance (minimum 1 km)** from the packing point to the
   delivery address (capped at 30 km). The cart shows a live quote and "add N more products for
   free delivery".
 - **Gawacha Bazaar+**: six Bazaar orders in a calendar month unlocks Bazaar+; progress is shown

@@ -29,11 +29,15 @@ export function AppGate({ children }: { children: React.ReactNode }) {
   const inAuthGroup = segments[0] === "(auth)";
   const authScreen = inAuthGroup ? (segments as string[])[1] : undefined;
   const inOnboardingGroup = segments[0] === "(onboarding)";
+  const roles = useAuthStore((s) => s.user?.roles);
+  // Partners work from /partner and never need a delivery address.
+  const isPartner = !!roles?.includes("DELIVERY_PARTNER") && !roles.includes("CUSTOMER");
+  const inPartnerGroup = (segments[0] as string) === "partner";
 
   const addressesQuery = useQuery({
     queryKey: ["addresses"],
     queryFn: addressApi.list,
-    enabled: status === "authenticated",
+    enabled: status === "authenticated" && !isPartner,
     staleTime: 60_000,
   });
 
@@ -62,6 +66,10 @@ export function AppGate({ children }: { children: React.ReactNode }) {
     }
 
     // authenticated
+    if (isPartner) {
+      if (!inPartnerGroup) router.replace("/partner" as never);
+      return;
+    }
     if (addressesQuery.isLoading) return;
     const hasAddress = (addressesQuery.data?.length ?? 0) > 0;
 
@@ -72,7 +80,7 @@ export function AppGate({ children }: { children: React.ReactNode }) {
     if ((inAuthGroup || inOnboardingGroup) && hasAddress) {
       router.replace("/(tabs)");
     }
-  }, [status, inAuthGroup, authScreen, inOnboardingGroup, addressesQuery.data, addressesQuery.isLoading, router]);
+  }, [status, inAuthGroup, authScreen, inOnboardingGroup, isPartner, inPartnerGroup, addressesQuery.data, addressesQuery.isLoading, router]);
 
   return <>{children}</>;
 }

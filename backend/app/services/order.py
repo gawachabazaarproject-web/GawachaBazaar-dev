@@ -79,6 +79,7 @@ from app.services.delivery import (
     price_delivery,
     resolve_route,
 )
+from app.services.delivery_assignment import DeliveryAssignmentService
 from app.services.inventory_reservation import InventoryReservationService
 from app.services.order_state import (
     IllegalOrderTransitionError,
@@ -394,6 +395,10 @@ class OrderService:
         if order.promotion_id is not None:
             PromotionService(self.db).reverse_redemption_for_order(order.id, now=now)
 
+        # An in-flight delivery assignment is closed (history kept) and the
+        # partner freed; the fulfillment row itself is left as it was.
+        DeliveryAssignmentService(self.db).close_for_cancelled_order(order.id)
+
         # Refund eligibility only for an online payment that actually
         # reached PAID - COD never creates a refund (nothing was
         # collected), and an online payment that never reached PAID has
@@ -515,6 +520,10 @@ class OrderService:
             delivery_distance_meters=delivery_quote.distance_meters,
             routing_provider=delivery_quote.routing_provider,
             warehouse_id=delivery_quote.warehouse_id,
+            delivery_pricing_version=delivery_quote.pricing_version,
+            delivery_base_fee=delivery_quote.base_fee,
+            delivery_per_km=delivery_quote.per_km,
+            delivery_billable_km=delivery_quote.billable_km,
             total_amount=total_amount,
             currency=currency,
             promotion_id=evaluation.promotion.id if evaluation.promotion else None,

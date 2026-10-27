@@ -55,6 +55,10 @@ class Order(Base):
         CheckConstraint("discount_amount >= 0", name="ck_orders_discount_amount"),
         CheckConstraint("delivery_fee >= 0", name="ck_orders_delivery_fee"),
         CheckConstraint(
+            "delivery_billable_km IS NULL OR delivery_billable_km >= 1",
+            name="ck_orders_delivery_billable_km",
+        ),
+        CheckConstraint(
             "discount_amount <= subtotal_amount",
             name="ck_orders_discount_not_exceeding_subtotal",
         ),
@@ -127,6 +131,12 @@ class Order(Base):
         ForeignKey("inventory_locations.id", ondelete="SET NULL"),
         nullable=True,
     )
+    # Pricing snapshot (version + inputs) so the fee can be re-derived and
+    # audited after the live rules change. Null when no per-km price applied.
+    delivery_pricing_version: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    delivery_base_fee: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
+    delivery_per_km: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
+    delivery_billable_km: Mapped[int | None] = mapped_column(Integer, nullable=True)
     promotion_id: Mapped[int | None] = mapped_column(
         BigInteger,
         ForeignKey("promotions.id", ondelete="RESTRICT"),

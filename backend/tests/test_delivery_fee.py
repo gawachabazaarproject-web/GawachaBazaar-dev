@@ -64,7 +64,7 @@ def test_fourteen_items_pays_base_plus_per_km():
 
 
 def test_zero_distance_is_base_fee_only():
-    assert calculate_delivery_fee(3, 21.1458, 79.0882, routing=routing(0)).fee == Decimal("20")
+    assert calculate_delivery_fee(3, 21.1458, 79.0882, routing=routing(0)).fee == Decimal("30")  # min 1 billable km
 
 
 def test_missing_gps_falls_back_to_base_fee():
@@ -108,7 +108,7 @@ def test_month_start_is_first_of_month_in_ist():
 def test_road_distance_comes_from_the_router():
     quote = calculate_delivery_fee(3, 21.2358, 79.0882, routing=routing(12_300))
     assert quote.distance_km == 12.3
-    assert quote.fee == Decimal("20") + Decimal("10") * Decimal("12.3")
+    assert quote.fee == Decimal("20") + Decimal("10") * 13  # 12.3 km bills as 13 km
     assert quote.routing_provider == "stub"
 
 
@@ -133,14 +133,19 @@ def test_invalid_stored_coordinates_are_not_deliverable():
 @pytest.mark.parametrize(
     "meters, fee",
     [
-        (2000, "40"),  # 20 + 10 x 2
-        (2100, "41"),
+        (0, "30"),  # minimum one billable km
+        (1, "30"),
+        (999, "30"),
+        (1000, "30"),  # exactly 1 km
+        (1001, "40"),  # a started km is a billed km
+        (1999, "40"),
+        (2000, "40"),
+        (2001, "50"),
+        (2100, "50"),
         (5000, "70"),
-        (5100, "71"),
+        (5200, "80"),
         (10000, "120"),
-        (10100, "121"),
-        (2001, "41"),  # 40.01 rounds UP to a whole rupee
-        (0, "20"),
+        (10100, "130"),
     ],
 )
 def test_fee_boundaries_and_ceiling_rounding(meters, fee):
@@ -150,7 +155,7 @@ def test_fee_boundaries_and_ceiling_rounding(meters, fee):
 def test_money_is_decimal_not_float():
     rules = PricingRules.from_settings()
     assert isinstance(price_for_distance(4700, rules), Decimal)
-    assert price_for_distance(4700, rules) == Decimal("67")  # 20 + 47 = 67 exactly
+    assert price_for_distance(4700, rules) == Decimal("70")  # 20 + 10 x ceil(4.7)
 
 
 def test_pricing_rules_are_configurable(monkeypatch):
@@ -173,3 +178,37 @@ def test_radius_also_applies_to_a_bazaar(monkeypatch):
     assert calculate_delivery_fee(15, 21.2, 79.1, routing=routing(9000)).fee == 0
     with pytest.raises(DeliveryUnavailableError):
         calculate_delivery_fee(15, 21.2, 79.1, routing=routing(11_000))
+
+
+# --- pricing rule: base + per_km x ceil(km), integer/Decimal only -----------------
+
+
+@pytest.mark.parametrize(
+    "meters, km, fee",
+    [(0, 1, "30"), (1, 1, "30"), (999, 1, "30"), (1000, 1, "30"), (1001, 2, "40"), (1999, 2, "40"),
+     (2000, 2, "40"), (2001, 3, "50"), (5000, 5, "70"), (5200, 6, "80"), (10000, 10, "120"), (10100, 11, "130")],
+)
+def test_billable_km_and_fee_table(meters, km, fee):
+    from app.services.delivery_pricing import billable_km_for_distance
+
+    rules = PricingRules.from_settings()
+    assert billable_km_for_distance(meters, rules) == km
+    assert price_for_distance(meters, rules) == Decimal(fee)
+    assert calculate_delivery_fee(3, 21.2, 79.1, routing=routing(meters)).billable_km == km
+
+
+def test_pricing_uses_no_floating_point():
+    rules = PricingRules.from_settings()
+    # 999_999 m is 1000 km: floats would be fine here, the cap must still be exact
+    assert price_for_distance(999_999, rules) == Decimal("20") + Decimal("10") * 30
+    assert isinstance(price_for_distance(1234, rules), Decimal)
+    with pytest.raises(ValueError):
+        price_for_distance(-1, rules)
+
+
+def test_quote_carries_the_pricing_snapshot_and_free_bazaar_carries_none():
+    q = calculate_delivery_fee(3, 21.2, 79.1, routing=routing(5200))
+    assert (q.pricing_version, q.base_fee, q.per_km, q.billable_km) == (
+        "ceil-km-v1", Decimal("20"), Decimal("10"), 6)
+    free = calculate_delivery_fee(15, 21.2, 79.1, routing=routing(5200))
+    assert free.fee == 0 and free.pricing_version is None and free.billable_km is None

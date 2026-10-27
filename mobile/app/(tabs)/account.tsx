@@ -46,6 +46,7 @@ export default function AccountScreen() {
         { icon: "heart", label: "Wishlist", badge: wishlistCount, onPress: () => router.push("/wishlist" as never) },
         { icon: "package", label: "Orders", onPress: () => router.push("/(tabs)/orders") },
         { icon: "shopping-bag", label: "Bulk requests", onPress: () => router.push("/bulk/requests") },
+        { icon: "gift", label: "Refer & Earn", onPress: () => router.push("/account/refer" as never) },
       ],
     },
     {

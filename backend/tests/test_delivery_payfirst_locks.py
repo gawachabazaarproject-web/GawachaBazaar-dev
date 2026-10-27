@@ -61,5 +61,5 @@ def test_pay_first_confirm_routes_before_any_lock(
     db_session.expire_all()
     order = db_session.query(Order).filter_by(user_id=user.id).one()
     assert order.delivery_distance_meters == 4700 and order.routing_provider == "probe"
-    assert order.delivery_fee == settings.DELIVERY_BASE_FEE + settings.DELIVERY_PER_KM * Decimal("4.7")
+    assert order.delivery_fee == settings.DELIVERY_BASE_FEE + settings.DELIVERY_PER_KM * Decimal("5")
     assert order.total_amount == Decimal(started.json()["amount"])

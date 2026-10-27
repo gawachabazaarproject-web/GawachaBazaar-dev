@@ -22,6 +22,12 @@ from app.models.cart_item import CartItem
 from app.models.category import Category
 from app.models.checkout_session import CheckoutSession
 from app.models.customer_note import CustomerNote
+from app.models.delivery_partner import (
+    DeliveryAssignment,
+    DeliveryPartnerEarning,
+    DeliveryPartnerLocation,
+    DeliveryPartnerProfile,
+)
 from app.models.farm import Farm
 from app.models.fulfillment import Fulfillment
 from app.models.home_slide import HomeSlide
@@ -53,6 +59,7 @@ from app.models.quality_check import QualityCheck
 from app.models.quote import Quote
 from app.models.quote_item import QuoteItem
 from app.models.quote_version import QuoteVersion
+from app.models.referral import Referral, ReferralCode, ReferralRewardLedger
 from app.models.refund import Refund
 from app.models.role import Role
 from app.models.stock_movement import StockMovement
@@ -109,6 +116,13 @@ __all__ = [
     "QuoteItem",
     "QuoteVersion",
     "Refund",
+    "Referral",
+    "ReferralCode",
+    "ReferralRewardLedger",
+    "DeliveryAssignment",
+    "DeliveryPartnerEarning",
+    "DeliveryPartnerLocation",
+    "DeliveryPartnerProfile",
     "Role",
     "StockMovement",
     "Supplier",

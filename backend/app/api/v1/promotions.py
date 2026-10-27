@@ -21,7 +21,7 @@ from app.schemas.promotion import (
     UpdatePromotionRequest,
 )
 from app.services.admin_audit import AdminAuditService
-from app.services.image_upload import upload_image
+from app.services.image_upload import release_image, upload_image
 from app.services.promotion import PromotionService
 
 router = APIRouter()
@@ -112,6 +112,7 @@ def upload_promotion_image(
 ) -> PromotionDetailResponse:
     service = PromotionService(db)
     promotion = service.get_promotion_or_404(promotion_id)
+    old_url = promotion.image_url
     promotion.image_url = upload_image(file, folder="gawachabazaar/offers")["secure_url"]
     AdminAuditService(db).record(
         admin_user_id=current_user.id,
@@ -120,6 +121,7 @@ def upload_promotion_image(
         resource_id=promotion.id,
     )
     db.commit()
+    release_image(old_url)
     return service.admin_get_promotion_detail(promotion_id)
 
 

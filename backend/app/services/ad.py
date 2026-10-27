@@ -12,6 +12,7 @@ from app.schemas.ad import (
     UpdateAdRequest,
 )
 from app.services.admin_audit import AdminAuditService
+from app.services.image_upload import release_image
 
 _VALID_STATUSES = ("ACTIVE", "INACTIVE")
 
@@ -103,6 +104,7 @@ class AdService:
 
     def admin_replace_image(self, ad_id: int, image_url: str, admin_user_id: int) -> AdminAdDetailResponse:
         ad = self._get_or_404(ad_id)
+        old_url = ad.image_url
         ad.image_url = image_url
         AdminAuditService(self.db).record(
             admin_user_id=admin_user_id,
@@ -111,6 +113,7 @@ class AdService:
             resource_id=ad.id,
         )
         self.db.commit()
+        release_image(old_url)
         return self.admin_get_ad_detail(ad.id)
 
     def admin_delete_ad(self, ad_id: int, admin_user_id: int) -> None:
@@ -122,8 +125,10 @@ class AdService:
             resource_id=ad.id,
             reason=f"brand={ad.brand_name}",
         )
+        old_url = ad.image_url
         self.db.delete(ad)
         self.db.commit()
+        release_image(old_url)
 
     # ------------------------------------------------------------------
     def _get_or_404(self, ad_id: int) -> Ad:

@@ -83,6 +83,8 @@ The latest EAS OTA update availability was **not** checked; the installed APK li
 
 **2026-10-27 AWS preparation (uncommitted):** new `docs/09-deployment-operations/AWS_PRODUCTION_PLAN.md` (architecture, costs from AWS's public price lists, security groups, measured load tests), `docker-compose.aws.yml` (EC2 + RDS + private OSRM + Redis), `deploy/osrm/build.sh` (reproducible Nagpur extract, 98 MB, 89 MiB RAM), `.forgejo/workflows/{ci,deploy-aws}.yml` (unrun), `.env.aws.example`, `/readiness`, DB pool/timeouts, in-flight cap (fixed a collapse at 100 concurrent users), per-user rate limits, load-test scripts. **Nothing was deployed to AWS.** Still blocked: AWS credentials, device/Firebase/Razorpay test inputs, real warehouse coordinates.
 
+**2026-10-27 device run:** the real app ran on a USB Android phone (Xiaomi, Android 14) with real Firebase login and a Razorpay TEST payment against a local backend: quote 7 170 m / Rs 112, order 1 CONFIRMED, screen total equals the database ([AWS plan](../09-deployment-operations/AWS_PRODUCTION_PLAN.md) section 6.4, procedure in [ANDROID_DEVICE_TEST](../07-testing/ANDROID_DEVICE_TEST.md)). Also this session: DEL-15 (image validation + Cloudinary release) fixed, DEL-14 measured and closed (1 worker), DEL-16 hashed lock + pinned base image, legacy EKS deploy made manual-only, two timezone-dependent tests fixed. Still open: real warehouse coordinates, AWS staging, payment failure/duplicate on device.
+
 ## 6. Recommended next steps (grounded in the findings above)
 
 1. Rotate the committed key (SECR-1) and confirm Render's production variables (CFG-1, FEE-1/O-3).

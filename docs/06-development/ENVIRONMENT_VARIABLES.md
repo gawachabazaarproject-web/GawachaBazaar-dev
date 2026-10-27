@@ -23,7 +23,7 @@ Legend — **When:** *runtime* = read when the process starts/handles requests; 
 | `RAZORPAY_WEBHOOK_SECRET` | HMAC secret for webhooks | Required if key id set | runtime | **Yes** | empty |
 | `RAZORPAY_BASE_URL`, `RAZORPAY_TIMEOUT_SECONDS` | API base and timeout | No | runtime | No | `https://api.razorpay.com/v1`, `10.0` |
 | `FREE_DELIVERY_MIN_ITEMS` | Distinct products for free delivery | No | runtime | No | `15` |
-| `DELIVERY_BASE_FEE` | Base delivery fee (Rs) | No | runtime | No | `40` (was 20 until 2026-10-14) |
+| `DELIVERY_BASE_FEE` | Base delivery fee (Rs) | No | runtime | No | `20` (was 40 from 2026-10-14 to 2026-10-27) |
 | `DELIVERY_PER_KM` | Fee per road km (Rs) | No | runtime | No | `10` |
 | `DELIVERY_MAX_CHARGED_KM` | Distance cap for pricing | No | runtime | No | `30.0` |
 | `PACKING_POINT_LATITUDE`, `PACKING_POINT_LONGITUDE` | Fallback origin when no packing-point warehouse is chosen | No | runtime | No | unset |
@@ -107,3 +107,22 @@ No environment variables are read (`process.env` is not used in `website/app` or
 2. **Pass it through `docker-compose.prod.yml` `x-backend-env`** (and the Kubernetes secret/config) — listing it in an example file alone does nothing.
 3. If it must reach a browser/app bundle, it is `NEXT_PUBLIC_*`/`EXPO_PUBLIC_*` and a *build-time* value; add the Docker build argument or EAS profile entry.
 4. Document it here.
+
+## 8. Refer & Earn and delivery partners (added 2026-10-27, backend `Settings`)
+
+All are **placeholders pending business decisions**; they are passed through `docker-compose.prod.yml` and `docker-compose.aws.yml`.
+
+| Name | Default | Purpose |
+|---|---|---|
+| `REFERRAL_ENABLED` | `false` | master switch for Refer & Earn |
+| `REFERRAL_REFERRER_REWARD` / `REFERRAL_REFERRED_REWARD` | 50 / 50 | Rs credited |
+| `REFERRAL_MIN_ORDER_VALUE` | 199 | minimum items value (after discount) of the qualifying order |
+| `REFERRAL_APPLY_WINDOW_DAYS` / `REFERRAL_QUALIFY_WINDOW_DAYS` | 14 / 30 | windows |
+| `REFERRAL_MAX_REWARDS_PER_REFERRER` | 20 | cap (0 = unlimited) |
+| `PARTNER_EARNING_BASE` / `PARTNER_EARNING_PER_KM` / `PARTNER_EARNING_COD_BONUS` | 20 / 5 / 0 | partner earning per delivery (Rs) |
+| `PARTNER_EARNING_RULE_VERSION` | `partner-v1` | stored on each ledger row; bump when you change the formula |
+| `PARTNER_LOCATION_MIN_INTERVAL_SECONDS` | 3 | min gap between accepted location updates |
+| `PARTNER_LOCATION_MAX_SPEED_KMH` | 150 | larger jumps are rejected |
+| `PARTNER_LOCATION_STALE_SECONDS` | 300 | customers stop seeing older positions |
+
+`DELIVERY_BASE_FEE` is Rs 20 (owner decision 2026-10-27); do not override it on the host.

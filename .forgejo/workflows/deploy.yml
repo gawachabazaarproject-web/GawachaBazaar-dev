@@ -1,9 +1,16 @@
-name: GawachaBazaar Production Deploy
+# LEGACY EKS deployment - ISOLATED 2026-10-27. It used to run automatically on
+# every push to main with no tests (KNOWN_ISSUES CI-001). It is now manual-only
+# and requires typing the confirmation below, so it cannot ship the wrong
+# architecture by accident. The supported path is ci.yml + deploy-aws.yml
+# (docs/09-deployment-operations/AWS_PRODUCTION_PLAN.md).
+name: GawachaBazaar LEGACY EKS Deploy (manual only)
 
 on:
-  push:
-    branches:
-      - main
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: "Type DEPLOY-LEGACY-EKS to confirm"
+        required: true
 
 env:
   DOCKER_BACKEND: gawachabazaar-backend
@@ -17,6 +24,7 @@ env:
 jobs:
   build-and-deploy:
     runs-on: ubuntu
+    if: ${{ inputs.confirm == 'DEPLOY-LEGACY-EKS' }}
 
     steps:
       - name: Checkout repository

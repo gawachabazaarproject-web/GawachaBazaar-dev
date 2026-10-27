@@ -33,6 +33,7 @@ const NAV_GROUPS: { title: string | null; items: NavItem[] }[] = [
     items: [
       { label: "Orders", href: "/orders", icon: "package", permission: "orders.read", searchable: true },
       { label: "Delivery", href: "/delivery", icon: "truck", permission: "delivery.read" },
+      { label: "Partners", href: "/delivery-partners", icon: "users", permission: "partners.read" },
       { label: "Payments", href: "/payments", icon: "credit-card", permission: "orders.refund", searchable: true },
       { label: "Customers", href: "/customers", icon: "users", permission: "customers.view", searchable: true },
     ],
@@ -50,6 +51,7 @@ const NAV_GROUPS: { title: string | null; items: NavItem[] }[] = [
     items: [
       { label: "Promotions", href: "/promotions", icon: "megaphone", permission: "promotions.read", searchable: true },
       { label: "Home slides", href: "/content", icon: "file-text", permission: "ads.read" },
+      { label: "Referrals", href: "/referrals", icon: "megaphone", permission: "referrals.read" },
       { label: "Ads", href: "/ads", icon: "megaphone", permission: "ads.read" },
     ],
   },

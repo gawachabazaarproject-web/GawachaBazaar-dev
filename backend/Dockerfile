@@ -1,7 +1,9 @@
 # Gawacha Bazaar backend - Python 3.11-slim, non-root.
 # Used by both docker-compose.yml (dev: overrides CMD with --reload and
 # bind-mounts the source) and docker-compose.prod.yml (runs as built).
-FROM python:3.11-slim
+# Pinned by digest (python:3.11-slim, multi-arch index) for reproducible builds.
+# Update procedure: docs/06-development/DEPENDENCY_MANAGEMENT.md
+FROM python:3.11-slim@sha256:b7a9e5f6a93d6d4a31f129bbd4bdee69efccb6ded0fb230d78aafaf37af98377
 
 # Prevent Python from writing .pyc files and enable unbuffered output
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -15,7 +17,8 @@ WORKDIR /app
 # a manylinux wheel (psycopg[binary], argon2-cffi, cryptography), so no
 # compiler or libpq is needed in the image.
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# requirements.txt is the fully pinned, hashed lock (generated from requirements.in).
+RUN pip install --no-cache-dir --require-hashes -r requirements.txt
 
 # Create the non-root user before copying source so ownership is set in
 # the same layer as the files themselves (no second chown-everything layer)

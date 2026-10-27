@@ -23,7 +23,7 @@ Gawacha Bazaar: FastAPI + PostgreSQL backend (`backend/`), Expo customer app (`m
 ## Verify before you report
 
 - Run the relevant checks and **report their real result**: backend `python -m pytest -p no:cacheprovider` (disposable DB), `python -m ruff check .`, `alembic check`; `npx tsc --noEmit` in `mobile/` and `Admin/`. There are no frontend tests.
-- **Never claim a test, deployment, migration, build or fix succeeded without checking its output.** Say what you ran, what you did not, and what remains unverified. Known baseline on 2026-10-14: 7 backend tests fail because the default `DELIVERY_BASE_FEE` was changed 20 → 40 (see `AI_STATUS.md`); don't report "all tests pass" without re-running.
+- **Never claim a test, deployment, migration, build or fix succeeded without checking its output.** Say what you ran, what you did not, and what remains unverified. The base delivery fee is Rs 20 (owner decision 2026-10-27; the old 20→40 test failures are resolved); don't report "all tests pass" without re-running.
 - UI changes cannot be validated by the tests; say so, or verify on a device/browser when possible. The Expo web target currently crashes at start (push notifications).
 
 ## Keep the documentation true

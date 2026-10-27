@@ -69,7 +69,7 @@ Backend (from `backend/`, Windows venv shown; Linux/macOS: `venv/bin/python`):
 
 | Task | Command |
 |---|---|
-| Install | `pip install -r requirements.txt -r requirements-dev.txt` |
+| Install | dev: `pip install -r requirements.in -r requirements-dev.txt`; Linux/CI/Docker: `pip install --require-hashes -r requirements.txt` (generated lock) |
 | Migrate | `alembic upgrade head` |
 | Run | `uvicorn app.main:app --reload --host 127.0.0.1 --port 8000` |
 | Lint | `python -m ruff check .` |

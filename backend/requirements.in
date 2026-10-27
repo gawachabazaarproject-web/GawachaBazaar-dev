@@ -1,0 +1,21 @@
+# Gawacha Bazaar Backend - production dependency RANGES (edit this file).
+# requirements.txt is the generated, fully pinned + hashed lock - never edit it by hand:
+#   see docs/06-development/DEPENDENCY_MANAGEMENT.md
+fastapi>=0.110.0,<1.0.0
+uvicorn[standard]>=0.28.0,<1.0.0
+pydantic>=2.6.0,<3.0.0
+pydantic-settings>=2.2.0,<3.0.0
+sqlalchemy>=2.0.28,<3.0.0
+psycopg[binary]>=3.1.18,<4.0.0
+alembic>=1.13.1,<2.0.0
+email-validator>=2.1.0
+pyjwt[crypto]>=2.8.0,<3.0.0
+argon2-cffi>=23.1.0
+firebase-admin>=6.5.0,<8.0.0
+python-dotenv>=1.0.1
+slowapi>=0.1.9,<1.0.0
+python-multipart>=0.0.9,<1.0.0
+cloudinary>=1.40.0,<2.0.0
+httpx>=0.27.0,<1.0.0
+redis>=5.0.0,<7.0.0
+Pillow>=10.3,<13

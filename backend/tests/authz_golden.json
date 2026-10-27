@@ -129,6 +129,33 @@
   "GET /api/v1/dashboard": [
    "OPERATIONS"
   ],
+  "GET /api/v1/delivery-partner/assignments": [
+   "DELIVERY_PARTNER"
+  ],
+  "GET /api/v1/delivery-partner/assignments/{assignment_id}": [
+   "DELIVERY_PARTNER"
+  ],
+  "GET /api/v1/delivery-partner/earnings": [
+   "DELIVERY_PARTNER"
+  ],
+  "GET /api/v1/delivery-partner/me": [
+   "DELIVERY_PARTNER"
+  ],
+  "GET /api/v1/delivery-partners": [
+   "OPERATIONS"
+  ],
+  "GET /api/v1/delivery-partners/active": [
+   "OPERATIONS"
+  ],
+  "GET /api/v1/delivery-partners/assignments": [
+   "OPERATIONS"
+  ],
+  "GET /api/v1/delivery-partners/cod": [
+   "OPERATIONS"
+  ],
+  "GET /api/v1/delivery-partners/earnings": [
+   "OPERATIONS"
+  ],
   "GET /api/v1/fulfillments": [
    "HUB_STAFF",
    "OPERATIONS",
@@ -222,6 +249,9 @@
   "GET /api/v1/orders/{order_id}": [
    "CUSTOMER"
   ],
+  "GET /api/v1/orders/{order_id}/delivery-tracking": [
+   "CUSTOMER"
+  ],
   "GET /api/v1/orders/{order_id}/fulfillment": [
    "CUSTOMER"
   ],
@@ -246,6 +276,15 @@
    "CUSTOMER"
   ],
   "GET /api/v1/payments/{payment_id}/checkout": [
+   "CUSTOMER"
+  ],
+  "GET /api/v1/referrals/history": [
+   "CUSTOMER"
+  ],
+  "GET /api/v1/referrals/me": [
+   "CUSTOMER"
+  ],
+  "GET /api/v1/referrals/rewards": [
    "CUSTOMER"
   ],
   "GET /api/v1/suppliers": [
@@ -284,6 +323,9 @@
   ],
   "PATCH /api/v1/catalog/variants/{variant_id}": [
    "CATALOG_STAFF"
+  ],
+  "PATCH /api/v1/delivery-partner/me/availability": [
+   "DELIVERY_PARTNER"
   ],
   "PATCH /api/v1/inventory/locations/{location_id}": [
    "HUB_STAFF",
@@ -367,6 +409,27 @@
   "POST /api/v1/catalog/variants/{variant_id}/prices": [
    "CATALOG_STAFF"
   ],
+  "POST /api/v1/delivery-partner/assignments/{assignment_id}/accept": [
+   "DELIVERY_PARTNER"
+  ],
+  "POST /api/v1/delivery-partner/assignments/{assignment_id}/deliver": [
+   "DELIVERY_PARTNER"
+  ],
+  "POST /api/v1/delivery-partner/assignments/{assignment_id}/fail": [
+   "DELIVERY_PARTNER"
+  ],
+  "POST /api/v1/delivery-partner/assignments/{assignment_id}/location": [
+   "DELIVERY_PARTNER"
+  ],
+  "POST /api/v1/delivery-partner/assignments/{assignment_id}/out-for-delivery": [
+   "DELIVERY_PARTNER"
+  ],
+  "POST /api/v1/delivery-partner/assignments/{assignment_id}/pickup": [
+   "DELIVERY_PARTNER"
+  ],
+  "POST /api/v1/delivery-partner/assignments/{assignment_id}/reject": [
+   "DELIVERY_PARTNER"
+  ],
   "POST /api/v1/delivery/geocode": [
    "CUSTOMER"
   ],
@@ -382,6 +445,10 @@
   ],
   "POST /api/v1/fulfillments/{fulfillment_id}/out-for-delivery": [
    "DELIVERY_PARTNER"
+  ],
+  "POST /api/v1/fulfillments/{fulfillment_id}/reassign": [
+   "HUB_STAFF",
+   "OPERATIONS"
   ],
   "POST /api/v1/fulfillments/{fulfillment_id}/status": [
    "HUB_STAFF",
@@ -506,6 +573,9 @@
    "OPERATIONS",
    "DELIVERY_PARTNER",
    "CATALOG_STAFF"
+  ],
+  "POST /api/v1/referrals/apply": [
+   "CUSTOMER"
   ],
   "POST /api/v1/suppliers": [
    "HUB_STAFF",

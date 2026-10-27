@@ -10,6 +10,7 @@ from app.schemas.home_slide import (
     UpdateHomeSlideRequest,
 )
 from app.services.admin_audit import AdminAuditService
+from app.services.image_upload import release_image
 
 _VALID_STATUSES = ("ACTIVE", "INACTIVE")
 
@@ -98,6 +99,7 @@ class HomeSlideService:
         self, slide_id: int, image_url: str, admin_user_id: int
     ) -> AdminHomeSlideResponse:
         slide = self._get_or_404(slide_id)
+        old_url = slide.image_url
         slide.image_url = image_url
         AdminAuditService(self.db).record(
             admin_user_id=admin_user_id,
@@ -106,6 +108,7 @@ class HomeSlideService:
             resource_id=slide.id,
         )
         self.db.commit()
+        release_image(old_url)
         self.db.refresh(slide)
         return AdminHomeSlideResponse.model_validate(slide, from_attributes=True)
 
@@ -118,8 +121,10 @@ class HomeSlideService:
             resource_id=slide.id,
             reason=f"title={slide.title}",
         )
+        old_url = slide.image_url
         self.db.delete(slide)
         self.db.commit()
+        release_image(old_url)
 
     def _get_or_404(self, slide_id: int) -> HomeSlide:
         slide = self.db.query(HomeSlide).filter(HomeSlide.id == slide_id).first()

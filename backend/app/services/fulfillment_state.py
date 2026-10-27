@@ -85,3 +85,19 @@ def transition_fulfillment_status(
 
 def is_fulfillment_terminal(status: FulfillmentStatus) -> bool:
     return status == FulfillmentStatus.DELIVERED
+
+
+# The ONLY legal backward moves: a delivery that did not happen (partner declined
+# before accepting, or the hand-over failed) returns to the dispatch queue so it
+# can be re-assigned. Everything else stays strictly forward.
+_REOPENABLE: frozenset[FulfillmentStatus] = frozenset(
+    {FulfillmentStatus.ASSIGNED, FulfillmentStatus.OUT_FOR_DELIVERY}
+)
+
+
+def reopen_for_dispatch(current: FulfillmentStatus) -> FulfillmentStatus:
+    """ASSIGNED / OUT_FOR_DELIVERY -> READY_FOR_DELIVERY (assignment released or
+    delivery failed). Any other status is an illegal transition."""
+    if current not in _REOPENABLE:
+        raise IllegalFulfillmentTransitionError(current, FulfillmentStatus.READY_FOR_DELIVERY)
+    return FulfillmentStatus.READY_FOR_DELIVERY

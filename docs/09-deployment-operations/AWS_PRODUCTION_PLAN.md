@@ -123,6 +123,46 @@ The same test on the full western-India extract (222 MB source, 2 CPUs): 421-481
 
 **Restart test (compose):** `docker compose restart osrm` -> serving a correct route again in about 4.3 s (includes launching the curl probe container). **Data volume is read-only**; nothing is downloaded or built at start.
 
+### 6.3 DEL-14: where the CPU goes, and 1 vs 2 workers (decision: keep 1 worker, no catalog cache)
+
+Profile (yappi, CPU clock, in-process TestClient, 40 calls per endpoint, 1,000-user dataset; shares of own-time - absolute ms are inflated by the profiler): SQLAlchemy ORM 38-43% on the catalog reads and 47% on checkout; PostgreSQL driver 4-16%; route matching 5-39% (noisy); Redis 0-2%; OSRM/HTTP client 0-3% (routes were cache hits); pydantic/JSON do not show up as separate buckets. About 11-18 ms of profiled CPU per read request and about 35 ms for checkout. **The bottleneck is ORM object construction, not Redis, OSRM or serialization.**
+
+| Workers | Virtual users | req/s | Errors | RSS total | CPU | DB connections (max) | `GET products` p50 / p95 / p99 |
+|---|---|---|---|---|---|---|---|
+| 1 | 25 | 33.2 | 0 | 160 MB | 123% | 21 | 42 / 408 / 468 ms |
+| 1 | 50 | 51.4 | 0 | 165 MB | 150% | 24 | 232 / 616 / 890 ms |
+| 1 | 100 | 49.2 | 0 | 171 MB | 149% | 25 | 1197 / 1584 / 1721 ms |
+| 2 | 25 | 33.9 | 0 | 421 MB | 170% | 27 | 31 / 139 / 411 ms |
+| 2 | 50 | 45.6 | 0 | 430 MB | 175% | 34 | 321 / 919 / 1192 ms |
+| 2 | 100 | 70.6 | 0 | 438 MB | 219% | 40 | 727 / 1255 / 1350 ms |
+
+Same laptop and method as 6.1; run-to-run variation is large (the 1-worker/100-user rate was 40.6 req/s in the earlier run). RSS for 2 workers includes the supervisor process and double-counted shared pages. Two workers only help once the single worker is saturated (+43% at 100 users) and do nothing at 25-50 users. **Maximum DB connections = workers x (pool 12 + overflow 12) = 24 with one worker, 48 with two** - both below the RDS `db.t4g.micro` limit (about 112, NOT VERIFIED on AWS).
+
+**Decision:** one worker. The expected month-one peak (about 10 req/s, an estimate) is a fraction of the measured 33-51 req/s, and a second worker would break the in-process rate limiter, WebSocket hub and reservation sweep. No catalog cache: it would remove roughly a quarter of total CPU (catalog reads are 60% of the modelled traffic and ORM is about 40% of their cost) but is not needed at this load and risks showing stale price/stock text; checkout always re-prices on the server. Revisit at sustained utilisation above 50%.
+
+### 6.4 Android device run (2026-10-27, local backend - NOT AWS)
+
+Device: Xiaomi 22041216I, Android 14, arm64, USB. A debug build was installed beside the production app as `com.gawacha.bazaar` (a package already registered in `google-services.json`), JS served by Metro, API reached through `adb reverse` on a local backend with a disposable PostgreSQL database, a Redis container and the self-hosted Nagpur OSRM. Firebase: **real** project `gawachabazaar-ac900` (the user signed in on the phone; the backend verified the real ID token using only the project id - no service account, so revocation checks fail open and log `FIREBASE_REVOCATION_CHECK_FAILED`). Razorpay: **real test-mode API** using the test key from the developer's `backend/.env` (the launcher refuses to start unless the key starts with `rzp_test_`). **The warehouse was a stand-in** (Zero Mile Stone, an inventory location flagged as the packing point and named "TEST warehouse"), not the real Gawacha warehouse.
+
+| Step | Evidence |
+|---|---|
+| Real Firebase login, address save | `POST /auth/sync` 200, `POST /addresses` 201; the address is in Nagpur 440017 with coordinates (device GPS, no map-search provider id) |
+| Cart | `POST /cart/items` 201, quantity 2: Brinjal 2 x 35 = Rs 70 |
+| Delivery quote | `routing cache=miss provider=osrm distance_m=7170 latency_ms=256`, then `delivery_priced distance_m=7170 fee=112 free=False warehouse_id=1` (40 + 10 x 7.17 = 111.7, rounded up to Rs 112). The straight line to the same pin is 4.71 km, so 7.17 km is a road distance |
+| Redis | the following requests logged `cache=hit`; keys are `route:v1:osrm:driving:<endpoint-hash>:...` with TTL about 604 700 s |
+| Razorpay (test mode) | `POST /payments/online/start` 200 (Razorpay order created, 1.47 s); the user completed the test payment in the Razorpay sheet; `POST /payments/online/1/verify` 200, `PAYMENT_STATE_TRANSITION PROCESSING -> PAID`, `PAYMENT_ORDER_CONFIRMED` |
+| Order | `ORDER_CREATED order_id=1 warehouse_id=1 provider=osrm distance_m=7170 delivery_fee=112.00 total=182.00`. Row: subtotal 70.00, discount 0.00, delivery_fee 112.00, total 182.00, `delivery_distance_meters` 7170, `routing_provider` osrm, `warehouse_id` 1, status CONFIRMED. Payment 182.00 PAID, UPI, RAZORPAY. Checkout session COMPLETED with `order_id` 1; cart CHECKED_OUT; reservation COMMITTED |
+| Phone screen | Order details: Brinjal 500 G x 2 Rs 70, Delivery fee Rs 112, Total Rs 182, Paid online Rs 182 - equal to the database row |
+
+Not captured on the device: the checkout screen's "distance by road" text (the quote API returned 7.17 km; the app shows one decimal), payment failure/cancel/duplicate-confirm (covered by automated tests only), logout and session restore, tampering from the phone (automated regression tests cover it), push notifications (`PUSH_TICKET_ERROR InvalidCredentials`: no FCM credentials for Expo push on this build).
+
+### 6.5 Rollback
+
+- **Application / containers:** deploy by git tag and keep the previous image. Roll back with `git checkout <previous-tag>` then `ENV_FILE=.env.aws COMPOSE_FILE_NAME=docker-compose.aws.yml deploy/scripts/deploy.sh`. The `migrate` service runs `alembic upgrade head`, a no-op for older code when the schema change was backward compatible.
+- **Database:** **no destructive downgrades in production.** Migrations are expand-then-contract: add nullable columns/tables first (like `d7e9a1c3b5f2`), ship code that works with both shapes, and drop or rename only in a later release once the old code is gone. Take a manual RDS snapshot before every schema-changing release; if a migration goes wrong, restore the snapshot to a new instance and repoint `DATABASE_URL` instead of running `alembic downgrade`.
+- **Configuration:** `.env.aws` is rendered from SSM Parameter Store, which keeps version history; roll a parameter back to its previous version and re-run `deploy.sh`. Keep the previously rendered file as `.env.aws.prev` on the host.
+- **Routing data:** keep the previous OSRM data directory; point `OSRM_DATA_DIR` back, `docker compose up -d osrm`, then flush Redis.
+
 ## 7. OSRM data (reproducible)
 
 `deploy/osrm/build.sh` (run on demand, never at start). Executed 2026-10-26/27:
@@ -206,7 +246,7 @@ Verified locally with the test double (not the real stack): order 1, distance 6 
 ## 16. Remaining blockers before production
 
 1. No AWS account/credentials were available: **nothing was created or tested on AWS**.
-2. Mobile app never run on a device/emulator; real Firebase login not exercised; Razorpay sandbox not exercised (no keys / test user).
+2. Mobile: **run once on a physical Android device** against a local backend with real Firebase login and a Razorpay test-mode payment (section 6.4, one order end to end). Not yet done: payment failure/cancel/duplicate on the device, tamper attempts from the phone, session restore/logout, any run against an AWS staging backend.
 3. Real warehouse coordinates not supplied (`PACKING_POINT_*` / Admin packing point) - delivery pricing is not production-ready until they are set.
 4. Per-core API throughput on Graviton is unmeasured; month-one demand (about 10 req/s at peak, an estimate) is under the measured 40 req/s on a faster core but the margin on `t4g.medium` must be re-measured in staging.
 5. Restore drill, CloudWatch alarms and the CI/CD workflows are written but unrun.
@@ -235,3 +275,9 @@ Verified locally with the test double (not the real stack): order 1, distance 6 
 - [ ] Real warehouse coordinates configured; delivery pricing verified with 3 real addresses
 - [ ] One real order verified end to end (section 15)
 - [ ] Rollback: previous image tag kept; `git checkout <last tag>` + `deploy.sh`; RDS snapshot taken before migration
+
+## 19. Addendum 2026-10-27 - partners, referrals, pricing
+
+* No new infrastructure: partner location is a latest-only PostgreSQL table (no Redis dependency); referral rewards and partner earnings are PostgreSQL ledgers. Redis remains the optional route cache.
+* Production configuration checklist additions: `DELIVERY_BASE_FEE=20` (decided; make sure no host override); `OSRM_BASE_URL` must be the self-hosted OSRM (default still the public demo server); `REFERRAL_*` / `PARTNER_*` placeholders; `DELIVERY_PARTNER` accounts created by an admin.
+* Backup/restore: the new ledgers are append-only and must be included in the dump (they are ordinary tables).

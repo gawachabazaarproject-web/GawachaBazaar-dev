@@ -5,7 +5,7 @@ Rule (all values configurable, see app/core/config.py and delivery_pricing.py):
     "Bazaar" - ships free.
   * Anything smaller pays DELIVERY_BASE_FEE plus DELIVERY_PER_KM per km of
     ROAD distance from the packing point to the delivery address (OSRM via
-    RoutingService, cached).
+    RoutingService, cached), rounded UP to whole km (minimum 1 km billed).
   * If routing is down the quote FAILS (503). Straight-line distance is never
     presented as a road distance.
 
@@ -29,7 +29,12 @@ from app.exceptions.base import (
     ServiceUnavailableError,
 )
 from app.models.inventory_location import InventoryLocation
-from app.services.delivery_pricing import PricingRules, price_for_distance
+from app.services.delivery_pricing import (
+    PRICING_VERSION,
+    PricingRules,
+    billable_km_for_distance,
+    price_for_distance,
+)
 from app.services.routing.base import NoRouteError, RouteResult
 from app.services.routing.service import RoutingService
 
@@ -52,6 +57,11 @@ class DeliveryQuote:
     duration_seconds: int | None = None
     routing_provider: str | None = None
     warehouse_id: int | None = None
+    # Pricing snapshot stored on the order (None for free / unpriced quotes).
+    pricing_version: str | None = None
+    base_fee: Decimal | None = None
+    per_km: Decimal | None = None
+    billable_km: int | None = None
 
 
 class DeliveryUnavailableError(BusinessValidationError):
@@ -177,6 +187,10 @@ def price_delivery(
         duration_seconds=route.duration_seconds,
         routing_provider=route.provider,
         warehouse_id=outcome.warehouse_id,
+        pricing_version=None if is_bazaar else PRICING_VERSION,
+        base_fee=None if is_bazaar else rules.base_fee,
+        per_km=None if is_bazaar else rules.per_km,
+        billable_km=None if is_bazaar else billable_km_for_distance(route.distance_meters, rules),
     )
 
 

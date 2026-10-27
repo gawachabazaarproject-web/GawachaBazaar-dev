@@ -28,6 +28,7 @@ from app.core.roles import ADMIN, DELIVERY_PARTNER, HUB_STAFF, OPERATIONS
 from app.dependencies.auth import require_roles
 from app.dependencies.database import get_db
 from app.models.user import User
+from app.schemas.delivery_partner import ReassignRequest
 from app.schemas.fulfillment import (
     MAX_PAGE_SIZE,
     AssignDeliveryPartnerRequest,
@@ -119,11 +120,27 @@ def update_fulfillment_status(
 def assign_delivery_partner(
     fulfillment_id: int,
     payload: AssignDeliveryPartnerRequest,
-    _current_user: User = Depends(require_roles(*_WAREHOUSE_ROLES)),
+    current_user: User = Depends(require_roles(*_WAREHOUSE_ROLES)),
     db: Session = Depends(get_db),
 ) -> FulfillmentResponse:
     return FulfillmentService(db).assign_delivery_partner(
-        fulfillment_id, payload.delivery_partner_user_id
+        fulfillment_id, payload.delivery_partner_user_id, current_user.id
+    )
+
+
+@router.post(
+    "/{fulfillment_id}/reassign",
+    response_model=FulfillmentResponse,
+    summary="Reassign to another delivery partner (assignment history is kept)",
+)
+def reassign_delivery_partner(
+    fulfillment_id: int,
+    payload: ReassignRequest,
+    current_user: User = Depends(require_roles(*_WAREHOUSE_ROLES)),
+    db: Session = Depends(get_db),
+) -> FulfillmentResponse:
+    return FulfillmentService(db).reassign_delivery_partner(
+        fulfillment_id, payload.delivery_partner_user_id, payload.reason, current_user.id
     )
 
 

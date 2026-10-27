@@ -77,6 +77,7 @@ from app.schemas.catalog import (
     UpdateProductVariantRequest,
 )
 from app.services.admin_audit import AdminAuditService
+from app.services.image_upload import release_image
 from app.services.inventory import InventoryService
 from app.services.pricing import get_current_prices_for_variants
 from app.services.stock_levels import effective_reserve, stock_level
@@ -1151,8 +1152,10 @@ class CatalogService:
             resource_id=image.id,
             reason=f"product_id={image.product_id}",
         )
+        old_url = image.image_url
         self.db.delete(image)
         self.db.commit()
+        release_image(old_url)
 
     # ------------------------------------------------------------------
     # Admin: permanent deletes

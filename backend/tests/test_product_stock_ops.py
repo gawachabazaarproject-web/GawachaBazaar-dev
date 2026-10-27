@@ -7,12 +7,13 @@ this area is an API that says "done" while a write was rolled back, or the
 reverse: a failure that still changed stock.
 """
 
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from unittest.mock import patch
 
 from sqlalchemy.orm import Session
 
+from app.core.business_time import business_today
 from app.core.roles import ADMIN, CATALOG_STAFF, CUSTOMER, HUB_STAFF, OPERATIONS
 from app.models.admin_action_log import AdminActionLog
 from app.models.batch import Batch
@@ -100,7 +101,7 @@ def _setup(db: Session, client):
 
 def test_receive_records_the_expiry_on_the_automatic_delivery(client, db_session) -> None:
     _, headers, product, sizes, main = _setup(db_session, client)
-    expiry = date.today() + timedelta(days=3)
+    expiry = business_today() + timedelta(days=3)
     lot = _receive(client, headers, sizes["1 kg"].id, main.id, 50, expiry_date=expiry.isoformat())
     assert lot["batch_expiry_date"] == expiry.isoformat()
     batch = db_session.query(Batch).one()
@@ -110,10 +111,10 @@ def test_receive_records_the_expiry_on_the_automatic_delivery(client, db_session
 
 def test_receive_rejects_a_past_expiry_and_expiry_with_a_batch(client, db_session) -> None:
     _, headers, product, sizes, main = _setup(db_session, client)
-    past = (date.today() - timedelta(days=1)).isoformat()
+    past = (business_today() - timedelta(days=1)).isoformat()
     for body in (
         {"expiry_date": past},
-        {"expiry_date": (date.today() + timedelta(days=2)).isoformat(), "batch_id": 1},
+        {"expiry_date": (business_today() + timedelta(days=2)).isoformat(), "batch_id": 1},
     ):
         response = client.post(
             f"{BASE}/admin/receive",
@@ -616,7 +617,7 @@ def test_stock_actions_are_limited_to_the_inventory_roles(client, db_session) ->
 def test_stock_cards_report_status_warehouses_expiry_and_reserved(client, db_session) -> None:
     _, headers, product, sizes, main = _setup(db_session, client)
     nagpur = _location(db_session, "NAG")
-    _receive(client, headers, sizes["1 kg"].id, main.id, 35, expiry_date=(date.today() + timedelta(days=2)).isoformat())
+    _receive(client, headers, sizes["1 kg"].id, main.id, 35, expiry_date=(business_today() + timedelta(days=2)).isoformat())
     _receive(client, headers, sizes["1 kg"].id, nagpur.id, 15)
     lot = db_session.query(InventoryLot).order_by(InventoryLot.id).first()
     lot.reserved_quantity = Decimal("5")
@@ -645,7 +646,7 @@ def test_stock_filters_and_summary_count_low_out_and_expiring(client, db_session
     ov = ProductVariant(product_id=onion.id, name="1 kg", sku="ONION-1KG", unit="KG", quantity=Decimal("1"), status="ACTIVE")
     db_session.add_all([pv, ov])
     db_session.commit()
-    _receive(client, headers, sizes["1 kg"].id, main.id, 50, expiry_date=(date.today() + timedelta(days=3)).isoformat())
+    _receive(client, headers, sizes["1 kg"].id, main.id, 50, expiry_date=(business_today() + timedelta(days=3)).isoformat())
     _receive(client, headers, pv.id, main.id, 8)  # at/below the default reserve of 10 packs
 
     summary = client.get(f"{BASE}/admin/products/summary", headers=headers).json()

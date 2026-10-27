@@ -68,3 +68,11 @@ Logs, monitoring and incident handling: [MONITORING_AND_LOGGING](MONITORING_AND_
 ## 5. Decisions needed from the owner
 
 Which of A/B/C is production (and decommission the others or label them); where Admin is hosted and how its Firebase config is injected; whether migrations run as a separate step; whether to scale beyond one process (requires shared state first); a CI gate before the `main` deploy ([QUALITY_GATES](../07-testing/QUALITY_GATES.md)).
+
+## Release notes: delivery pricing, Refer & Earn, delivery partners (2026-10-27)
+
+* **Migrations** (run `alembic upgrade head` as usual): `b1c2d3e4f501` (additive nullable order columns), `c2d3e4f5a601` (6 new tables + two append-only triggers). Downgrade path tested (upgrade -> downgrade -> upgrade -> `alembic check` clean on a disposable DB). Back up before upgrading.
+* **Config:** new variables in [ENVIRONMENT_VARIABLES](../06-development/ENVIRONMENT_VARIABLES.md) section 8. Refer & Earn stays off until `REFERRAL_ENABLED=true`. `DELIVERY_BASE_FEE` is Rs 20 (owner decision); confirm the live host does not still set 40.
+* **Roles:** to use partners, give staff the `DELIVERY_PARTNER` role (Admin -> Staff); the profile is created on first use or via `POST /delivery-partners`.
+* **Mobile:** new screens are JS-only (OTA-eligible) **except** that location sharing uses `expo-location`, already in the installed binary - verify the installed build's permissions before relying on OTA; the delivery-partner flow was not shipped to any store build by this work.
+* **Single worker:** location state is in PostgreSQL, so the one-worker rule is not made worse.

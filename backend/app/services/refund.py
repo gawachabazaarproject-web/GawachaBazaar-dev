@@ -52,6 +52,7 @@ from app.services.payment_gateway import (
     PaymentGateway,
 )
 from app.services.payment_state import PaymentStatus, TransactionStatus
+from app.services.referral import ReferralService
 from app.services.refund_state import (
     IllegalRefundTransitionError,
     RefundStatus,
@@ -407,6 +408,7 @@ class RefundService:
         transaction.completed_at = now
         if status == TransactionStatus.SUCCESS:
             self._apply_transition(refund, RefundStatus.REFUNDED)
+            self._reverse_referral(refund)
             refund.processed_at = now
         else:
             transaction.failure_reason = (failure_reason or "Refund failed at the gateway.")[:2000]
@@ -443,6 +445,7 @@ class RefundService:
             new_refund_status = RefundStatus.FAILED.value
         elif result.status == TransactionStatus.SUCCESS:
             self._apply_transition(refund, RefundStatus.REFUNDED)
+            self._reverse_referral(refund)
             refund.processed_at = datetime.now(UTC)
             new_refund_status = RefundStatus.REFUNDED.value
 
@@ -521,6 +524,15 @@ class RefundService:
             new_status=new_status,
             previous_status=previous_status,
         )
+
+    def _reverse_referral(self, refund: Refund) -> None:
+        """A refunded order must not keep a referral reward it qualified.
+        Inside the caller's transaction, in a SAVEPOINT: never blocks a refund."""
+        try:
+            with self.db.begin_nested():
+                ReferralService(self.db).reverse_for_order(refund.order_id, "Order refunded")
+        except Exception:  # noqa: BLE001 - reward bookkeeping must not fail a refund
+            logger.exception("REFERRAL_REVERSAL_FAILED: refund_id=%s", refund.id)
 
     @staticmethod
     def _apply_transition(refund: Refund, target: RefundStatus) -> None:

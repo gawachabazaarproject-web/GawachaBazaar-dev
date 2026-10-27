@@ -1,7 +1,7 @@
 # Database Schema
 
 > **Status:** Verified (generated from the ORM models). **Generated:** 2026-10-27 by [`docs/_tools/gen_schema_reference.py`](../_tools/gen_schema_reference.py).
-> **Evidence:** [`backend/app/models/`](../../backend/app/models) (SQLAlchemy 2 declarative models, 52 tables) and the migration history in [`backend/alembic/versions/`](../../backend/alembic/versions). The models were compared with a database migrated to head using `alembic check` (see [MIGRATIONS.md](MIGRATIONS.md)). `alembic_version` is Alembic's own table and is not listed.
+> **Evidence:** [`backend/app/models/`](../../backend/app/models) (SQLAlchemy 2 declarative models, 59 tables) and the migration history in [`backend/alembic/versions/`](../../backend/alembic/versions). The models were compared with a database migrated to head using `alembic check` (see [MIGRATIONS.md](MIGRATIONS.md)). `alembic_version` is Alembic's own table and is not listed.
 
 Relationships between tables: [ENTITY_RELATIONSHIPS.md](ENTITY_RELATIONSHIPS.md). Retention and lifecycle: [DATA_RETENTION.md](DATA_RETENTION.md). Business meaning of statuses: the domain documents in [`../05-domains/`](../05-domains).
 
@@ -21,7 +21,7 @@ Timestamps show as `DATETIME` here (the ORM type) but are `timestamp with time z
 | Promotions | [`promotions`](#promotions), [`promotion_targets`](#promotion_targets), [`promotion_eligible_customers`](#promotion_eligible_customers), [`promotion_redemptions`](#promotion_redemptions) |
 | Bulk commerce | [`bulk_customer_profiles`](#bulk_customer_profiles), [`bulk_order_requests`](#bulk_order_requests), [`bulk_order_request_items`](#bulk_order_request_items), [`quotes`](#quotes), [`quote_versions`](#quote_versions), [`quote_items`](#quote_items) |
 | Audit | [`admin_action_logs`](#admin_action_logs) |
-| Other (not grouped) | [`notification_events`](#notification_events), [`product_categories`](#product_categories) |
+| Other (not grouped) | [`delivery_assignments`](#delivery_assignments), [`delivery_partner_earnings`](#delivery_partner_earnings), [`delivery_partner_locations`](#delivery_partner_locations), [`delivery_partner_profiles`](#delivery_partner_profiles), [`notification_events`](#notification_events), [`product_categories`](#product_categories), [`referral_codes`](#referral_codes), [`referral_reward_ledger`](#referral_reward_ledger), [`referrals`](#referrals) |
 
 ## Identity and access
 
@@ -717,6 +717,10 @@ Constraints and indexes:
 | `delivery_distance_meters` | INTEGER | yes |  |  |
 | `routing_provider` | VARCHAR(30) | yes |  |  |
 | `warehouse_id` | BIGINT | yes |  | FK -> inventory_locations.id (ON DELETE SET NULL) |
+| `delivery_pricing_version` | VARCHAR(30) | yes |  |  |
+| `delivery_base_fee` | NUMERIC(12, 2) | yes |  |  |
+| `delivery_per_km` | NUMERIC(12, 2) | yes |  |  |
+| `delivery_billable_km` | INTEGER | yes |  |  |
 | `promotion_id` | BIGINT | yes |  | FK -> promotions.id (ON DELETE RESTRICT) |
 | `applied_promo_code` | VARCHAR(50) | yes |  |  |
 | `placed_at` | DATETIME | no |  |  |
@@ -730,6 +734,7 @@ Constraints and indexes:
 
 - UNIQUE `uq_orders_cart_id`: (cart_id)
 - UNIQUE `uq_orders_order_number`: (order_number)
+- CHECK `ck_orders_delivery_billable_km`: `delivery_billable_km IS NULL OR delivery_billable_km >= 1`
 - CHECK `ck_orders_delivery_fee`: `delivery_fee >= 0`
 - CHECK `ck_orders_discount_amount`: `discount_amount >= 0`
 - CHECK `ck_orders_discount_not_exceeding_subtotal`: `discount_amount <= subtotal_amount`
@@ -1156,6 +1161,106 @@ Constraints and indexes:
 
 ## Other (not grouped)
 
+### delivery_assignments
+
+| Column | Type | Null | Default | Key / reference |
+|---|---|---|---|---|
+| `id` | BIGINT | no | identity | PK |
+| `order_id` | BIGINT | no |  | FK -> orders.id (ON DELETE RESTRICT) |
+| `fulfillment_id` | BIGINT | no |  | FK -> fulfillments.id (ON DELETE RESTRICT) |
+| `partner_user_id` | BIGINT | no |  | FK -> users.id (ON DELETE RESTRICT) |
+| `assigned_by_user_id` | BIGINT | yes |  | FK -> users.id (ON DELETE RESTRICT) |
+| `status` | VARCHAR(20) | no | ASSIGNED |  |
+| `assigned_at` | DATETIME | no | now() |  |
+| `accepted_at` | DATETIME | yes |  |  |
+| `picked_up_at` | DATETIME | yes |  |  |
+| `out_for_delivery_at` | DATETIME | yes |  |  |
+| `delivered_at` | DATETIME | yes |  |  |
+| `failed_at` | DATETIME | yes |  |  |
+| `closed_at` | DATETIME | yes |  |  |
+| `close_reason` | VARCHAR(300) | yes |  |  |
+| `cod_status` | VARCHAR(15) | no | NOT_APPLICABLE |  |
+| `cod_expected_amount` | NUMERIC(12, 2) | no | 0 |  |
+| `cod_collected_amount` | NUMERIC(12, 2) | yes |  |  |
+| `cod_collected_at` | DATETIME | yes |  |  |
+| `cod_reconciled_at` | DATETIME | yes |  |  |
+| `cod_reconciled_by_user_id` | BIGINT | yes |  | FK -> users.id (ON DELETE RESTRICT) |
+| `created_at` | DATETIME | no | now() |  |
+| `updated_at` | DATETIME | no | now() |  |
+
+Constraints and indexes:
+
+- CHECK `ck_da_cod_collected_exact`: `cod_status <> 'COD_COLLECTED' OR cod_collected_amount = cod_expected_amount`
+- CHECK `ck_da_cod_expected`: `cod_expected_amount >= 0`
+- CHECK `ck_da_cod_status`: `cod_status IN ('NOT_APPLICABLE', 'COD_PENDING', 'COD_COLLECTED', 'COD_FAILED')`
+- CHECK `ck_da_delivered_cod_settled`: `status <> 'DELIVERED' OR cod_status IN ('NOT_APPLICABLE', 'COD_COLLECTED')`
+- CHECK `ck_da_status`: `status IN ('ASSIGNED', 'ACCEPTED', 'PICKED_UP', 'OUT_FOR_DELIVERY', 'DELIVERED', 'FAILED', 'REJECTED', 'CANCELLED')`
+- UNIQUE INDEX `uq_delivery_assignments_one_active_per_order`: (order_id) - partial/filtered (see model)
+- INDEX `ix_delivery_assignments_order_id`: (order_id)
+- INDEX `ix_delivery_assignments_partner_status`: (partner_user_id, status)
+
+### delivery_partner_earnings
+
+| Column | Type | Null | Default | Key / reference |
+|---|---|---|---|---|
+| `id` | BIGINT | no | identity | PK |
+| `assignment_id` | BIGINT | no |  | FK -> delivery_assignments.id (ON DELETE RESTRICT) |
+| `partner_user_id` | BIGINT | no |  | FK -> users.id (ON DELETE RESTRICT) |
+| `order_id` | BIGINT | no |  | FK -> orders.id (ON DELETE RESTRICT) |
+| `entry_type` | VARCHAR(10) | no |  |  |
+| `amount` | NUMERIC(12, 2) | no |  |  |
+| `rule_version` | VARCHAR(30) | no |  |  |
+| `base_amount` | NUMERIC(12, 2) | no |  |  |
+| `per_km_amount` | NUMERIC(12, 2) | no |  |  |
+| `billable_km` | INTEGER | no | 0 |  |
+| `cod_bonus` | NUMERIC(12, 2) | no | 0 |  |
+| `reason` | VARCHAR(300) | yes |  |  |
+| `created_at` | DATETIME | no | now() |  |
+
+Constraints and indexes:
+
+- UNIQUE `uq_dpe_assignment_entry`: (assignment_id, entry_type)
+- CHECK `ck_dpe_sign`: `(entry_type = 'EARNING' AND amount >= 0) OR (entry_type = 'REVERSAL' AND amount <= 0)`
+- CHECK `ck_dpe_type`: `entry_type IN ('EARNING', 'REVERSAL')`
+- INDEX `ix_dpe_partner`: (partner_user_id, created_at)
+
+### delivery_partner_locations
+
+| Column | Type | Null | Default | Key / reference |
+|---|---|---|---|---|
+| `assignment_id` | BIGINT | no |  | PK; FK -> delivery_assignments.id (ON DELETE CASCADE) |
+| `partner_user_id` | BIGINT | no |  | FK -> users.id (ON DELETE RESTRICT) |
+| `latitude` | FLOAT | no |  |  |
+| `longitude` | FLOAT | no |  |  |
+| `accuracy_m` | FLOAT | yes |  |  |
+| `updated_at` | DATETIME | no | now() |  |
+
+Constraints and indexes:
+
+- CHECK `ck_dpl_lat`: `latitude BETWEEN -90 AND 90`
+- CHECK `ck_dpl_lng`: `longitude BETWEEN -180 AND 180`
+
+### delivery_partner_profiles
+
+| Column | Type | Null | Default | Key / reference |
+|---|---|---|---|---|
+| `id` | BIGINT | no | identity | PK |
+| `user_id` | BIGINT | no |  | FK -> users.id (ON DELETE RESTRICT) |
+| `status` | VARCHAR(12) | no | ACTIVE |  |
+| `availability` | VARCHAR(12) | no | OFFLINE |  |
+| `vehicle_type` | VARCHAR(10) | no | BIKE |  |
+| `vehicle_number` | VARCHAR(30) | yes |  |  |
+| `phone` | VARCHAR(20) | yes |  |  |
+| `created_at` | DATETIME | no | now() |  |
+| `updated_at` | DATETIME | no | now() |  |
+
+Constraints and indexes:
+
+- UNIQUE `uq_delivery_partner_profiles_user_id`: (user_id)
+- CHECK `ck_dpp_availability`: `availability IN ('OFFLINE', 'AVAILABLE', 'ON_DELIVERY')`
+- CHECK `ck_dpp_status`: `status IN ('ACTIVE', 'INACTIVE', 'SUSPENDED')`
+- CHECK `ck_dpp_vehicle`: `vehicle_type IN ('BIKE', 'SCOOTER', 'BICYCLE', 'VAN', 'OTHER')`
+
 ### notification_events
 
 | Column | Type | Null | Default | Key / reference |
@@ -1181,4 +1286,72 @@ Constraints and indexes:
 Constraints and indexes:
 
 - INDEX `ix_product_categories_category_id`: (category_id)
+
+### referral_codes
+
+| Column | Type | Null | Default | Key / reference |
+|---|---|---|---|---|
+| `id` | BIGINT | no | identity | PK |
+| `user_id` | BIGINT | no |  | FK -> users.id (ON DELETE RESTRICT) |
+| `code` | VARCHAR(16) | no |  |  |
+| `created_at` | DATETIME | no | now() |  |
+
+Constraints and indexes:
+
+- UNIQUE `uq_referral_codes_code`: (code)
+- UNIQUE `uq_referral_codes_user_id`: (user_id)
+- CHECK `ck_referral_codes_length`: `char_length(code) >= 6`
+- CHECK `ck_referral_codes_upper`: `code = upper(code)`
+
+### referral_reward_ledger
+
+| Column | Type | Null | Default | Key / reference |
+|---|---|---|---|---|
+| `id` | BIGINT | no | identity | PK |
+| `referral_id` | BIGINT | no |  | FK -> referrals.id (ON DELETE RESTRICT) |
+| `beneficiary_user_id` | BIGINT | no |  | FK -> users.id (ON DELETE RESTRICT) |
+| `beneficiary_role` | VARCHAR(10) | no |  |  |
+| `entry_type` | VARCHAR(10) | no |  |  |
+| `amount` | NUMERIC(12, 2) | no |  |  |
+| `currency` | VARCHAR(3) | no | INR |  |
+| `order_id` | BIGINT | yes |  | FK -> orders.id (ON DELETE RESTRICT) |
+| `reason` | VARCHAR(300) | yes |  |  |
+| `created_by_user_id` | BIGINT | yes |  | FK -> users.id (ON DELETE RESTRICT) |
+| `created_at` | DATETIME | no | now() |  |
+
+Constraints and indexes:
+
+- UNIQUE `uq_referral_ledger_once`: (referral_id, beneficiary_user_id, entry_type)
+- CHECK `ck_referral_ledger_role`: `beneficiary_role IN ('REFERRER', 'REFERRED')`
+- CHECK `ck_referral_ledger_sign`: `(entry_type = 'REWARD' AND amount > 0) OR (entry_type = 'REVERSAL' AND amount < 0)`
+- CHECK `ck_referral_ledger_type`: `entry_type IN ('REWARD', 'REVERSAL')`
+- INDEX `ix_referral_ledger_beneficiary`: (beneficiary_user_id)
+
+### referrals
+
+| Column | Type | Null | Default | Key / reference |
+|---|---|---|---|---|
+| `id` | BIGINT | no | identity | PK |
+| `referrer_user_id` | BIGINT | no |  | FK -> users.id (ON DELETE RESTRICT) |
+| `referred_user_id` | BIGINT | no |  | FK -> users.id (ON DELETE RESTRICT) |
+| `referral_code_id` | BIGINT | no |  | FK -> referral_codes.id (ON DELETE RESTRICT) |
+| `status` | VARCHAR(20) | no | PENDING |  |
+| `qualifying_order_id` | BIGINT | yes |  | FK -> orders.id (ON DELETE RESTRICT) |
+| `applied_at` | DATETIME | no | now() |  |
+| `expires_at` | DATETIME | no |  |  |
+| `qualified_at` | DATETIME | yes |  |  |
+| `rewarded_at` | DATETIME | yes |  |  |
+| `reversed_at` | DATETIME | yes |  |  |
+| `cancelled_at` | DATETIME | yes |  |  |
+| `status_reason` | VARCHAR(300) | yes |  |  |
+| `updated_at` | DATETIME | no | now() |  |
+
+Constraints and indexes:
+
+- UNIQUE `uq_referrals_qualifying_order_id`: (qualifying_order_id)
+- UNIQUE `uq_referrals_referred_user_id`: (referred_user_id)
+- CHECK `ck_referrals_no_self`: `referrer_user_id <> referred_user_id`
+- CHECK `ck_referrals_status`: `status IN ('PENDING', 'QUALIFIED', 'REWARDED', 'REVERSED', 'CANCELLED')`
+- INDEX `ix_referrals_referrer_user_id`: (referrer_user_id)
+- INDEX `ix_referrals_status`: (status)
 

@@ -15,7 +15,7 @@ import os
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
-from decimal import ROUND_CEILING, Decimal
+from decimal import Decimal
 
 import httpx
 import pytest
@@ -75,7 +75,7 @@ def live(monkeypatch):
     monkeypatch.setattr(routing_service, "route_cache", cache)
     monkeypatch.setattr(settings, "PACKING_POINT_LATITUDE", ORIGIN[0])
     monkeypatch.setattr(settings, "PACKING_POINT_LONGITUDE", ORIGIN[1])
-    monkeypatch.setattr(settings, "DELIVERY_BASE_FEE", Decimal("40"))
+    monkeypatch.setattr(settings, "DELIVERY_BASE_FEE", Decimal("20"))
     monkeypatch.setattr(settings, "DELIVERY_PER_KM", Decimal("10"))
     monkeypatch.setattr(settings, "DELIVERY_MAX_DISTANCE_KM", 0.0)
 
@@ -104,9 +104,8 @@ def live(monkeypatch):
 
 
 def _expected_fee(meters: int) -> Decimal:
-    return (Decimal("40") + Decimal("10") * (Decimal(meters) / 1000)).to_integral_value(
-        rounding=ROUND_CEILING
-    )
+    km = max(1, (meters + 999) // 1000)  # whole km, rounded up, minimum 1
+    return Decimal("20") + Decimal("10") * km
 
 
 def test_real_osrm_parsing_and_coordinate_order(live):

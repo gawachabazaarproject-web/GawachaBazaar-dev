@@ -45,6 +45,7 @@ they depend on data (not just role membership):
 
 import json
 from datetime import UTC, datetime
+from decimal import Decimal
 
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -53,6 +54,7 @@ from app.core.logging import logger
 from app.core.realtime import notify_status_event
 from app.core.roles import ADMIN, DELIVERY_PARTNER, HUB_STAFF, OPERATIONS
 from app.exceptions.base import AuthorizationError, ConflictError, NotFoundError
+from app.models.delivery_partner import ACTIVE_ASSIGNMENT_STATUSES, DeliveryAssignment
 from app.models.fulfillment import Fulfillment
 from app.models.inventory_lot import InventoryLot
 from app.models.inventory_reservation import InventoryReservation
@@ -72,6 +74,8 @@ from app.schemas.fulfillment import (
     FulfillmentResponse,
 )
 from app.schemas.order import OrderAddressResponse, OrderItemResponse
+from app.services.admin_audit import AdminAuditService
+from app.services.delivery_assignment import DeliveryAssignmentService
 from app.services.fulfillment_state import (
     FulfillmentStatus,
     IllegalFulfillmentTransitionError,
@@ -84,6 +88,7 @@ from app.services.payment_state import (
     TransactionStatus,
     transition_payment_status,
 )
+from app.services.referral import ReferralService
 from app.services.reservation_state import ReservationStatus
 
 _DELIVERY_MOVEMENT_TYPE = "DISPATCH"
@@ -321,7 +326,10 @@ class FulfillmentService:
     # ------------------------------------------------------------------
 
     def assign_delivery_partner(
-        self, fulfillment_id: int, delivery_partner_user_id: int
+        self,
+        fulfillment_id: int,
+        delivery_partner_user_id: int,
+        assigned_by_user_id: int | None = None,
     ) -> FulfillmentResponse:
         """Lock order + fulfillment -> verify READY_FOR_DELIVERY -> ASSIGNED
         is legal -> verify the target user exists and holds
@@ -362,6 +370,11 @@ class FulfillmentService:
             )
 
         now = datetime.now(UTC)
+        # The DB allows one ACTIVE assignment per order; this also snapshots the
+        # COD amount due. Raises ConflictError for a suspended partner.
+        DeliveryAssignmentService(self.db).create_for_assignment(
+            order, fulfillment, target_user.id, assigned_by_user_id
+        )
         fulfillment.delivery_partner_user_id = target_user.id
         fulfillment.assigned_at = now
         fulfillment.status = FulfillmentStatus.ASSIGNED
@@ -388,6 +401,62 @@ class FulfillmentService:
         )
         return FulfillmentResponse.model_validate(fulfillment)
 
+    def reassign_delivery_partner(
+        self,
+        fulfillment_id: int,
+        delivery_partner_user_id: int,
+        reason: str,
+        admin_user_id: int,
+    ) -> FulfillmentResponse:
+        """ASSIGNED fulfillment -> a different partner. The old assignment is
+        CANCELLED (history kept) and a new one inserted in the same transaction;
+        allowed until the partner has left (assignment ASSIGNED/ACCEPTED/PICKED_UP)."""
+        order, fulfillment = self._lock_order_and_fulfillment(fulfillment_id)
+        self._assert_order_still_active(order)
+        if FulfillmentStatus(fulfillment.status) != FulfillmentStatus.ASSIGNED:
+            raise ConflictError(f"Cannot reassign from status {fulfillment.status}.")
+        current = (
+            self.db.query(DeliveryAssignment)
+            .filter(
+                DeliveryAssignment.order_id == order.id,
+                DeliveryAssignment.status.in_(ACTIVE_ASSIGNMENT_STATUSES),
+            )
+            .first()
+        )
+        if current is not None and current.status == "OUT_FOR_DELIVERY":
+            raise ConflictError("The delivery is already out; the partner must mark it failed first.")
+        if current is not None and current.partner_user_id == delivery_partner_user_id:
+            raise ConflictError("The delivery is already assigned to this partner.")
+        target_user = self.db.query(User).filter(User.id == delivery_partner_user_id).first()
+        if target_user is None:
+            raise NotFoundError("Delivery partner user not found.")
+        if target_user.status != "ACTIVE":
+            raise ConflictError("The delivery partner account is not active.")
+        if not self._has_any_role(target_user.id, DELIVERY_PARTNER):
+            raise ConflictError("The target user does not hold the DELIVERY_PARTNER role.")
+        previous_partner = current.partner_user_id if current else None
+        service = DeliveryAssignmentService(self.db)
+        service.close_active_for_order(order.id, "CANCELLED", f"Reassigned: {reason}")
+        service.create_for_assignment(order, fulfillment, target_user.id, admin_user_id)
+        fulfillment.delivery_partner_user_id = target_user.id
+        fulfillment.assigned_at = datetime.now(UTC)
+        AdminAuditService(self.db).record(
+            admin_user_id=admin_user_id,
+            action="delivery.reassign",
+            resource_type="fulfillment",
+            resource_id=fulfillment.id,
+            previous_state=str(previous_partner) if previous_partner else None,
+            new_state=str(target_user.id),
+            reason=reason,
+        )
+        try:
+            self.db.commit()
+        except IntegrityError as exc:
+            self.db.rollback()
+            raise ConflictError("Could not reassign due to a conflicting update.") from exc
+        self.db.refresh(fulfillment)
+        return FulfillmentResponse.model_validate(fulfillment)
+
     # ------------------------------------------------------------------
     # Out for delivery (ASSIGNED -> OUT_FOR_DELIVERY, partner-owned)
     # ------------------------------------------------------------------
@@ -410,6 +479,7 @@ class FulfillmentService:
 
         if result.applied:
             fulfillment.status = FulfillmentStatus.OUT_FOR_DELIVERY
+            self._fast_forward_assignment_to_out(order.id)
             logger.info(
                 "FULFILLMENT_OUT_FOR_DELIVERY: fulfillment_id=%s delivery_partner_user_id=%s",
                 fulfillment.id, fulfillment.delivery_partner_user_id,
@@ -438,7 +508,12 @@ class FulfillmentService:
     # ------------------------------------------------------------------
 
     def confirm_delivery(
-        self, fulfillment_id: int, current_user: User
+        self,
+        fulfillment_id: int,
+        current_user: User,
+        assignment_id: int | None = None,
+        cod_collected_amount: Decimal | None = None,
+        strict: bool = False,
     ) -> FulfillmentResponse:
         """Atomically: lock order -> lock fulfillment -> verify ownership
         (assigned delivery partner, or ADMIN override) -> verify
@@ -487,6 +562,18 @@ class FulfillmentService:
         )
 
         self._assert_can_act_as_delivery_partner(fulfillment, current_user)
+
+        # Order -> Fulfillment -> Assignment (documented lock order).
+        assignment = (
+            self.db.query(DeliveryAssignment)
+            .filter(
+                DeliveryAssignment.order_id == order.id,
+                DeliveryAssignment.status.in_(ACTIVE_ASSIGNMENT_STATUSES),
+            )
+            .populate_existing()
+            .with_for_update()
+            .first()
+        )
 
         if FulfillmentStatus(fulfillment.status) == FulfillmentStatus.DELIVERED:
             self.db.commit()  # idempotent: nothing left to do, release locks
@@ -569,12 +656,23 @@ class FulfillmentService:
             .with_for_update()
             .first()
         )
+        if assignment is not None:
+            if assignment_id is not None and assignment.id != assignment_id:
+                raise ConflictError("This delivery assignment is no longer the active one.")
+            # Verifies the COD amount (strict path), writes the assignment's COD
+            # facts and the partner earning - BEFORE the payment is marked PAID.
+            DeliveryAssignmentService(self.db).settle_delivered(
+                order, assignment, payment, cod_collected_amount, strict
+            )
+        elif assignment_id is not None:
+            raise ConflictError("This delivery assignment is no longer active.")
         cod_previous_status = self._collect_cod_payment(payment, current_user)
 
         previous_fulfillment_status = fulfillment.status
         fulfillment.status = FulfillmentStatus.DELIVERED
         fulfillment.delivered_at = datetime.now(UTC)
         order.status = "COMPLETED"
+        self._qualify_referral(order)
 
         try:
             self.db.commit()
@@ -613,6 +711,39 @@ class FulfillmentService:
                 previous_status=cod_previous_status,
             )
         return FulfillmentResponse.model_validate(fulfillment)
+
+    def _fast_forward_assignment_to_out(self, order_id: int) -> None:
+        """Legacy /out-for-delivery (no accept / pickup steps): keep the assignment
+        row in step with the fulfillment. The partner-facing API enforces every step."""
+        assignment = (
+            self.db.query(DeliveryAssignment)
+            .filter(
+                DeliveryAssignment.order_id == order_id,
+                DeliveryAssignment.status.in_(ACTIVE_ASSIGNMENT_STATUSES),
+            )
+            .populate_existing()
+            .with_for_update()
+            .first()
+        )
+        if assignment is None:
+            return
+        now = datetime.now(UTC)
+        assignment.accepted_at = assignment.accepted_at or now
+        assignment.picked_up_at = assignment.picked_up_at or now
+        assignment.out_for_delivery_at = now
+        assignment.status = "OUT_FOR_DELIVERY"
+        self.db.flush()
+        DeliveryAssignmentService(self.db)._refresh_availability(assignment.partner_user_id)
+
+    def _qualify_referral(self, order: Order) -> None:
+        """Refer & Earn: a delivered first order may qualify its referral. Runs in
+        a SAVEPOINT inside the delivery transaction - a reward problem is logged
+        and rolled back on its own, it never blocks or undoes a delivery."""
+        try:
+            with self.db.begin_nested():
+                ReferralService(self.db).qualify_for_order(order)
+        except Exception:  # noqa: BLE001
+            logger.exception("REFERRAL_QUALIFY_FAILED: order_id=%s", order.id)
 
     def _collect_cod_payment(self, payment: Payment | None, collected_by: User) -> str | None:
         """Cash on Delivery is collected at the door, so confirming the

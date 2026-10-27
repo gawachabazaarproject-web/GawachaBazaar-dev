@@ -53,13 +53,21 @@ class LoadTestFirebase(FirebaseGateway):
         raise NotImplementedError
 
 
-if __name__ == "__main__":
+def _guard() -> None:
     if settings.APP_ENV == "production" or os.environ.get("LOADTEST_ALLOW_FAKE_AUTH") != "1":
         sys.exit("refusing to start: fake auth is for disposable load-test environments only")
+
+
+_guard()
+set_firebase(LoadTestFirebase())  # runs in every worker process (module import)
+from app.main import app  # noqa: E402,F401 - uvicorn imports this attribute by name
+
+if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--port", type=int, default=18000)
+    ap.add_argument("--workers", type=int, default=1)
     args = ap.parse_args()
-    set_firebase(LoadTestFirebase())
-    from app.main import app
-
-    uvicorn.run(app, host="127.0.0.1", port=args.port, workers=1, log_level="warning", access_log=False)
+    uvicorn.run(
+        "scripts.loadtest_server:app", host="127.0.0.1", port=args.port, workers=args.workers,
+        log_level="warning", access_log=False,
+    )

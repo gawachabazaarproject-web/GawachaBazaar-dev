@@ -65,7 +65,7 @@ class Settings(BaseSettings):
     # in the current calendar month (BAZAAR_TIMEZONE) is eligible for
     # Gawacha Bazaar+.
     FREE_DELIVERY_MIN_ITEMS: int = 15
-    DELIVERY_BASE_FEE: Decimal = Decimal("40")
+    DELIVERY_BASE_FEE: Decimal = Decimal("20")
     DELIVERY_PER_KM: Decimal = Decimal("10")
     DELIVERY_MAX_CHARGED_KM: float = 30.0
     # Fallback origin; the admin-chosen packing point (Settings page) wins.
@@ -111,6 +111,37 @@ class Settings(BaseSettings):
     GEOCODING_TIMEOUT_SECONDS: float = 5.0
     BAZAAR_PLUS_ORDERS_REQUIRED: int = 6
     BAZAAR_TIMEZONE: str = "Asia/Kolkata"
+
+    # ------------------------------------------------------------------
+    # Refer & Earn. REQUIRED BUSINESS DECISION: every value below is a
+    # PLACEHOLDER chosen only so the code is safe, not a company policy. The
+    # feature ships DISABLED (REFERRAL_ENABLED=false): nothing can be applied,
+    # qualified or rewarded until the owner decides the rewards and turns it
+    # on. See docs/05-domains/REFERRAL_SYSTEM.md.
+    # ------------------------------------------------------------------
+    REFERRAL_ENABLED: bool = False
+    REFERRAL_REFERRER_REWARD: Decimal = Decimal("50")  # Rs credited to the inviter
+    REFERRAL_REFERRED_REWARD: Decimal = Decimal("50")  # Rs credited to the new customer
+    REFERRAL_MIN_ORDER_VALUE: Decimal = Decimal("199")  # items value after discount, excl. delivery
+    REFERRAL_APPLY_WINDOW_DAYS: int = 14  # a code can be applied this long after sign-up
+    REFERRAL_QUALIFY_WINDOW_DAYS: int = 30  # applied -> first qualifying order deadline
+    REFERRAL_MAX_REWARDS_PER_REFERRER: int = 20  # 0 = unlimited
+
+    # ------------------------------------------------------------------
+    # Delivery partners. REQUIRED BUSINESS DECISION: the partner's earning
+    # is NOT the customer's delivery fee. These rupee values are placeholders;
+    # the result is snapshotted on every earnings ledger row.
+    # ------------------------------------------------------------------
+    PARTNER_EARNING_RULE_VERSION: str = "partner-v1"
+    PARTNER_EARNING_BASE: Decimal = Decimal("20")
+    PARTNER_EARNING_PER_KM: Decimal = Decimal("5")
+    PARTNER_EARNING_COD_BONUS: Decimal = Decimal("0")
+    # Live location: minimum seconds between accepted updates per assignment,
+    # the largest plausible speed between two updates, and how old a position
+    # may be before a customer stops seeing it.
+    PARTNER_LOCATION_MIN_INTERVAL_SECONDS: int = 3
+    PARTNER_LOCATION_MAX_SPEED_KMH: float = 150.0
+    PARTNER_LOCATION_STALE_SECONDS: int = 300
 
     # Cloudinary (image uploads). Empty string means "not configured" -
     # ImageUploadService raises a clear, honest error rather than silently
