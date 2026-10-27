@@ -305,6 +305,10 @@ class DeliveryAssignmentService:
                 new_status=fulfillment.status,
                 previous_status=previous_fulfillment,
             )
+        if action == "out_for_delivery":
+            from app.services.delivery_otp import DeliveryOtpService
+
+            DeliveryOtpService(self.db).issue_for_order(order.id)
         return self._to_response(assignment, for_partner=True)
 
     def accept(self, assignment_id: int, user: User) -> AssignmentResponse:

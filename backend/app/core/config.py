@@ -144,7 +144,7 @@ class Settings(BaseSettings):
     # completed without a code (the code is still issued if the partner asks).
     DELIVERY_OTP_ENFORCED: bool = True
     DELIVERY_OTP_SECRET: str = ""
-    DELIVERY_OTP_EXPIRY_MINUTES: int = 10
+    DELIVERY_OTP_EXPIRY_MINUTES: int = 240
     DELIVERY_OTP_MAX_ATTEMPTS: int = 5
     DELIVERY_OTP_RESEND_LIMIT: int = 3
     DELIVERY_OTP_RESEND_WINDOW_MINUTES: int = 15

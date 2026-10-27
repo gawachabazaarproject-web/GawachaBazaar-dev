@@ -39,7 +39,7 @@ export default function DeliveryDetail() {
   const step = useMutation({ mutationFn: (a: "accept" | "pickup" | "out-for-delivery") => partnerApi.act(aid, a), onSuccess: refresh, onError });
   const reject = useMutation({ mutationFn: () => partnerApi.reject(aid, "Declined by partner"), onSuccess: refresh, onError });
   const fail = useMutation({ mutationFn: () => partnerApi.fail(aid, failReason.trim()), onSuccess: refresh, onError });
-  const needsOtp = job?.otp_required === true && job?.cod_status === "COD_PENDING";
+  const needsOtp = job?.otp_required === true;
   const sendOtp = useMutation({
     mutationFn: () => partnerApi.sendOtp(aid),
     onSuccess: () => { setOtp(""); show("Code sent to the customer", "success"); q.refetch(); },
@@ -161,7 +161,7 @@ export default function DeliveryDetail() {
                         ? "Too many wrong tries. Send a new code."
                         : job.delivery_otp?.status === "EXPIRED"
                           ? "The code expired. Send a new code."
-                          : "Tap below when you are at the door; the code goes to the customer's app."}
+                          : "The code is sent to the customer's app when you leave. Tap below to send it again."}
                   </Text>
                   <Button
                     label={job.delivery_otp?.status === "ACTIVE" ? "Resend code" : "Send code to customer"}
