@@ -3,6 +3,21 @@
 > **Last verified:** 2026-10-14 (≈ 12:00–13:10 IST), branch `docs-and-primary-testing`, `HEAD` `8d6229e` ("chore(mobile): link EAS project under yash145"), **dirty working tree** (see §5).
 > **Purpose:** the "where are we right now" page for agents and developers: what works (and how that was checked), what is broken or unverified, what changed recently *according to the repository*, and what to do next. **Update this file whenever active development status, blockers or priorities change** ([AGENTS.md](../../AGENTS.md)). It is a snapshot; where it conflicts with the code or a fresh test run, trust those.
 
+## 0. COD delivery OTP - status on 2026-10-27 (uncommitted, not deployed, not built)
+
+| Check | Result |
+|---|---|
+| Full backend suite (disposable DB, before the final test additions) | 1251 collected: **1233 passed, 17 skipped, 1 failed** in 29 min 19 s. The one failure was `test_authz_matrix` - expected drift of exactly the 2 new operations; fixed by the reviewed `AUTHZ_REGEN=1` regeneration (golden diff = 6 added lines, nothing widened). No pre-existing failures appeared in this run. |
+| `tests/test_delivery_otp.py` | 32 passed (valid/invalid/expired/locked code, regeneration, resend limit, IDOR/roles, concurrency, logs, DB constraint, admin override audit, production startup rule, push failure) |
+| Migration `d3e4f5a60712` | upgrade → downgrade -1 → upgrade → `alembic check` clean on the disposable DB |
+| Ruff | passes on every touched Python file; the repo-wide pre-existing findings (14, none in touched files) were left alone |
+| TypeScript | `mobile/` and `Admin/` `npx tsc --noEmit`: exit 0 |
+| References | `API_REFERENCE` (239 ops) and `DATABASE_SCHEMA` (60 tables) regenerated with `docs/_tools` |
+
+**Not verified:** any physical Android run; FCM/Expo push delivery of the code; notification tap routing; the customer/partner OTP screens on a device or emulator; Admin in a browser; the production host's environment (`DELIVERY_OTP_SECRET` / `DELIVERY_OTP_ENFORCED` / `REFERRAL_ENABLED` could not be inspected from the repository - the local `.env` is development with no secret).
+
+**Release blockers (as of this note):** set a >= 32-char `DELIVERY_OTP_SECRET` on the real host (production refuses to start without it while enforcement is on); decide rollout order (deploy backend + ship the partner app together - a partner on an old app cannot complete unpaid-COD deliveries once enforcement is on; `DELIVERY_OTP_ENFORCED=false` is the temporary switch); device test. See [COD_OPERATIONS](../05-domains/COD_OPERATIONS.md#delivery-otp-proof-of-delivery---implemented).
+
 ## 1. Verified status (what was actually run on 2026-10-14)
 
 | Check | Command / method | Result |

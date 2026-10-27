@@ -53,6 +53,7 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 asyncio_mode = "auto"
 markers = [
+    "delivery_otp: runs with COD delivery-OTP enforcement ON (other suites run with it off)",
     "integration: needs real PostgreSQL + Redis + OSRM (run with GB_INTEGRATION=1; see docs/05-domains/DELIVERY.md)",
 ]
 filterwarnings = [

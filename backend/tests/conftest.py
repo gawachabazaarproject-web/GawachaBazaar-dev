@@ -102,6 +102,21 @@ def offline_routing(request, monkeypatch) -> None:
 
 
 @pytest.fixture(autouse=True)
+def delivery_otp_setting(request, monkeypatch) -> None:
+    """The pre-OTP delivery suites (written before the code existed) complete COD
+    orders without a customer code, so they run with enforcement off - this only
+    patches the in-process setting per test (monkeypatch undoes it; xdist workers
+    are separate processes). The declared default stays True and is asserted in
+    test_delivery_otp.py::test_production_defaults_enforce_the_code. OTP tests, tests marked `delivery_otp` (tests/
+    test_delivery_otp.py) run with the production default (enforced)."""
+    from app.core.config import settings
+
+    monkeypatch.setattr(
+        settings, "DELIVERY_OTP_ENFORCED", bool(request.node.get_closest_marker("delivery_otp"))
+    )
+
+
+@pytest.fixture(autouse=True)
 def reset_rate_limiter() -> None:
     """`limiter` (app/core/rate_limit.py) is a module-level singleton shared
     by every request the test app handles, in-process, for the lifetime of

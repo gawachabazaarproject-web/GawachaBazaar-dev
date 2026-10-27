@@ -163,6 +163,25 @@ def _check_receipts(user_id: int, ticket_ids: dict[str, str]) -> None:
         db.close()
 
 
+def notify_delivery_otp(*, user_id: int, order_id: int, otp: str, otp_row_id: int) -> None:
+    """Push the COD delivery code to the customer. Reuses `_send` (best-effort,
+    own thread/session, dedupe). The code is in the payload so the lock screen
+    shows it; it is never logged by this module."""
+    data = {"type": "DELIVERY_OTP", "orderId": order_id}
+    threading.Thread(
+        target=_send,
+        args=(
+            user_id,
+            "Your delivery code",
+            f"Share code {otp} with the delivery partner for order #{order_id}. Valid for "
+            f"{settings.DELIVERY_OTP_EXPIRY_MINUTES} minutes. Do not share it with anyone else.",
+            data,
+            f"delivery_otp:{otp_row_id}",
+        ),
+        daemon=True,
+    ).start()
+
+
 def notify_user_status(*, resource: str, order_id: int, user_id: int, new_status: str) -> None:
     msg = _MESSAGES.get((resource, new_status))
     if msg is None:

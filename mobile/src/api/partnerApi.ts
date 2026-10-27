@@ -23,6 +23,15 @@ export interface PartnerMe {
   earned_today: string;
 }
 
+/** OTP state only - the partner never receives the code itself. */
+export interface OtpStatus {
+  status: "NOT_GENERATED" | "ACTIVE" | "EXPIRED" | "LOCKED" | "INVALIDATED" | "VERIFIED";
+  generated_at: string | null;
+  expires_at: string | null;
+  verified_at: string | null;
+  attempts_left: number | null;
+}
+
 export interface Assignment {
   id: number;
   order_id: number;
@@ -47,6 +56,9 @@ export interface Assignment {
   items: { name: string; quantity: string; unit: string | null }[];
   maps_url: string | null;
   earning_amount: string | null;
+  /** True when an unpaid COD order needs the customer's delivery code to complete. */
+  otp_required?: boolean;
+  delivery_otp?: OtpStatus | null;
 }
 
 export interface AssignmentList {
@@ -79,10 +91,14 @@ export const partnerApi = {
     apiClient.post<Assignment>(`${B}/assignments/${id}/reject`, { reason }).then((r) => r.data),
   fail: (id: number, reason: string) =>
     apiClient.post<Assignment>(`${B}/assignments/${id}/fail`, { reason }).then((r) => r.data),
-  deliver: (id: number, codCollectedAmount?: string) =>
+  sendOtp: (id: number) =>
+    apiClient.post<OtpStatus>(`${B}/assignments/${id}/otp/send`, {}).then((r) => r.data),
+  /** Also the OTP verification: the backend checks the code and completes the delivery atomically. */
+  deliver: (id: number, codCollectedAmount?: string, otp?: string) =>
     apiClient
       .post<Assignment>(`${B}/assignments/${id}/deliver`, {
         cod_collected_amount: codCollectedAmount ?? null,
+        otp: otp ?? null,
       })
       .then((r) => r.data),
   location: (id: number, latitude: number, longitude: number, accuracy?: number | null) =>

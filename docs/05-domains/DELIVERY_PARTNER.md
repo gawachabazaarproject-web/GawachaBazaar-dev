@@ -44,11 +44,12 @@ Partner (`DELIVERY_PARTNER` only; foreign ids → 404):
 | `GET /delivery-partner/assignments?scope=active\|history&status&date_from&date_to&page` | gig list / history (customer name + address only while the job is open) |
 | `GET /delivery-partner/assignments/{id}` | detail incl. items, address, Google Maps deep link, COD due |
 | `POST .../{id}/accept` · `/reject {reason}` · `/pickup` · `/out-for-delivery` · `/fail {reason}` | transitions |
-| `POST .../{id}/deliver {cod_collected_amount}` | atomic completion; exact COD amount required for COD |
+| `POST .../{id}/otp/send` | at the door: generate + push the COD delivery code to the customer (10/min, 3 per order per 15 min) - [COD_OPERATIONS](COD_OPERATIONS.md#delivery-otp-proof-of-delivery---implemented) |
+| `POST .../{id}/deliver {cod_collected_amount, otp}` | atomic completion; exact COD amount **and the customer's 6-digit `otp`** required for unpaid COD |
 | `POST .../{id}/location {latitude, longitude, accuracy_m}` | position |
 | `GET /delivery-partner/earnings?date_from&date_to` | my ledger |
 
-Customer: `GET /orders/{order_id}/delivery-tracking`.
+Customer: `GET /orders/{order_id}/delivery-tracking`, `GET /orders/{order_id}/delivery-otp` (own order only; the code is shown only while ACTIVE).
 
 Staff: `POST /fulfillments/{id}/assign` (existing; now also creates the assignment), `POST /fulfillments/{id}/reassign {delivery_partner_user_id, reason}` (ADMIN/HUB_STAFF/OPERATIONS).
 
@@ -62,6 +63,7 @@ Source of truth: `backend/tests/authz_golden.json` (reviewed 2026-10-27) + the r
 |---|---|---|---|---|---|---|---|
 | `/delivery-partner/*` (all) | 401 | ✖ | ✔ own | ✖ | ✖ | ✖ | ✖ (deliberately: admins use the admin API) |
 | `GET /orders/{id}/delivery-tracking` | 401 | ✔ own order | ✖ | ✖ | ✖ | ✖ | ✖ |
+| `GET /orders/{id}/delivery-otp` | 401 | ✔ own order (404 otherwise) | ✖ | ✖ | ✖ | ✖ | ✖ |
 | `POST /fulfillments/{id}/assign`, `/reassign` | 401 | ✖ | ✖ | ✔ | ✔ | ✖ | ✔ |
 | `GET /delivery-partners`, `/assignments`, `/active`, `/cod`, `/earnings` | 401 | ✖ | ✖ | ✖ | ✔ | ✖ | ✔ |
 | `POST/PATCH /delivery-partners…` (manage) | 401 | ✖ | ✖ | ✖ | ✖ | ✖ | ✔ |

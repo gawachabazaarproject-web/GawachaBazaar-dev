@@ -14,6 +14,7 @@ const ORDER_TYPES = new Set([
   "PAYMENT_RECEIVED",
   "REFUND_INITIATED",
   "REFUND_COMPLETED",
+  "DELIVERY_OTP",
 ]);
 
 export function parseOrderId(raw: unknown): number | null {

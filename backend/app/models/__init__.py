@@ -22,6 +22,7 @@ from app.models.cart_item import CartItem
 from app.models.category import Category
 from app.models.checkout_session import CheckoutSession
 from app.models.customer_note import CustomerNote
+from app.models.delivery_otp import DeliveryOtp
 from app.models.delivery_partner import (
     DeliveryAssignment,
     DeliveryPartnerEarning,
@@ -119,6 +120,7 @@ __all__ = [
     "Referral",
     "ReferralCode",
     "ReferralRewardLedger",
+    "DeliveryOtp",
     "DeliveryAssignment",
     "DeliveryPartnerEarning",
     "DeliveryPartnerLocation",

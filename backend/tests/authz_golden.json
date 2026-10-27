@@ -249,6 +249,9 @@
   "GET /api/v1/orders/{order_id}": [
    "CUSTOMER"
   ],
+  "GET /api/v1/orders/{order_id}/delivery-otp": [
+   "CUSTOMER"
+  ],
   "GET /api/v1/orders/{order_id}/delivery-tracking": [
    "CUSTOMER"
   ],
@@ -419,6 +422,9 @@
    "DELIVERY_PARTNER"
   ],
   "POST /api/v1/delivery-partner/assignments/{assignment_id}/location": [
+   "DELIVERY_PARTNER"
+  ],
+  "POST /api/v1/delivery-partner/assignments/{assignment_id}/otp/send": [
    "DELIVERY_PARTNER"
   ],
   "POST /api/v1/delivery-partner/assignments/{assignment_id}/out-for-delivery": [

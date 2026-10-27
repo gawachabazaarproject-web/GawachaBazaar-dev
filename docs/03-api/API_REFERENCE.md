@@ -5,11 +5,11 @@
 
 Conventions (envelope, errors, pagination): [API_CONVENTIONS.md](API_CONVENTIONS.md). Webhook: [WEBHOOKS.md](WEBHOOKS.md). Roles and permissions: [USER_ROLES_AND_PERMISSIONS](../01-requirements/USER_ROLES_AND_PERMISSIONS.md).
 
-**237 HTTP operations + 1 WebSocket.** Interactive docs (`/docs`, `/redoc`, `/openapi.json`) are served only when `APP_ENV` is not `production` ([`main.py`](../../backend/app/main.py)).
+**239 HTTP operations + 1 WebSocket.** Interactive docs (`/docs`, `/redoc`, `/openapi.json`) are served only when `APP_ENV` is not `production` ([`main.py`](../../backend/app/main.py)).
 
 How to read the **Auth** column: `roles A/B` = caller must hold at least one of those roles (checked live against `user_roles`); `perm x.y` = the caller's roles must grant that permission in the static map ([`permissions.py`](../../backend/app/core/permissions.py)); `signed-in user` = any ACTIVE user whose token verified (email/password users also need a verified email). Router-level role gates apply to every route in that router. **Request** column: `name(p|q|h)` are path/query/header parameters; the schema name is the JSON body model. **Response** lists declared success responses (`code: Schema`); every error uses the uniform envelope.
 
-Field-level request/response schemas live in the OpenAPI document (265 schemas at generation time) and the Pydantic models in [`backend/app/schemas/`](../../backend/app/schemas); they are not repeated here to avoid drift.
+Field-level request/response schemas live in the OpenAPI document (268 schemas at generation time) and the Pydantic models in [`backend/app/schemas/`](../../backend/app/schemas); they are not repeated here to avoid drift.
 
 ## Index
 
@@ -25,7 +25,7 @@ Field-level request/response schemas live in the OpenAPI document (265 schemas a
 | [customers](#customers) | 13 |
 | [dashboard](#dashboard) | 1 |
 | [delivery](#delivery) | 2 |
-| [delivery_partner](#delivery-partner) | 21 |
+| [delivery_partner](#delivery-partner) | 23 |
 | [fulfillments](#fulfillments) | 8 |
 | [home_slides](#home-slides) | 6 |
 | [inventory](#inventory) | 33 |
@@ -206,27 +206,29 @@ Source: [`backend/app/api/v1/delivery_partner.py`](../../backend/app/api/v1/deli
 
 | Method | Path | Auth | Request | Response | Notes |
 |---|---|---|---|---|---|
-| GET | `/api/v1/delivery-partner/assignments` | roles DELIVERY_PARTNER | scope(q), status(q), date_from(q), date_to(q), page(q), page_size(q) | 200: AssignmentListResponse | My deliveries (active or history) [L79](../../backend/app/api/v1/delivery_partner.py#L79) |
-| GET | `/api/v1/delivery-partner/assignments/{assignment_id}` | roles DELIVERY_PARTNER | assignment_id(p) | 200: AssignmentResponse | One of my deliveries [L97](../../backend/app/api/v1/delivery_partner.py#L97) |
-| POST | `/api/v1/delivery-partner/assignments/{assignment_id}/accept` | roles DELIVERY_PARTNER | assignment_id(p) | 200: AssignmentResponse | Accept (ASSIGNED -> ACCEPTED) [L108](../../backend/app/api/v1/delivery_partner.py#L108) |
-| POST | `/api/v1/delivery-partner/assignments/{assignment_id}/deliver` | roles DELIVERY_PARTNER | assignment_id(p), DeliverRequest | 200: AssignmentResponse | rate limit 30/minute per client IP (in-process); Complete the delivery; confirms COD cash (must equal the amount due) [L160](../../backend/app/api/v1/delivery_partner.py#L160) |
-| POST | `/api/v1/delivery-partner/assignments/{assignment_id}/fail` | roles DELIVERY_PARTNER | assignment_id(p), FailRequest | 200: AssignmentResponse | Delivery could not be completed (back to the dispatch queue) [L175](../../backend/app/api/v1/delivery_partner.py#L175) |
-| POST | `/api/v1/delivery-partner/assignments/{assignment_id}/location` | roles DELIVERY_PARTNER | assignment_id(p), LocationUpdateRequest | 200: LocationAck | rate limit 120/minute per client IP (in-process); Share current location (only during an active delivery; rate limited) [L190](../../backend/app/api/v1/delivery_partner.py#L190) |
-| POST | `/api/v1/delivery-partner/assignments/{assignment_id}/out-for-delivery` | roles DELIVERY_PARTNER | assignment_id(p) | 200: AssignmentResponse | Leave for the customer (PICKED_UP -> OUT_FOR_DELIVERY) [L146](../../backend/app/api/v1/delivery_partner.py#L146) |
-| POST | `/api/v1/delivery-partner/assignments/{assignment_id}/pickup` | roles DELIVERY_PARTNER | assignment_id(p) | 200: AssignmentResponse | Picked up (ACCEPTED -> PICKED_UP) [L133](../../backend/app/api/v1/delivery_partner.py#L133) |
-| POST | `/api/v1/delivery-partner/assignments/{assignment_id}/reject` | roles DELIVERY_PARTNER | assignment_id(p), RejectRequest | 200: AssignmentResponse | Decline before accepting (back to the dispatch queue) [L121](../../backend/app/api/v1/delivery_partner.py#L121) |
-| GET | `/api/v1/delivery-partner/earnings` | roles DELIVERY_PARTNER | date_from(q), date_to(q), page(q), page_size(q) | 200: EarningsResponse | My earnings ledger [L204](../../backend/app/api/v1/delivery_partner.py#L204) |
-| GET | `/api/v1/delivery-partner/me` | roles DELIVERY_PARTNER | - | 200: PartnerMeResponse | My partner profile and today's numbers [L59](../../backend/app/api/v1/delivery_partner.py#L59) |
-| PATCH | `/api/v1/delivery-partner/me/availability` | roles DELIVERY_PARTNER | SetAvailabilityRequest | 200: PartnerMeResponse | Go online / offline [L68](../../backend/app/api/v1/delivery_partner.py#L68) |
-| GET | `/api/v1/delivery-partners` | perm partners.read | status(q), availability(q), page(q), page_size(q) | 200: AdminPartnerListResponse | List delivery partners (partners.read) [L239](../../backend/app/api/v1/delivery_partner.py#L239) |
-| POST | `/api/v1/delivery-partners` | perm partners.manage | AdminCreatePartnerRequest | 201: PartnerProfileResponse | Create a partner profile (partners.manage) [L251](../../backend/app/api/v1/delivery_partner.py#L251) |
-| GET | `/api/v1/delivery-partners/active` | perm partners.read | - | 200: array | Active deliveries with last position (partners.read) [L277](../../backend/app/api/v1/delivery_partner.py#L277) |
-| GET | `/api/v1/delivery-partners/assignments` | perm partners.read | status(q), partner_user_id(q), page(q), page_size(q) | 200: AssignmentListResponse | All assignments (partners.read) [L262](../../backend/app/api/v1/delivery_partner.py#L262) |
-| POST | `/api/v1/delivery-partners/assignments/{assignment_id}/cod-reconcile` | perm partners.cod_reconcile | assignment_id(p), CodReconcileRequest | 200: CodSummaryItem | Mark collected cash as handed over (partners.cod_reconcile) [L300](../../backend/app/api/v1/delivery_partner.py#L300) |
-| GET | `/api/v1/delivery-partners/cod` | perm partners.read | reconciled(q), partner_user_id(q), page(q), page_size(q) | 200: CodListResponse | COD cash collected / outstanding (partners.read) [L284](../../backend/app/api/v1/delivery_partner.py#L284) |
-| GET | `/api/v1/delivery-partners/earnings` | perm partners.read | date_from(q), date_to(q) | 200: array | Earnings per partner (partners.read) [L310](../../backend/app/api/v1/delivery_partner.py#L310) |
-| PATCH | `/api/v1/delivery-partners/{user_id}` | perm partners.manage | user_id(p), AdminUpdatePartnerRequest | 200: PartnerProfileResponse | Update a partner (partners.manage) [L320](../../backend/app/api/v1/delivery_partner.py#L320) |
-| GET | `/api/v1/orders/{order_id}/delivery-tracking` | roles CUSTOMER | order_id(p) | 200: CustomerTrackingResponse | Where is my delivery (own order, only while it is being delivered) [L225](../../backend/app/api/v1/delivery_partner.py#L225) |
+| GET | `/api/v1/delivery-partner/assignments` | roles DELIVERY_PARTNER | scope(q), status(q), date_from(q), date_to(q), page(q), page_size(q) | 200: AssignmentListResponse | My deliveries (active or history) [L82](../../backend/app/api/v1/delivery_partner.py#L82) |
+| GET | `/api/v1/delivery-partner/assignments/{assignment_id}` | roles DELIVERY_PARTNER | assignment_id(p) | 200: AssignmentResponse | One of my deliveries [L100](../../backend/app/api/v1/delivery_partner.py#L100) |
+| POST | `/api/v1/delivery-partner/assignments/{assignment_id}/accept` | roles DELIVERY_PARTNER | assignment_id(p) | 200: AssignmentResponse | Accept (ASSIGNED -> ACCEPTED) [L111](../../backend/app/api/v1/delivery_partner.py#L111) |
+| POST | `/api/v1/delivery-partner/assignments/{assignment_id}/deliver` | roles DELIVERY_PARTNER | assignment_id(p), DeliverRequest | 200: AssignmentResponse | rate limit 30/minute per client IP (in-process); Complete the delivery; confirms COD cash (must equal the amount due) [L163](../../backend/app/api/v1/delivery_partner.py#L163) |
+| POST | `/api/v1/delivery-partner/assignments/{assignment_id}/fail` | roles DELIVERY_PARTNER | assignment_id(p), FailRequest | 200: AssignmentResponse | Delivery could not be completed (back to the dispatch queue) [L197](../../backend/app/api/v1/delivery_partner.py#L197) |
+| POST | `/api/v1/delivery-partner/assignments/{assignment_id}/location` | roles DELIVERY_PARTNER | assignment_id(p), LocationUpdateRequest | 200: LocationAck | rate limit 120/minute per client IP (in-process); Share current location (only during an active delivery; rate limited) [L212](../../backend/app/api/v1/delivery_partner.py#L212) |
+| POST | `/api/v1/delivery-partner/assignments/{assignment_id}/otp/send` | roles DELIVERY_PARTNER | assignment_id(p) | 200: OtpStatusSummary | rate limit 10/minute per client IP (in-process); At the door: send the COD delivery code to the customer (resend replaces it; rate limited) [L183](../../backend/app/api/v1/delivery_partner.py#L183) |
+| POST | `/api/v1/delivery-partner/assignments/{assignment_id}/out-for-delivery` | roles DELIVERY_PARTNER | assignment_id(p) | 200: AssignmentResponse | Leave for the customer (PICKED_UP -> OUT_FOR_DELIVERY) [L149](../../backend/app/api/v1/delivery_partner.py#L149) |
+| POST | `/api/v1/delivery-partner/assignments/{assignment_id}/pickup` | roles DELIVERY_PARTNER | assignment_id(p) | 200: AssignmentResponse | Picked up (ACCEPTED -> PICKED_UP) [L136](../../backend/app/api/v1/delivery_partner.py#L136) |
+| POST | `/api/v1/delivery-partner/assignments/{assignment_id}/reject` | roles DELIVERY_PARTNER | assignment_id(p), RejectRequest | 200: AssignmentResponse | Decline before accepting (back to the dispatch queue) [L124](../../backend/app/api/v1/delivery_partner.py#L124) |
+| GET | `/api/v1/delivery-partner/earnings` | roles DELIVERY_PARTNER | date_from(q), date_to(q), page(q), page_size(q) | 200: EarningsResponse | My earnings ledger [L226](../../backend/app/api/v1/delivery_partner.py#L226) |
+| GET | `/api/v1/delivery-partner/me` | roles DELIVERY_PARTNER | - | 200: PartnerMeResponse | My partner profile and today's numbers [L62](../../backend/app/api/v1/delivery_partner.py#L62) |
+| PATCH | `/api/v1/delivery-partner/me/availability` | roles DELIVERY_PARTNER | SetAvailabilityRequest | 200: PartnerMeResponse | Go online / offline [L71](../../backend/app/api/v1/delivery_partner.py#L71) |
+| GET | `/api/v1/delivery-partners` | perm partners.read | status(q), availability(q), page(q), page_size(q) | 200: AdminPartnerListResponse | List delivery partners (partners.read) [L276](../../backend/app/api/v1/delivery_partner.py#L276) |
+| POST | `/api/v1/delivery-partners` | perm partners.manage | AdminCreatePartnerRequest | 201: PartnerProfileResponse | Create a partner profile (partners.manage) [L288](../../backend/app/api/v1/delivery_partner.py#L288) |
+| GET | `/api/v1/delivery-partners/active` | perm partners.read | - | 200: array | Active deliveries with last position (partners.read) [L314](../../backend/app/api/v1/delivery_partner.py#L314) |
+| GET | `/api/v1/delivery-partners/assignments` | perm partners.read | status(q), partner_user_id(q), page(q), page_size(q) | 200: AssignmentListResponse | All assignments (partners.read) [L299](../../backend/app/api/v1/delivery_partner.py#L299) |
+| POST | `/api/v1/delivery-partners/assignments/{assignment_id}/cod-reconcile` | perm partners.cod_reconcile | assignment_id(p), CodReconcileRequest | 200: CodSummaryItem | Mark collected cash as handed over (partners.cod_reconcile) [L337](../../backend/app/api/v1/delivery_partner.py#L337) |
+| GET | `/api/v1/delivery-partners/cod` | perm partners.read | reconciled(q), partner_user_id(q), page(q), page_size(q) | 200: CodListResponse | COD cash collected / outstanding (partners.read) [L321](../../backend/app/api/v1/delivery_partner.py#L321) |
+| GET | `/api/v1/delivery-partners/earnings` | perm partners.read | date_from(q), date_to(q) | 200: array | Earnings per partner (partners.read) [L347](../../backend/app/api/v1/delivery_partner.py#L347) |
+| PATCH | `/api/v1/delivery-partners/{user_id}` | perm partners.manage | user_id(p), AdminUpdatePartnerRequest | 200: PartnerProfileResponse | Update a partner (partners.manage) [L357](../../backend/app/api/v1/delivery_partner.py#L357) |
+| GET | `/api/v1/orders/{order_id}/delivery-otp` | roles CUSTOMER | order_id(p) | 200: CustomerDeliveryOtpResponse | rate limit 60/minute per client IP (in-process); My COD delivery code (own order only; the code is shown only while active) [L261](../../backend/app/api/v1/delivery_partner.py#L261) |
+| GET | `/api/v1/orders/{order_id}/delivery-tracking` | roles CUSTOMER | order_id(p) | 200: CustomerTrackingResponse | Where is my delivery (own order, only while it is being delivered) [L247](../../backend/app/api/v1/delivery_partner.py#L247) |
 
 ## fulfillments
 
@@ -237,7 +239,7 @@ Source: [`backend/app/api/v1/fulfillments.py`](../../backend/app/api/v1/fulfillm
 | GET | `/api/v1/fulfillments` | roles ADMIN/HUB_STAFF/OPERATIONS/DELIVERY_PARTNER | status(q), delivery_partner_user_id(q), page(q), page_size(q) | 200: FulfillmentListResponse | List fulfillments (staff see all, a delivery partner sees only their own assignments) [L54](../../backend/app/api/v1/fulfillments.py#L54) |
 | GET | `/api/v1/fulfillments/{fulfillment_id}` | roles ADMIN/HUB_STAFF/OPERATIONS/DELIVERY_PARTNER | fulfillment_id(p) | 200: FulfillmentResponse | Get a fulfillment (a delivery partner may only view their own assignment) [L76](../../backend/app/api/v1/fulfillments.py#L76) |
 | POST | `/api/v1/fulfillments/{fulfillment_id}/assign` | roles ADMIN/HUB_STAFF/OPERATIONS | fulfillment_id(p), AssignDeliveryPartnerRequest | 200: FulfillmentResponse | Assign a delivery partner (READY_FOR_DELIVERY -> ASSIGNED) [L120](../../backend/app/api/v1/fulfillments.py#L120) |
-| POST | `/api/v1/fulfillments/{fulfillment_id}/deliver` | roles ADMIN/DELIVERY_PARTNER | fulfillment_id(p) | 200: FulfillmentResponse | Confirm delivery - the only action that consumes physical inventory [L165](../../backend/app/api/v1/fulfillments.py#L165) |
+| POST | `/api/v1/fulfillments/{fulfillment_id}/deliver` | roles ADMIN/DELIVERY_PARTNER | fulfillment_id(p), body | 200: FulfillmentResponse | Confirm delivery - the only action that consumes physical inventory [L165](../../backend/app/api/v1/fulfillments.py#L165) |
 | GET | `/api/v1/fulfillments/{fulfillment_id}/order` | roles ADMIN/HUB_STAFF/OPERATIONS/DELIVERY_PARTNER | fulfillment_id(p) | 200: FulfillmentOrderDetailResponse | Get what to pick/pack and where to deliver for a fulfillment (order items, address, customer name, payment method/amount) - a delivery partner may only view their own assignment [L93](../../backend/app/api/v1/fulfillments.py#L93) |
 | POST | `/api/v1/fulfillments/{fulfillment_id}/out-for-delivery` | roles ADMIN/DELIVERY_PARTNER | fulfillment_id(p) | 200: FulfillmentResponse | Mark out for delivery (ASSIGNED -> OUT_FOR_DELIVERY; assigned partner or ADMIN only) [L152](../../backend/app/api/v1/fulfillments.py#L152) |
 | POST | `/api/v1/fulfillments/{fulfillment_id}/reassign` | roles ADMIN/HUB_STAFF/OPERATIONS | fulfillment_id(p), ReassignRequest | 200: FulfillmentResponse | Reassign to another delivery partner (assignment history is kept) [L136](../../backend/app/api/v1/fulfillments.py#L136) |
