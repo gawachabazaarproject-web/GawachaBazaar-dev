@@ -24,6 +24,7 @@ import { BrandAdsCarousel } from "@/components/home/BrandAdsCarousel";
 import { WholesaleProductCard } from "@/components/home/WholesaleProductCard";
 import { useCategories, useProducts } from "@/features/catalog/useCatalog";
 import { useAddresses } from "@/features/address/useAddresses";
+import { ActiveDeliveryCodes } from "@/features/orders/ActiveDeliveryCodes";
 import { useWholesaleStore } from "@/store/wholesaleStore";
 import { colors, radius, spacing } from "@/theme";
 
@@ -80,6 +81,8 @@ export default function HomeScreen() {
           onAccountPress={() => router.push("/(tabs)/account")}
           onCartPress={() => router.push("/cart")}
         />
+
+        <ActiveDeliveryCodes />
 
         <Pressable style={styles.searchBar} onPress={() => router.push("/(tabs)/search")}>
           <Feather name="search" size={16} color={colors.textMuted} />
