@@ -4,6 +4,7 @@ import Image from "next/image";
 import { useEffect, useRef } from "react";
 import { ensureGsap } from "@/lib/gsap";
 import EditorialLink from "./EditorialLink";
+import { BUSINESS } from "@/lib/legal";
 
 export default function Footer() {
   const ref = useRef<HTMLDivElement>(null);
@@ -72,11 +73,12 @@ export default function Footer() {
           <div>
             <p className="eyebrow text-neutral-100/40">Sales &amp; Support</p>
             <div className="mt-5 flex flex-col gap-3 text-sm">
-              <a href="tel:+917100000000" className="hover:text-secondary-400">+91 710 000 0000</a>
-              <a href="mailto:hello@gawachabazaar.in" className="hover:text-secondary-400">
-                hello@gawachabazaar.in
+              <a href={BUSINESS.phoneHref} className="hover:text-secondary-400">{BUSINESS.phone}</a>
+              <a href={`mailto:${BUSINESS.email}`} className="hover:text-secondary-400">
+                {BUSINESS.email}
               </a>
-              <p>Nagpur, Maharashtra, India</p>
+              <p>{BUSINESS.address}</p>
+              <p>FSSAI License No.: {BUSINESS.fssai}</p>
             </div>
           </div>
 
@@ -92,8 +94,10 @@ export default function Footer() {
         <div className="flex flex-col items-center justify-between gap-4 border-t border-neutral-100/10 py-8 text-xs text-neutral-100/40 sm:flex-row">
           <p>Gawacha Bazaar. © 2026 All rights reserved.</p>
           <div className="flex gap-6">
-            <a href="#" className="hover:text-secondary-400">Privacy Policy</a>
-            <a href="#" className="hover:text-secondary-400">Terms of Use</a>
+            <a href="/legal/privacy" className="hover:text-secondary-400">Privacy Policy</a>
+            <a href="/legal/terms" className="hover:text-secondary-400">Terms &amp; Conditions</a>
+            <a href="/legal/refund" className="hover:text-secondary-400">Refunds</a>
+            <a href="/legal" className="hover:text-secondary-400">All policies</a>
           </div>
         </div>
       </div>

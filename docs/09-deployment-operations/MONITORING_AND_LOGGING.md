@@ -1,6 +1,6 @@
 # Monitoring and Logging
 
-> **Status:** Verified from source on 2026-10-14. **There is no monitoring, metrics, tracing, error-tracking or alerting system in the repository.** What exists is structured-ish logging to stdout, health endpoints and Docker/Kubernetes health checks. Where logs go on Render/EKS/the VPS beyond stdout is outside the repository.
+> **Status:** Verified from source on 2026-10-14. **There is no monitoring, metrics, tracing, error-tracking or alerting system in the repository.** What exists is structured-ish logging to stdout, health endpoints and Docker/Kubernetes health checks. Where logs go on EKS/the VPS beyond stdout is outside the repository.
 > **Evidence:** [`backend/app/core/logging.py`](../../backend/app/core/logging.py), [`request_id.py`](../../backend/app/core/request_id.py), [`main.py`](../../backend/app/main.py), [`start.sh`](../../backend/start.sh), [`Dockerfile`](../../backend/Dockerfile), [`docker-compose.prod.yml`](../../docker-compose.prod.yml), [`deploy/Caddyfile`](../../deploy/Caddyfile), `grep` of log markers in `backend/app`.
 
 ## What is logged
@@ -44,11 +44,10 @@ None: no Prometheus/StatsD/OpenTelemetry, no Sentry-style error tracker, no upti
 
 ## Practical monitoring today
 
-- **Render:** the dashboard's Logs/Metrics/Events tabs (not in the repository); search the markers above after incidents.
 - **VPS:** `docker compose … logs -f backend`; `ps` for container health; `ls backups/` for backup recency.
 - **EKS:** `kubectl logs`, `kubectl get hpa,pods`; the HPA scales on CPU only (does not see pool starvation).
 - **Mobile:** `adb logcat | grep ReactNativeJS`.
 
 ## Recommended (not implemented)
 
-Ship logs to a searchable store with retention; JSON logging; alerts on `PAYMENT_RECONCILIATION`, `PAYMENT_RESERVATION_MISMATCH`, `REFUND_FAILED`/`PAYMENT_WEBHOOK_UNKNOWN_REFERENCE`, a spike of `AUTH_UNAVAILABLE`/`FIREBASE_*`, and 5xx rate; an external uptime check on `/health` (this also keeps a free-tier Render service warm); a DB-aware readiness probe; frontend error reporting; request-id propagation to clients' bug reports.
+Ship logs to a searchable store with retention; JSON logging; alerts on `PAYMENT_RECONCILIATION`, `PAYMENT_RESERVATION_MISMATCH`, `REFUND_FAILED`/`PAYMENT_WEBHOOK_UNKNOWN_REFERENCE`, a spike of `AUTH_UNAVAILABLE`/`FIREBASE_*`, and 5xx rate; an external uptime check on `/health` (this also keeps a free-tier AWS backend warm); a DB-aware readiness probe; frontend error reporting; request-id propagation to clients' bug reports.

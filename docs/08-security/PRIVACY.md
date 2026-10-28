@@ -30,7 +30,7 @@ Credentials (passwords) are held only by **Firebase**; the backend never receive
 | Expo push service (and Google FCM) | push token, notification text containing the order number | – |
 | Google Distance Matrix or the public OSRM server | **delivery address coordinates** and the packing-point coordinates are sent for pricing. The default configuration uses the **public OSRM demo server**, which the config calls "testing only" | Choose a private router/Google for production privacy |
 | Cloudinary | product/ad images only (no personal data intended) | – |
-| Hosting providers (Render/Contabo/AWS/Vercel) | everything the backend stores | not inspected |
+| Hosting providers (Contabo/AWS/Vercel) | everything the backend stores | not inspected |
 
 ## 3. Controls in the code
 

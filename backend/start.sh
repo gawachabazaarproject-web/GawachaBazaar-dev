@@ -6,7 +6,7 @@ echo "==> Running database migrations..."
 alembic upgrade head
 
 # Start Uvicorn
-# Render injects $PORT (usually 10000). Default to 8000 if not set.
+# The host may inject $PORT. Default to 8000 if not set.
 PORT="${PORT:-8000}"
 echo "==> Starting Uvicorn on port $PORT..."
 exec uvicorn app.main:app \

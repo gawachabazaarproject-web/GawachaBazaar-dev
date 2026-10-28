@@ -96,7 +96,7 @@ Clients: `cd mobile && npm install && npx expo start -c` · `cd Admin && npm ins
 - PAY-001: a captured online payment can be attached to an unrelated, already-existing order without a refund (confirmed, **not fixed**; guarded by a strict `xfail` test).
 - CI deploys to production on every push to `main` with no test, lint or migration gate.
 - No automated tests for `mobile/`, `Admin/`, `website/`.
-- Which deployment is authoritative (Contabo VPS compose, AWS EKS, or the Render service that answers `/health`) is **unresolved** from the repository alone.
+- Which deployment is authoritative (Contabo VPS compose, AWS EKS, or the AWS backend at `api.gawachabazaar.in`) is **unresolved** from the repository alone.
 - Authentication is Firebase-only; the legacy password migration path still exists in code.
 
 ## 10. Link index

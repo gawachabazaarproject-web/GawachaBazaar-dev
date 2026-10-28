@@ -27,8 +27,8 @@ Labels: **Verified** (code read *and* exercised by a passing test), **Partially 
 | Secrets in the repository | `.env*`, service accounts, keystores, `google-services.json` ignored and none tracked; **but a live-looking API key is committed in `.mcp.json`** | **Gap** | [SECRETS_MANAGEMENT](SECRETS_MANAGEMENT.md) |
 | Production start-up validation | Refuses to start without `FIREBASE_PROJECT_ID`, or with half-configured Razorpay; **does not check** `DEBUG`, `ALLOWED_ORIGINS`, or the default database URL | Partially verified | `config.py` (R-17) |
 | Container hardening | Backend, Admin and website images run as non-root; only Caddy publishes ports in the compose stack; backend port is never published | Verified (files) | Dockerfiles, compose |
-| Transport | Caddy automatic HTTPS + HSTS (VPS stack); ALB HTTPS (EKS overlay); Render terminates TLS (observed `https://`) | Partially verified | Caddyfile, `k8s/overlays/aws/ingress.yaml` |
-| API docs exposure | `/docs`, `/redoc`, `/openapi.json` disabled when `APP_ENV=production` (a live probe of the Render service on 2026-10-14 returned 404 for `/docs`) | Verified | `main.py` |
+| Transport | Caddy automatic HTTPS + HSTS (VPS stack); ALB HTTPS (EKS overlay); AWS terminates TLS (observed `https://`) | Partially verified | Caddyfile, `k8s/overlays/aws/ingress.yaml` |
+| API docs exposure | `/docs`, `/redoc`, `/openapi.json` disabled when `APP_ENV=production` (a live probe of the AWS backend on 2026-10-14 returned 404 for `/docs`) | Verified | `main.py` |
 | Test safety | Suite cannot truncate a non-disposable database | Verified | `_db_safety.py`, 46 policy tests |
 | Dependency / container scanning | None configured | Gap | [QUALITY_GATES](../07-testing/QUALITY_GATES.md) |
 | Audit trail | 47 admin actions recorded with actor, target and states; no general reader | Partially verified | [ADMIN_OPERATIONS](../05-domains/ADMIN_OPERATIONS.md) |
@@ -55,7 +55,7 @@ SEC-001 (test fixtures could truncate a remote database) is **fixed** ([SEC001_R
 
 ## 3. What was *not* assessed
 
-Real Firebase and Razorpay behaviour; the production Render/EKS/VPS configuration and network exposure; TLS configuration; Cloudinary access settings; Expo/FCM credential handling; mobile app binary hardening (obfuscation, certificate pinning, root detection — none found in the repository); SQL injection beyond reading the ORM usage; business-logic fraud scenarios beyond those covered by the tests; denial of service (only exploratory load tests exist — [PERFORMANCE_RESULTS](../testing/PERFORMANCE_RESULTS.md), including the pool-starvation cliff PERF-001).
+Real Firebase and Razorpay behaviour; the production EKS/VPS configuration and network exposure; TLS configuration; Cloudinary access settings; Expo/FCM credential handling; mobile app binary hardening (obfuscation, certificate pinning, root detection — none found in the repository); SQL injection beyond reading the ORM usage; business-logic fraud scenarios beyond those covered by the tests; denial of service (only exploratory load tests exist — [PERFORMANCE_RESULTS](../testing/PERFORMANCE_RESULTS.md), including the pool-starvation cliff PERF-001).
 
 ## 4. Reporting and response
 

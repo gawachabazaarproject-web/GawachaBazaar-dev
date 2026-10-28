@@ -74,7 +74,7 @@ def test_write_operations_translate_auth_errors_to_unavailable(monkeypatch):
 
 
 def test_token_verification_works_without_a_service_account(monkeypatch):
-    """No service account and no ADC (e.g. Render): a bad token must be
+    """No service account and no ADC (e.g. a managed host): a bad token must be
     rejected as invalid, not crash with DefaultCredentialsError."""
     import firebase_admin
 

@@ -5,7 +5,7 @@ Order updates reach customers as Expo push notifications (Expo push service -> F
 | Document | Contents |
 |---|---|
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Flow, payload contract, idempotency, token lifecycle, decisions |
-| [SETUP.md](SETUP.md) | Firebase / EAS / Render configuration |
+| [SETUP.md](SETUP.md) | Firebase / EAS configuration |
 | [TESTING.md](TESTING.md) | Automated tests and the manual real-device checklist |
 | [TROUBLESHOOTING.md](TROUBLESHOOTING.md) | Log markers and common failures |
 

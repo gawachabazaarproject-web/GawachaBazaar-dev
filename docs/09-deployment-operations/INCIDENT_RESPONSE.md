@@ -6,7 +6,7 @@
 ## 1. First five minutes (any incident)
 
 1. **Scope it:** which client (app, Admin, website), which action (sign-in, browse, checkout, payment, delivery), since when, one user or all?
-2. **Is the backend up?** `curl -s https://<api>/health` (expect `{"status":"ok",…}`; a free-tier Render service may take ≈ 45 s to wake) and `/health/db` (expect `"database":"connected"`).
+2. **Is the backend up?** `curl -s https://<api>/health` (expect `{"status":"ok",…}`; a sleeping host may take ≈ 45 s to wake) and `/health/db` (expect `"database":"connected"`).
 3. **Can tokens be verified?** `curl -s -i -X POST https://<api>/api/v1/auth/sync -H "Authorization: Bearer bad"`: **401** `AUTHENTICATION_ERROR` = token verification works; **503** `AUTH_UNAVAILABLE` = the Firebase integration is broken for everyone (Playbook P1).
 4. **Read the logs** around the time for the markers in [MONITORING_AND_LOGGING](MONITORING_AND_LOGGING.md); note the `request_id` from a failing response header `X-Request-ID`.
 5. **Do not restart, redeploy or edit data until you know why** — a restart drops WebSockets and in-flight work; several fixes below need data checks first. Record what you did and when.
@@ -16,7 +16,7 @@
 ### P1 — Nobody can sign in (observed 2026-10-14)
 *Symptoms:* mobile shows "Could not validate credentials." or "Sign-in is temporarily unavailable"; Admin shows the 503 message; the `/auth/sync` probe returns 503.
 *Cause seen:* `FIREBASE_SERVICE_ACCOUNT_JSON` was set to a file path with no valid file behind it; the code then treats the value as inline JSON, fails ("not valid JSON") and **every** token verification returns 503. Other possible causes: `FIREBASE_PROJECT_ID` empty or wrong (401 "Could not validate credentials" for valid Firebase tokens), certificate fetch failing (`FIREBASE_CERT_FETCH_FAILED`).
-*Check:* Render/VPS environment for `FIREBASE_PROJECT_ID` (must equal the Firebase project of the app: `gawachabazaar-ac900`) and `FIREBASE_SERVICE_ACCOUNT_JSON` (valid one-line JSON, **or** an existing secret file path, **or** unset); logs for `FIREBASE_*` lines.
+*Check:* VPS/AWS environment for `FIREBASE_PROJECT_ID` (must equal the Firebase project of the app: `gawachabazaar-ac900`) and `FIREBASE_SERVICE_ACCOUNT_JSON` (valid one-line JSON, **or** an existing secret file path, **or** unset); logs for `FIREBASE_*` lines.
 *Fix **[changes configuration]**:* correct or **remove** `FIREBASE_SERVICE_ACCOUNT_JSON` and redeploy (sign-in then works with only the project id; staff creation, password resets, legacy migration and revocation checks are unavailable until a valid key is restored). Then re-run the probe: expect 401.
 *Prevention (proposal):* make service-account loading fail soft; alert on `AUTH_UNAVAILABLE` ([AUTHENTICATION](../05-domains/AUTHENTICATION.md)).
 
@@ -38,7 +38,7 @@
 ### P6 — Backend slow or timing out under load
 *Symptoms:* many `QueuePool limit … timed out` errors, requests hang ≈ 30 s, health checks fail. *Cause:* DB pool (5+10) smaller than the 40-thread request pool (PERF-001); recovery took ≈ 6 minutes after load stopped in the experiment. *Actions:* reduce incoming load; a restart clears the queue but drops WebSockets; scaling out does not help the pool and breaks single-process assumptions ([MULTI_REPLICA_ANALYSIS](../testing/MULTI_REPLICA_ANALYSIS.md)). Longer-term fixes are proposals in PERFORMANCE_RESULTS.
 
-### P7 — First request after idle takes ~45 s (Render free tier)
+### P7 — First request after idle takes ~45 s (AWS)
 Expected behaviour of the host; the mobile app pings `/health` early and retries sync with back-off. An external uptime ping every few minutes would avoid it (proposal).
 
 ### P8 — Admin does not show new orders / alarm silent

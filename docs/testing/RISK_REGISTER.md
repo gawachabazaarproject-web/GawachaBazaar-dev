@@ -1,7 +1,7 @@
 # Risk Register
 
 Likelihood (L) and impact (I): H/M/L. Severity follows the mission scale and is independent of likelihood. **Evidence** points to what was actually run; "Suspected" means not reproduced.
-Environment facts: Razorpay + COD (no PhonePe); no Redis/queue/scheduler; in-process rate limiter, WebSocket hub and reservation sweep; AWS EKS manifests in repo **and** a Render backend reporting `environment: production` — authoritative environment, traffic split and database topology are **unresolved**; no confirmed peak-concurrency requirement.
+Environment facts: Razorpay + COD (no PhonePe); no Redis/queue/scheduler; in-process rate limiter, WebSocket hub and reservation sweep; AWS EKS manifests in repo **and** a AWS backend reporting `environment: production` — authoritative environment, traffic split and database topology are **unresolved**; no confirmed peak-concurrency requirement.
 
 | ID | Risk | Sev | L | I | Status | Evidence / where | Test / next step |
 |---|---|---|---|---|---|---|---|
@@ -19,11 +19,11 @@ Environment facts: Razorpay + COD (no PhonePe); no Redis/queue/scheduler; in-pro
 | R-12 | Missing/wrong role checks on any of 196 operations | High if present | L | H | **Not reproduced** — golden role×operation matrix over every endpoint | `test_authz_matrix.py` | keep; review on every new endpoint |
 | R-13 | Test suite destroys a real DB (SEC-001) | High | M | H | **Fixed** | `SEC001_REVIEW.md` | residual items there |
 | R-14 | `backend/.env` holds a plaintext remote DB credential; scripts default to it | Medium | M | H | **Confirmed (local file)** | `SEC001_REVIEW.md` §residual | rotate; separate dev DB |
-| R-15 | Two production-labelled backends (Render, AWS) — risk of split data, wrong app→API pointing | High | M | H | **Unresolved** | health probe: Render `environment: production`; AWS ALB routes `/api/v1` | owner to confirm topology; compare app API base in shipped APK |
+| R-15 | Multiple production-labelled backends — risk of split data, wrong app→API pointing | High | M | H | **Unresolved** | health probe: AWS `environment: production`; AWS ALB routes `/api/v1` | owner to confirm topology; compare app API base in shipped APK |
 | R-16 | 41 MB APK tracked in git; stale `JWT_SECRET_KEY` in `.env` | Low | H | L | Confirmed | `git ls-files` | remove from history/repo |
 | R-17 | Production-config validator misses DEBUG/ALLOWED_ORIGINS/DB URL defaults | Medium | L | M | Confirmed (code) | `core/config.py` | extend `check_production_secrets` (k8s sets `DEBUG=False`) |
 | R-18 | WebSocket token in query string | Low | M | L | Confirmed (code) | `api/v1/realtime.py` | short-lived ticket or first-message auth |
 | R-19 | Backup/restore never exercised | High if untested | ? | C | **Not tested** (no environment) | — | restore drill into disposable DB |
-| R-20 | Razorpay live sandbox flow unverified end-to-end | Medium | ? | H | **Blocked** — a *test-mode* key exists only in a developer `.env` that also points at the Render demo DB; no authorized staging | needs opt-in env |
+| R-20 | Razorpay live sandbox flow unverified end-to-end | Medium | ? | H | **Blocked** — a *test-mode* key exists only in a developer `.env` that also points at the AWS demo DB; no authorized staging | needs opt-in env |
 | R-21 | Payments: timeouts after provider success | Medium | L | H | Partly tested (gateway outage keeps PROCESSING; `verify` reconciles; refund-failed leaves `REFUND_FAILED` with log) | extend with reconciliation job test |
 | R-22 | AI-generated-code defect classes (Phase 2 research document `AI_ASSISTED_ENGINEERING_RISKS.md` **not yet produced**) | — | — | — | Not started | — | pending |

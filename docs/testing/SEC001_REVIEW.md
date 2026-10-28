@@ -20,7 +20,7 @@ Scope reviewed: full diff of `backend/tests/conftest.py` (modified), new `backen
 Calling `verify_live_target` on the raw connection autobegan a transaction that the `Session` then joined, so `session.commit()` after the `TRUNCATE` did not commit and `ACCESS EXCLUSIVE` locks hung the suite. Fixed with `connection.rollback()`; guarded by `test_fixture_integrity.py` (verified to fail without the fix). The first aborted run is **not** counted as a baseline.
 
 ## Residual risks (not fixed — outside the test package)
-1. Importing `app` from a plain shell/script (not through pytest's conftest) uses whatever `.env` says. Same for `alembic` and `backend/scripts/*.py` (`seed_dummy_data.py`, `create_admin.py`, …): run against `backend/.env`, i.e. the Render demo database, if invoked by hand.
+1. Importing `app` from a plain shell/script (not through pytest's conftest) uses whatever `.env` says. Same for `alembic` and `backend/scripts/*.py` (`seed_dummy_data.py`, `create_admin.py`, …): run against `backend/.env`, i.e. the AWS demo database, if invoked by hand.
 2. A deliberately mis-labelled remote database (marker comment + `*_test` name) reached through a loopback tunnel would pass; this needs intent, not accident.
 3. `localhost` is resolved once at validation and again by libpq (theoretical race).
 4. `backend/.env` contains a plaintext remote database credential on disk (gitignored). Consider rotating it, since it was visible to tooling during this audit; I did not print or alter it.

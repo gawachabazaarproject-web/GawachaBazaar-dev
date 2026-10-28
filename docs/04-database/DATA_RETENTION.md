@@ -36,5 +36,5 @@ The application **never purges data on a schedule**. The only automatic data lif
 1. **Right-to-erasure / account deletion** is not implementable through the product today; deleting a customer with orders would violate `RESTRICT` constraints and no anonymisation routine exists. Owner decision needed on how to satisfy Indian data-protection obligations ([PRIVACY](../08-security/PRIVACY.md)).
 2. Unbounded growth: `payment_webhook_events`, `stock_movements`, `admin_action_logs`, `checkout_sessions` have no archival or partitioning.
 3. Order and address snapshots hold personal data permanently by design.
-4. Backup retention is only defined for the compose stack; the Render/EKS databases' backup settings are outside the repository.
+4. Backup retention is only defined for the compose stack; the EKS databases' backup settings are outside the repository.
 5. Seeded demo/starter data (home slides, four promotions) lives in production unless removed ([MIGRATIONS](MIGRATIONS.md)).

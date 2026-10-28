@@ -1,6 +1,6 @@
 # Backup and Recovery
 
-> **Status:** Partially verified. **Last verified:** 2026-10-14. Backup/restore scripts exist for the **VPS Docker Compose stack only**; they were read, **not executed** (no restore drill is recorded anywhere). Backup arrangements for the Render and EKS databases are outside the repository and unknown.
+> **Status:** Partially verified. **Last verified:** 2026-10-14. Backup/restore scripts exist for the **VPS Docker Compose stack only**; they were read, **not executed** (no restore drill is recorded anywhere). Backup arrangements for the AWS and EKS databases are outside the repository and unknown.
 > **Evidence:** [`deploy/scripts/backup-db.sh`](../../deploy/scripts/backup-db.sh), [`restore-db.sh`](../../deploy/scripts/restore-db.sh), [`docker-compose.prod.yml`](../../docker-compose.prod.yml) (`db-backup`, volumes), [`deploy/README.md`](../../deploy/README.md) (Operations, checklist), [RISK_REGISTER](../testing/RISK_REGISTER.md) R-19.
 
 ## What is backed up (compose stack)
@@ -46,7 +46,7 @@ After any restore: run the smoke test, check `alembic current` equals the code's
 
 ## Unknowns and gaps
 
-- Backup, retention, PITR and restore capabilities of the **Render PostgreSQL** and any **AWS** database are not documented in the repository (the earlier audit could not tell which databases exist or are live).
+- Backup, retention, PITR and restore capabilities of the **AWS PostgreSQL** and the AWS databases are not documented in the repository (the earlier audit could not tell which databases exist or are live).
 - **No restore drill** has been performed or recorded; backup validity is unproven (R-19).
 - No off-site copy, no encryption, no backup monitoring or alerting; no documented RPO/RTO.
 - Disposable test containers (`gb-qa-test-db`, tmpfs) are **not** backups and must never hold real data.

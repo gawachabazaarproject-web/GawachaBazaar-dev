@@ -1,6 +1,6 @@
 # Secrets Management
 
-> **Status:** Verified for where secrets are *supposed* to live and for the leak found; **actual secret stores on Render, the VPS, Kubernetes, EAS and CI were not inspected** (they are outside the repository). **Last verified:** 2026-10-14. **No secret value appears in this document.**
+> **Status:** Verified for where secrets are *supposed* to live and for the leak found; **actual secret stores on the VPS, Kubernetes, EAS and CI were not inspected** (they are outside the repository). **Last verified:** 2026-10-14. **No secret value appears in this document.**
 > **Evidence:** [`.gitignore`](../../.gitignore), `git ls-files`, `git log -G`, [`deploy/FIREBASE_AUTH.md`](../../deploy/FIREBASE_AUTH.md), [`deploy/README.md`](../../deploy/README.md), [`docker-compose.prod.yml`](../../docker-compose.prod.yml), [`k8s/base/backend-deployment.yaml`](../../k8s/base/backend-deployment.yaml), [`.forgejo/workflows/deploy.yml`](../../.forgejo/workflows/deploy.yml), [`mobile/app.config.js`](../../mobile/app.config.js), [`backend/app/core/config.py`](../../backend/app/core/config.py).
 > Names and purposes of every variable: [ENVIRONMENT_VARIABLES](../06-development/ENVIRONMENT_VARIABLES.md).
 
@@ -8,8 +8,8 @@
 
 | Secret | Used by | Intended store | Notes |
 |---|---|---|---|
-| `DATABASE_URL` (contains the DB password) | backend, Alembic, scripts | host environment (Render env, `.env.production` `chmod 600`, K8s Secret) | A local untracked `backend/.env` in the audited checkout holds a hosted-database URL in plaintext (R-14) |
-| `FIREBASE_SERVICE_ACCOUNT_JSON` (service-account private key) | backend (staff creation, resets, revocation) | Render secret env / secret file (`/etc/secrets/firebase-service-account.json`), K8s Secret | Gitignored patterns: `*firebase-adminsdk*.json`, `service-account*.json`. **A bad value breaks all sign-ins** ([AUTHENTICATION](../05-domains/AUTHENTICATION.md)) |
+| `DATABASE_URL` (contains the DB password) | backend, Alembic, scripts | host environment (`.env.production` `chmod 600`, K8s Secret) | A local untracked `backend/.env` in the audited checkout holds a hosted-database URL in plaintext (R-14) |
+| `FIREBASE_SERVICE_ACCOUNT_JSON` (service-account private key) | backend (staff creation, resets, revocation) | secret env / secret file (`/etc/secrets/firebase-service-account.json`), K8s Secret | Gitignored patterns: `*firebase-adminsdk*.json`, `service-account*.json`. **A bad value breaks all sign-ins** ([AUTHENTICATION](../05-domains/AUTHENTICATION.md)) |
 | `RAZORPAY_KEY_SECRET`, `RAZORPAY_WEBHOOK_SECRET` | backend | same as above | Key **id** is public (sent to Checkout) |
 | `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET` | backend | same | – |
 | `REDIS_URL` | backend | same | Optional (may embed a password) |
@@ -43,7 +43,7 @@ Searches performed on 2026-10-14 (names only, no values recorded): tracked-file 
 | SECR-2 | A local untracked `backend/.env` (not in git) points `DATABASE_URL` at a hosted PostgreSQL with a plaintext credential, and the scripts/Alembic default to it. Use a separate local database for development and rotate that credential if the file was shared (R-14) |
 | SECR-3 | A stale `JWT_SECRET_KEY` line existed in a developer `.env` although the code no longer reads it; delete unused secrets |
 | SECR-4 | `AWS account id` and an ACM certificate ARN are committed in `k8s/overlays/aws/ingress.yaml` and an ECR image in `k8s/backend-deployment.yaml`. They are identifiers, not credentials, but they reveal infrastructure details |
-| SECR-5 | Whether the Render service uses the service-account secret file is unknown; the observed failure on 2026-10-14 shows the file reference can dangle |
+| SECR-5 | Whether the AWS backend uses the service-account secret file is unknown; the observed failure on 2026-10-14 shows the file reference can dangle |
 | SECR-6 | No secret rotation procedure, owner or schedule is documented |
 
 ## 4. Handling rules for contributors and agents
@@ -51,7 +51,7 @@ Searches performed on 2026-10-14 (names only, no values recorded): tracked-file 
 1. Never write a secret into source, docs, tests, examples, screenshots, commit messages or chat. Examples use obvious placeholders.
 2. Do not `cat` or print `.env`, `.mcp.json`, service-account files or `docker inspect` environment blocks; when you must inspect them, extract **names only** or redact values (`sed -E 's/(KEY|SECRET|PASSWORD)=.*/\1=<hidden>/'`).
 3. If a secret is exposed, rotate it first, then clean up the repository.
-4. Prefer provider-managed secret stores (Render secret files/env, EAS secrets, Kubernetes Secrets, Forgejo secrets) over `.env` files on shared machines; keep `.env.production` at mode `600` on the VPS.
+4. Prefer provider-managed secret stores (EAS secrets, Kubernetes Secrets, Forgejo secrets) over `.env` files on shared machines; keep `.env.production` at mode `600` on the VPS.
 5. Public-by-design values (`NEXT_PUBLIC_*`, `EXPO_PUBLIC_*`, Firebase web config, Razorpay key **id**) must never be paired with their private counterparts in client bundles.
 6. After changing a signing key (new EAS account or keystore), register the new SHA-1/SHA-256 in Firebase and refresh `google-services.json`.
 

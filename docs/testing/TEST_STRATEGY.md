@@ -9,8 +9,8 @@ Risk first (money, stock, authorization, then everything else) · real PostgreSQ
 | Disposable PostgreSQL 16 in Docker (`gb-qa-test-db`, 127.0.0.1:15432, tmpfs, no volume) | all DB tests; `gawachabazaar_test` (suite) and `gb_multiproc_test` (multi-process + load) | available; **recreate if Docker restarts** (data is not persisted) |
 | Local multi-process (2 uvicorn replicas) | replica correctness | `backend/tests/multiproc/run_scenarios.py` |
 | Local load (1 uvicorn worker, asyncio+httpx driver) | exploratory capacity | `backend/tests/multiproc/perf.py` |
-| Razorpay sandbox | payment integration | **blocked** — needs an explicitly opted-in staging environment; a test-mode key is present only in a developer `.env` bound to the Render demo DB, so it was not used |
-| Staging (EKS or Render) | E2E, performance on real topology | **not available/authorized** |
+| Razorpay sandbox | payment integration | **blocked** — needs an explicitly opted-in staging environment; a test-mode key is present only in a developer `.env` bound to the AWS demo DB, so it was not used |
+| Staging (EKS or AWS) | E2E, performance on real topology | **not available/authorized** |
 
 ## Layers and what exists
 | Layer | Existing (pre-audit) | Added in audit | Gap |

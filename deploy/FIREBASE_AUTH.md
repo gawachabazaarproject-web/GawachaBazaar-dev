@@ -67,15 +67,15 @@ FastAPI --firebase_admin.verify_id_token()--> uid --> users.firebase_uid --> app
 
 | Where | Variable | Secret? |
 |---|---|---|
-| Backend (Render) | `FIREBASE_PROJECT_ID` | no |
-| Backend (Render) | `FIREBASE_SERVICE_ACCOUNT_JSON` (raw JSON on one line, OR path to a Render Secret File e.g. `/etc/secrets/firebase-service-account.json`) | **yes** |
+| Backend | `FIREBASE_PROJECT_ID` | no |
+| Backend | `FIREBASE_SERVICE_ACCOUNT_JSON` (raw JSON on one line, OR path to a mounted secret file e.g. `/etc/secrets/firebase-service-account.json`) | **yes** |
 | Admin (Vercel) | `NEXT_PUBLIC_FIREBASE_API_KEY`, `_AUTH_DOMAIN`, `_PROJECT_ID`, `_STORAGE_BUCKET`, `_MESSAGING_SENDER_ID`, `_APP_ID` | no (public web config) |
 | Mobile (EAS / `.env`) | `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID` | no |
 | Mobile web build | `EXPO_PUBLIC_FIREBASE_*` (same 6 values) | no |
 | Mobile native build | `google-services.json` via `GOOGLE_SERVICES_JSON` path (EAS file secret) or file next to `app.config.js` | no, but gitignored |
 
 `JWT_SECRET_KEY`, `JWT_ALGORITHM`, `ACCESS_TOKEN_EXPIRE_MINUTES` and
-`REFRESH_TOKEN_EXPIRE_DAYS` are no longer used and can be deleted from Render.
+`REFRESH_TOKEN_EXPIRE_DAYS` are no longer used and can be deleted from the backend environment.
 
 With `APP_ENV=production`, the backend refuses to start without
 `FIREBASE_PROJECT_ID`. Token verification needs only that. The service
@@ -105,7 +105,7 @@ Then add `FIREBASE_PROJECT_ID` (and optionally `FIREBASE_SERVICE_ACCOUNT_JSON`) 
 
 ## 4. Deployment
 
-1. **Render (backend)**: set `FIREBASE_PROJECT_ID` and the secret
+1. **Backend host**: set `FIREBASE_PROJECT_ID` and the secret
    `FIREBASE_SERVICE_ACCOUNT_JSON`, delete the `JWT_*` variables, and deploy.
    `alembic upgrade head` applies `c5f1a7e3d9b2`. **Every existing session ends.**
    Users sign in again, and pre-Firebase accounts migrate on that first
@@ -141,7 +141,7 @@ Then add `FIREBASE_PROJECT_ID` (and optionally `FIREBASE_SERVICE_ACCOUNT_JSON`) 
 - [x] Legacy migration returns the same answer and takes the same time for an unknown account and a wrong password.
 - [x] Disabled or suspended users are rejected on every request (PostgreSQL status); admins suspending a customer also disables the Firebase user and revokes their sessions.
 - [x] CORS limited to `ALLOWED_ORIGINS` (tested).
-- [ ] HTTPS only: Render and Vercel provide it; the mobile release uses an `https://` API URL, so cleartext stays off.
+- [ ] HTTPS only: the backend host and Vercel provide it; the mobile release uses an `https://` API URL, so cleartext stays off.
 - [ ] Firebase SMS region policy set to India; test phone numbers used in QA.
 - [ ] App Check / Play Integrity enabled before a public launch.
 - [ ] Rate limiter is per-process in memory. Move it to Redis if the backend scales past one instance.

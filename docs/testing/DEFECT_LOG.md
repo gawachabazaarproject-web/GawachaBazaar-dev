@@ -19,7 +19,7 @@ Status values: **Confirmed** = reproduced with a test or experiment in this audi
 ## SEC-001 — Test fixtures could TRUNCATE a remote database
 - **Severity:** High (test-safety) · **Status:** Confirmed → **Fixed in this audit** (approved by owner)
 - **Location:** `backend/tests/conftest.py` (old): `TEST_DATABASE_URL = settings.DATABASE_URL.replace("/gawachabazaar", "/gawachabazaar_test")` with guard `"gawachabazaar_test" in url`.
-- **Root cause:** database name derived from the developer's `DATABASE_URL`; with the Render URL in `backend/.env` the result was `…render.com/gawachabazaar_test_demo_db`, which passes the guard; `db_session` then runs `TRUNCATE … CASCADE` on ~50 tables. Application code that bypasses the `get_db` override (`app/main.py` sweep loop, `app/services/push.py`) also connected to `settings.DATABASE_URL`.
+- **Root cause:** database name derived from the developer's `DATABASE_URL`; with the AWS URL in `backend/.env` the result was `…amazonaws.com/gawachabazaar_test_demo_db`, which passes the guard; `db_session` then runs `TRUNCATE … CASCADE` on ~50 tables. Application code that bypasses the `get_db` override (`app/main.py` sweep loop, `app/services/push.py`) also connected to `settings.DATABASE_URL`.
 - **Fix:** `tests/_db_safety.py` + `conftest.py` (details in `SEC001_REVIEW.md`). 46 safety tests + mutation checks + independent review. 
 - **Disclosure:** one `pytest -x` was run before the problem was understood; it failed at connection and executed no SQL.
 

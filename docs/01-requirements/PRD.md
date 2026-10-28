@@ -50,7 +50,7 @@
 ## 7. Open questions for the product owner
 
 1. Intended launch date, traffic expectations and growth plan (drives capacity work — [NON_FUNCTIONAL_REQUIREMENTS](NON_FUNCTIONAL_REQUIREMENTS.md)).
-2. Which deployment is the production system (Contabo VPS compose, AWS EKS or Render)? ([DEPLOYMENT](../09-deployment-operations/DEPLOYMENT.md))
+2. Which deployment is the production system (Contabo VPS compose or AWS)? ([DEPLOYMENT](../09-deployment-operations/DEPLOYMENT.md))
 3. What should Bazaar+ actually give a customer? What should the `WHOLESALER` role be able to do?
 4. Should reviews, reports, farm traceability (farm/quality checks) and in-app support be built, and in what order? ([ROADMAP](../10-project-management/ROADMAP.md))
 5. Refund policy (automatic vs approval-gated; partial refunds) and cancellation window beyond "before delivery".

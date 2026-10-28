@@ -1,6 +1,6 @@
 # Performance results (exploratory)
 
-**These are exploratory capacity tests, not production requirements.** No peak-concurrency requirement exists in the repository and none is assumed. Load generator (asyncio + httpx), one uvicorn worker (started like `start.sh`, `DEBUG=false`) and PostgreSQL 16 (Docker, tmpfs) all share one 12-thread / 15.6 GB developer machine, so absolute numbers are not transferable to EKS (pod limit 1 CPU) or Render. Database: disposable `gb_multiproc_test`. Never run against any remote or shared environment.
+**These are exploratory capacity tests, not production requirements.** No peak-concurrency requirement exists in the repository and none is assumed. Load generator (asyncio + httpx), one uvicorn worker (started like `start.sh`, `DEBUG=false`) and PostgreSQL 16 (Docker, tmpfs) all share one 12-thread / 15.6 GB developer machine, so absolute numbers are not transferable to EKS (pod limit 1 CPU) or AWS. Database: disposable `gb_multiproc_test`. Never run against any remote or shared environment.
 
 ## Method
 `backend/tests/multiproc/perf.py`. Closed-loop virtual users, think time 0.2–0.6 s, 100 seeded customers each with own product/stock/address. Per iteration: catalog list, catalog search, product detail, home-slides, offers, `/auth/me`, add to cart, get cart, (every 8th iteration) **Cash-on-Delivery checkout with real stock reservation**, order list. Users start staggered over a ramp; statistics use only requests that *started* after the ramp. Stop rules: error rate > 5 %, p99 > 8 s, or integrity failure. After each level: no duplicate order numbers, reserved quantity within `[0, quantity]`, every order has a reservation, reserved total equals ordered units of open orders, order count equals successful checkouts.
@@ -33,7 +33,7 @@ Earlier interrupted run with the same method (10 VU: 33 req/s p99 0.66 s; 25 VU:
 5. Profile the catalog list (most expensive read).
 
 ## Not done
-50/100-user runs with a longer soak; Render/EKS environments; DB slow-query analysis; Redis (not present); worker-failure injection; retry-storm modelling; memory-leak soak (RSS rose only 126 → 142 MB over the runs).
+50/100-user runs with a longer soak; EKS environments; DB slow-query analysis; Redis (not present); worker-failure injection; retry-storm modelling; memory-leak soak (RSS rose only 126 → 142 MB over the runs).
 
 ## Invalid runs kept for transparency (`evidence/performance/results_INVALID_*.json`)
 Run 1: server ran with `DEBUG=true` so SQLAlchemy echoed every statement (47 MB log) — numbers discarded. Run 2: all users started simultaneously on the heaviest endpoint (thundering herd) and the measurement window was too short — discarded; method fixed with staggered ramp and in-window statistics.

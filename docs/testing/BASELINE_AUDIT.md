@@ -9,7 +9,7 @@ Branch `docs-and-primary-testing`, base `07b8450`. Revision 1 contained errors (
 - **Data:** PostgreSQL 16, 51 tables at head; row locks (`FOR UPDATE`) in cart, checkout session, order, inventory, reservation, fulfillment, bulk order; unique constraints on webhook events, payment idempotency keys, `payments.order_id`, `orders.cart_id`, reservation per order.
 - **Clients:** `website/` and `Admin/` (Next.js), `mobile/` (Expo, EAS OTA updates). **None of the three has a test framework or test files.**
 - **Deployment configuration in the repo:** Forgejo Actions → Docker Hub → **AWS EKS** (`k8s/`, ALB ingress; backend pod limit 1 CPU / 768 Mi; HPA 1→3 at 70 % of a 250 m request; `DEBUG=False`, `APP_ENV=production`). 
-- **What is actually serving (probed read-only, one GET each):** `https://gawachabazaar-backend.onrender.com/health` → 200 `{"environment":"production"}` (Render, uvicorn). `https://api.gawachabazaar.in/api/v1/ping` → 200 from AWS-hosted address; `/health` on that host returns the Next.js 404 page (the ALB routes only `/api/v1` to the backend). **Both look live. Which one the shipped app uses, how traffic is split, and which database each uses are Unresolved. Neither environment is treated as authoritative.** No kubeconfig, AWS credentials or staging access exist here.
+- **What is actually serving (probed read-only, one GET each):** `https://api.gawachabazaar.in/health` → 200 `{"environment":"production"}` (uvicorn). `https://api.gawachabazaar.in/api/v1/ping` → 200 from AWS-hosted address; `/health` on that host returns the Next.js 404 page (the ALB routes only `/api/v1` to the backend). **Both look live. Which one the shipped app uses, how traffic is split, and which database each uses are Unresolved. Neither environment is treated as authoritative.** No kubeconfig, AWS credentials or staging access exist here.
 - **Workload:** no peak-concurrency requirement is recorded anywhere. The "10,000 monthly users / 1,000 customers" planning figure is unverified and does not determine concurrency. No requirement is invented in this audit.
 
 ## 2. Test baseline (actually executed)
@@ -30,20 +30,20 @@ PAY-001 (High, payment attached to wrong order, xfail test) · SEC-001 (fixed) �
 **Not found (after targeted testing):** oversell, duplicate order/payment, webhook forgery/replay acceptance, cross-customer access, over-broad role access (see `RISK_REGISTER.md` R-09…R-12). That is "not reproduced in the tested scope", not a proof of absence.
 
 ## 4. Not verified / blocked
-Razorpay sandbox end-to-end (no authorized staging; the only test-mode key is in a developer `.env` bound to the Render demo DB — not used) · EKS behaviour and ALB header handling · Render-vs-AWS topology · backup/restore · frontend/mobile behaviour · live Firebase tokens (expiry/revocation/project mismatch) · migration from a previous revision with data · soak/long-run behaviour.
+Razorpay sandbox end-to-end (no authorized staging; the only test-mode key is in a developer `.env` bound to the AWS demo DB — not used) · EKS behaviour and ALB header handling · VPS-vs-AWS topology · backup/restore · frontend/mobile behaviour · live Firebase tokens (expiry/revocation/project mismatch) · migration from a previous revision with data · soak/long-run behaviour.
 
 ## 5. Safe environments now available
 Disposable Postgres container `gb-qa-test-db` (recreate after any Docker restart; data is in tmpfs). The pre-existing `gawachabazaar-db` container (port 5433) and the unidentified listener on :5432 were never touched.
 
 ## 6. Incidents during the audit (disclosed)
-1. A `pytest -x` run before SEC-001 was understood tried to connect to the remote Render host and failed at fixture setup; no SQL ran.
+1. A `pytest -x` run before SEC-001 was understood tried to connect to the remote AWS host and failed at fixture setup; no SQL ran.
 2. My first multi-process harness leaked `DATABASE_URL`; the new safety guard blocked it as designed.
 3. Two invalid load-test runs (SQL echo left on; synchronized start) are kept, labelled `INVALID`, and excluded from conclusions.
 
 ## 7. Next highest-priority actions
-1. Approve and apply PAY-001 fix (small, no schema change). 2. Add a CI test gate (CI-001). 3. Confirm the production topology (Render vs AWS) and rotate the DB credential that sat in `backend/.env`. 4. Decide XFF trust and migration-job approach. 5. Provide an opted-in staging environment + Razorpay test keys for sandbox flows. 6. Add frontend smoke tests.
+1. Approve and apply PAY-001 fix (small, no schema change). 2. Add a CI test gate (CI-001). 3. Confirm the production topology (VPS vs AWS) and rotate the DB credential that sat in `backend/.env`. 4. Decide XFF trust and migration-job approach. 5. Provide an opted-in staging environment + Razorpay test keys for sandbox flows. 6. Add frontend smoke tests.
 
 ## 8. Corrections to revision 1
 - "No concurrency tests found" (TEST-002) was **wrong**: the suite has ~40 real-thread PostgreSQL concurrency tests; retracted.
-- Revision 1 said Render was only a stale config; a live Render backend reporting `production` exists.
+- Revision 1 said AWS was only a stale config; a live AWS backend reporting `production` exists.
 - Revision 1 listed a local Postgres on :5432 as a possible test target; it was never used.

@@ -239,14 +239,14 @@ class InventoryReservationService:
             # A size's own assigned share (is_share) is used first, then its
             # ordinary lots, then the siblings' ordinary lots. Another size's
             # share is never touched: it was assigned to that size.
-            own = [l for l in locked_lots if l.variant_id == variant_id]
+            own = [lot for lot in locked_lots if lot.variant_id == variant_id]
             others = [
-                l
-                for l in locked_lots
-                if l.variant_id in ids and l.variant_id != variant_id and not l.is_share
+                lot
+                for lot in locked_lots
+                if lot.variant_id in ids and lot.variant_id != variant_id and not lot.is_share
             ]
-            key = lambda l: (l.created_at, l.id)  # noqa: E731 - FIFO
-            own_key = lambda l: (not l.is_share, l.created_at, l.id)  # noqa: E731
+            key = lambda lot: (lot.created_at, lot.id)  # noqa: E731 - FIFO
+            own_key = lambda lot: (not lot.is_share, lot.created_at, lot.id)  # noqa: E731
             return sorted(own, key=own_key) + sorted(others, key=key)
 
         # Allocate (in memory only, against the now-locked, fresh

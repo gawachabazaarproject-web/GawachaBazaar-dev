@@ -61,7 +61,7 @@
 | Backups restorable, off-site, monitored | **Gap — Blocker?** | [BACKUP_AND_RECOVERY](../09-deployment-operations/BACKUP_AND_RECOVERY.md) |
 | Monitoring and alerting; incident process; support contact | **Gap** | [MONITORING_AND_LOGGING](../09-deployment-operations/MONITORING_AND_LOGGING.md), [INCIDENT_RESPONSE](../09-deployment-operations/INCIDENT_RESPONSE.md) |
 | Health checks | Partial | `/health`, `/health/db`; no DB-aware readiness |
-| Cold-start behaviour (Render free tier) | Partial | ≈ 44 s; app retries/loader (uncommitted) |
+| Cold-start behaviour (AWS) | Partial | ≈ 44 s; app retries/loader (uncommitted) |
 | Single-process constraint respected | **Gap** | HPA 1→3 contradicts it |
 
 ### Customer-facing readiness
@@ -76,7 +76,7 @@
 
 ## 3. Suggested order to close the largest risks (recommendation)
 
-1. Rotate the committed key; confirm Render's production settings (O-1, O-3).
+1. Rotate the committed key; confirm AWS's production settings (O-1, O-3).
 2. Fix the 7 failing tests, then PAY-001, then add the CI gate (E-1, E-2, E-3).
 3. Decide the production topology and fix the Admin build/config path (O-2, E-5, E-6).
 4. Do a restore drill and set up off-site backups (O-9).

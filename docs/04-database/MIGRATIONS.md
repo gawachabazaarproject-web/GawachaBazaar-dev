@@ -24,7 +24,7 @@
 | `docker-compose.prod.yml` | A separate one-shot `migrate` service (`alembic upgrade head`) must complete successfully before `backend` starts. Note `backend` *also* runs `start.sh`, so the migration runs a second time (a no-op) | Compose gate protects the old backend if the migration fails |
 | `docker-compose.yml` (dev) | Backend command is overridden to plain `uvicorn --reload`; **no migration runs** — run `alembic upgrade head` yourself | Fresh dev DB is empty until you do |
 | Kubernetes / EKS (CI workflow) | Only the image's `start.sh` (no migration Job, no init container in the manifests) | The OPS-002 race applies when pods start together |
-| Render | Unknown (service settings are not in the repository) | – |
+| AWS | Unknown (service settings are not in the repository) | – |
 
 CI does **not** run migrations, a drift check, or a migrate-from-previous-revision test before deploying ([QUALITY_GATES](../07-testing/QUALITY_GATES.md)).
 

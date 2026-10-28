@@ -59,7 +59,7 @@ def test_missing_or_blank_fails_closed(value) -> None:
 
 def test_database_url_alone_is_never_used() -> None:
     """The old behaviour derived the test DB from DATABASE_URL. Now it must fail."""
-    env = {"DATABASE_URL": "postgresql+psycopg://u:p@db.render.com/gawachabazaar_demo_db"}
+    env = {"DATABASE_URL": "postgresql+psycopg://u:p@db.us-east-1.rds.amazonaws.com/gawachabazaar_demo_db"}
     with pytest.raises(UnsafeTestDatabaseError, match="not set"):
         resolve_test_database_url(env)
 
@@ -67,8 +67,8 @@ def test_database_url_alone_is_never_used() -> None:
 @pytest.mark.parametrize(
     "url, fragment",
     [
-        # the exact value the old string-replace produced from the Render .env
-        ("postgresql+psycopg://u:p@dpg-x-a.oregon-postgres.render.com/gawachabazaar_test_demo_db", "not loopback"),
+        # the exact value the old string-replace produced from the old hosted .env
+        ("postgresql+psycopg://u:p@db.us-east-1.rds.amazonaws.com/gawachabazaar_test_demo_db", "not loopback"),
         ("postgresql+psycopg://u:p@10.0.0.5:15432/x_test", "not loopback"),
         ("postgresql+psycopg://u:p@0.0.0.0:15432/x_test", "not loopback"),
         ("postgresql+psycopg://u:p@127.0.0.1.evil.com:15432/x_test", "not loopback"),
@@ -81,7 +81,7 @@ def test_database_url_alone_is_never_used() -> None:
         ("postgresql+psycopg://u:p@127.0.0.1:15432/gawachabazaar_test_demo_db", "must match"),
         ("postgresql+psycopg://u:p@127.0.0.1:15432/Prod_test", "must match"),
         ("postgresql+psycopg://u:p@127.0.0.1:15432/", "must match"),
-        ("postgresql+psycopg://u:p@127.0.0.1:15432/x_test?host=db.render.com", "redirect"),
+        ("postgresql+psycopg://u:p@127.0.0.1:15432/x_test?host=db.us-east-1.rds.amazonaws.com", "redirect"),
         ("postgresql+psycopg://u:p@127.0.0.1:15432/x_test?hostaddr=8.8.8.8", "redirect"),
         ("postgresql+psycopg://u:p@127.0.0.1:15432/x_test?service=prod", "redirect"),
         ("mysql://u:p@127.0.0.1:15432/x_test", "driver"),
@@ -138,7 +138,7 @@ def test_libpq_environment_overrides_are_refused(var: str) -> None:
 def test_remote_host_with_valid_test_name_is_rejected() -> None:
     """Regression guard: host allow-list must be enforced on its own."""
     with pytest.raises(UnsafeTestDatabaseError, match="not loopback"):
-        resolve_test_database_url({"TEST_DATABASE_URL": "postgresql+psycopg://u:p@db.render.com:15432/x_test"})
+        resolve_test_database_url({"TEST_DATABASE_URL": "postgresql+psycopg://u:p@db.us-east-1.rds.amazonaws.com:15432/x_test"})
 
 
 @pytest.mark.parametrize(
@@ -169,7 +169,7 @@ def test_global_engine_is_pinned_to_loopback_so_app_code_cannot_reach_a_real_db(
     "test_url",
     [
         "",  # missing
-        "postgresql+psycopg://u:p@dpg-x-a.oregon-postgres.render.com:5432/gawachabazaar_test_demo_db",  # remote
+        "postgresql+psycopg://u:p@db.us-east-1.rds.amazonaws.com:5432/gawachabazaar_test_demo_db",  # remote
         "postgresql+psycopg://u:p@127.0.0.1:5432/gawachabazaar",  # local but unsafe name/port
     ],
 )
@@ -177,7 +177,7 @@ def test_real_fixtures_refuse_unsafe_configuration_before_connecting(test_url: s
     """Runs a fresh pytest session whose DB-backed fixtures must abort with
     UnsafeTestDatabaseError, and whose global engine is the unroutable sentinel."""
     env = {k: v for k, v in os.environ.items() if k != "TEST_DATABASE_URL"}
-    env["DATABASE_URL"] = "postgresql+psycopg://u:p@dpg-x-a.oregon-postgres.render.com/gawachabazaar_demo_db"
+    env["DATABASE_URL"] = "postgresql+psycopg://u:p@db.us-east-1.rds.amazonaws.com/gawachabazaar_demo_db"
     if test_url:
         env["TEST_DATABASE_URL"] = test_url
     proc = subprocess.run(  # noqa: S603 - fixed argv, test-only

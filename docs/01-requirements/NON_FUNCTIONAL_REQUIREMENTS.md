@@ -13,7 +13,7 @@
 | DB connection pool | `pool_size=5`, `max_overflow=10`, `pool_pre_ping=True`; default `pool_timeout` | Enforced | [`db/session.py`](../../backend/app/db/session.py) |
 | Upload size | Images ≤ 8 MB, types JPEG/PNG/WebP/GIF; Caddy caps request bodies at 10 MB | Enforced | [`image_upload.py`](../../backend/app/services/image_upload.py), [`deploy/Caddyfile`](../../deploy/Caddyfile) |
 | Delivery quote latency | Routing call timeout 3 s (`ROUTING_TIMEOUT_SECONDS`), results cached per ~11 m coordinate cell, no fallback (503 when routing is down) | Enforced | [`delivery.py`](../../backend/app/services/delivery.py) |
-| Cold start on Render | The Render service answered `/health` after 44 s when idle (observed 2026-10-14); the mobile client's default timeout is 15 s, with a 60 s warm-up ping | Observed | [`mobile/src/api/client.ts`](../../mobile/src/api/client.ts) |
+| Cold start on AWS | The AWS backend answered `/health` after 44 s when idle (observed 2026-10-14); the mobile client's default timeout is 15 s, with a 60 s warm-up ping | Observed | [`mobile/src/api/client.ts`](../../mobile/src/api/client.ts) |
 
 ## 2. Availability and resilience
 

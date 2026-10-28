@@ -162,7 +162,7 @@ def test_firebase_uses_render_secret_file_when_env_is_empty(monkeypatch, tmp_pat
     key_file.write_text("{}")
     monkeypatch.setattr(settings, "FIREBASE_PROJECT_ID", "demo-project")
     monkeypatch.setattr(settings, "FIREBASE_SERVICE_ACCOUNT_JSON", "")
-    monkeypatch.setattr(firebase, "RENDER_SECRET_FILE", str(key_file))
+    monkeypatch.setattr(firebase, "SECRET_FILE_FALLBACK", str(key_file))
     loaded = []
 
     import firebase_admin

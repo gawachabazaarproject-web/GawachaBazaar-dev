@@ -76,7 +76,7 @@ tests/test_db_safety.py::test_missing_or_blank_fails_closed[None] PASSED [  7%]
 tests/test_db_safety.py::test_missing_or_blank_fails_closed[] PASSED     [  7%]
 tests/test_db_safety.py::test_missing_or_blank_fails_closed[   ] PASSED  [  7%]
 tests/test_db_safety.py::test_database_url_alone_is_never_used PASSED    [  7%]
-tests/test_db_safety.py::test_unsafe_targets_are_rejected[postgresql+psycopg://u:p@dpg-x-a.oregon-postgres.render.com/gawachabazaar_test_demo_db-not loopback] PASSED [  7%]
+tests/test_db_safety.py::test_unsafe_targets_are_rejected[postgresql+psycopg://u:p@db.us-east-1.rds.amazonaws.com/gawachabazaar_test_demo_db-not loopback] PASSED [  7%]
 tests/test_db_safety.py::test_unsafe_targets_are_rejected[postgresql+psycopg://u:p@10.0.0.5:15432/x_test-not loopback] PASSED [  7%]
 tests/test_db_safety.py::test_unsafe_targets_are_rejected[postgresql+psycopg://u:p@0.0.0.0:15432/x_test-not loopback] PASSED [  8%]
 tests/test_db_safety.py::test_unsafe_targets_are_rejected[postgresql+psycopg://u:p@127.0.0.1.evil.com:15432/x_test-not loopback] PASSED [  8%]
@@ -89,7 +89,7 @@ tests/test_db_safety.py::test_unsafe_targets_are_rejected[postgresql+psycopg://u
 tests/test_db_safety.py::test_unsafe_targets_are_rejected[postgresql+psycopg://u:p@127.0.0.1:15432/gawachabazaar_test_demo_db-must match] PASSED [  8%]
 tests/test_db_safety.py::test_unsafe_targets_are_rejected[postgresql+psycopg://u:p@127.0.0.1:15432/Prod_test-must match] PASSED [  9%]
 tests/test_db_safety.py::test_unsafe_targets_are_rejected[postgresql+psycopg://u:p@127.0.0.1:15432/-must match] PASSED [  9%]
-tests/test_db_safety.py::test_unsafe_targets_are_rejected[postgresql+psycopg://u:p@127.0.0.1:15432/x_test?host=db.render.com-redirect] PASSED [  9%]
+tests/test_db_safety.py::test_unsafe_targets_are_rejected[postgresql+psycopg://u:p@127.0.0.1:15432/x_test?host=db.us-east-1.rds.amazonaws.com-redirect] PASSED [  9%]
 tests/test_db_safety.py::test_unsafe_targets_are_rejected[postgresql+psycopg://u:p@127.0.0.1:15432/x_test?hostaddr=8.8.8.8-redirect] PASSED [  9%]
 tests/test_db_safety.py::test_unsafe_targets_are_rejected[postgresql+psycopg://u:p@127.0.0.1:15432/x_test?service=prod-redirect] PASSED [  9%]
 tests/test_db_safety.py::test_unsafe_targets_are_rejected[mysql://u:p@127.0.0.1:15432/x_test-driver] PASSED [  9%]
@@ -112,7 +112,7 @@ tests/test_db_safety.py::test_unknown_libpq_query_keys_are_refused[?load_balance
 tests/test_db_safety.py::test_allow_listed_query_keys_pass PASSED        [ 11%]
 tests/test_db_safety.py::test_global_engine_is_pinned_to_loopback_so_app_code_cannot_reach_a_real_db PASSED [ 11%]
 tests/test_db_safety.py::test_real_fixtures_refuse_unsafe_configuration_before_connecting[] PASSED [ 11%]
-tests/test_db_safety.py::test_real_fixtures_refuse_unsafe_configuration_before_connecting[postgresql+psycopg://u:p@dpg-x-a.oregon-postgres.render.com:5432/gawachabazaar_test_demo_db] PASSED [ 11%]
+tests/test_db_safety.py::test_real_fixtures_refuse_unsafe_configuration_before_connecting[postgresql+psycopg://u:p@db.us-east-1.rds.amazonaws.com:5432/gawachabazaar_test_demo_db] PASSED [ 11%]
 tests/test_db_safety.py::test_real_fixtures_refuse_unsafe_configuration_before_connecting[postgresql+psycopg://u:p@127.0.0.1:5432/gawachabazaar] PASSED [ 11%]
 tests/test_db_safety.py::test_sentinel_is_unroutable PASSED              [ 12%]
 tests/test_delivery_fee.py::test_fifteen_items_ships_free PASSED         [ 12%]
@@ -908,7 +908,7 @@ tests/test_stock_reserve_and_deletes.py::test_delete_endpoints_need_the_right_pe
 45.42s call     tests/test_authz_matrix.py::test_every_operation_matches_the_reviewed_authorization_snapshot
 6.77s call     tests/test_admin_dashboard.py::test_dashboard_reflects_todays_operations
 6.09s call     tests/test_db_safety.py::test_real_fixtures_refuse_unsafe_configuration_before_connecting[postgresql+psycopg://u:p@127.0.0.1:5432/gawachabazaar]
-5.96s call     tests/test_db_safety.py::test_real_fixtures_refuse_unsafe_configuration_before_connecting[postgresql+psycopg://u:p@dpg-x-a.oregon-postgres.render.com:5432/gawachabazaar_test_demo_db]
+5.96s call     tests/test_db_safety.py::test_real_fixtures_refuse_unsafe_configuration_before_connecting[postgresql+psycopg://u:p@db.us-east-1.rds.amazonaws.com:5432/gawachabazaar_test_demo_db]
 4.90s call     tests/test_db_safety.py::test_real_fixtures_refuse_unsafe_configuration_before_connecting[]
 2.81s call     tests/test_phase_16_fulfillment_delivery.py::test_27_delivery_partner_a_cannot_touch_partner_bs_fulfillment
 2.57s call     tests/test_phase_17_supplier_bulk_commerce.py::test_39_order_id_backstop_set_after_conversion_and_unique

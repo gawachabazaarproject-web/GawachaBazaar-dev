@@ -1,6 +1,6 @@
 # Multi-replica correctness analysis
 
-**Why this matters here:** `k8s/base/backend-hpa.yaml` scales the backend 1→3 pods at 70 % CPU of a **250 m request** (pod limit 1 core). Scale-out therefore starts at modest load, so >1 replica is an ordinary operating condition, not an edge case. (The Render deployment, if it is also serving, is a separate single instance; the traffic split between Render and AWS is unresolved.)
+**Why this matters here:** `k8s/base/backend-hpa.yaml` scales the backend 1→3 pods at 70 % CPU of a **250 m request** (pod limit 1 core). Scale-out therefore starts at modest load, so >1 replica is an ordinary operating condition, not an edge case. (The AWS deployment, if it is also serving, is a separate single instance; the traffic split between AWS and AWS is unresolved.)
 
 **Method:** two real `uvicorn` processes (same flags as `start.sh`, 1 worker each) sharing one disposable PostgreSQL 16 database; harness `backend/tests/multiproc/run_scenarios.py`; raw results `docs/testing/evidence/multireplica/results.json` and replica logs. A portable Firebase fake lets both replicas accept the same tokens, like real Firebase tokens verify on any pod.
 
@@ -18,4 +18,4 @@
 - **Not demonstrated to need Redis or a queue.** Every gap above has a PostgreSQL-only remedy; no new infrastructure is proposed. Any change requires approval.
 
 ## Limits of this analysis
-Local processes on one machine, not an EKS cluster; ALB behaviour (XFF handling, connection draining, sticky sessions) not observed; Render-vs-AWS traffic path unknown.
+Local processes on one machine, not an EKS cluster; ALB behaviour (XFF handling, connection draining, sticky sessions) not observed; VPS-vs-AWS traffic path unknown.

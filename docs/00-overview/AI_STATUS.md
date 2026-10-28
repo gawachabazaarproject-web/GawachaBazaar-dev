@@ -3,6 +3,19 @@
 > **Last verified:** 2026-10-14 (≈ 12:00–13:10 IST), branch `docs-and-primary-testing`, `HEAD` `8d6229e` ("chore(mobile): link EAS project under yash145"), **dirty working tree** (see §5).
 > **Purpose:** the "where are we right now" page for agents and developers: what works (and how that was checked), what is broken or unverified, what changed recently *according to the repository*, and what to do next. **Update this file whenever active development status, blockers or priorities change** ([AGENTS.md](../../AGENTS.md)). It is a snapshot; where it conflicts with the code or a fresh test run, trust those.
 
+## 0b. Pre-production verification - 2026-10-28 (uncommitted fixes on `feat/delivery-routing-aws-prep`)
+
+| Check | Result |
+|---|---|
+| Full backend suite (scratch PostgreSQL 16, loopback 15432, `pytest -p no:cacheprovider`) | **1698 passed, 17 skipped, 0 failed** (42 min); the 3 files touching the later `inventory_reservation.py` rename re-run: 84 passed |
+| `alembic upgrade head` on an empty DB + `alembic check` | single head `e5f6a7b80923`; "No new upgrade operations detected" |
+| Ruff | 2 findings left, both in `tests/multiproc` harness scripts (F841); app code clean |
+| `tsc --noEmit` mobile, Admin, website | all exit 0 |
+| Admin `next build` | passes; Admin `node --test`: was **2 of 3 files failing** (the base-units commit imported `@/lib/units`, which plain Node cannot resolve) -> fixed with relative `./units.ts` imports + `allowImportingTsExtensions`; now 13/13 |
+| Fixes | `inventory_reservation.py` E741 renames; mobile `resolveBaseUrl` only derives the Metro LAN host when `__DEV__` (a release build/OTA must use `EXPO_PUBLIC_API_BASE_URL`) |
+
+**Not verified:** production database/data (the base-units migration refuses to run if any size is not a whole number of g/ml/pieces), production environment variables, any device or browser run, real Razorpay/Firebase/FCM.
+
 ## 0a. Inventory canonical base units - status on 2026-10-27 (committed to the feature branch, NOT deployed)
 
 Stock is accounted in exact integer grams / ml / pieces (migration `e5f6a7b80923`; model and rules in [INVENTORY](../05-domains/INVENTORY.md#quantity-model-exact-base-units-2026-10-27)).
@@ -51,9 +64,9 @@ Stock is accounted in exact integer grams / ml / pieces (migration `e5f6a7b80923
 | Route inventory vs OpenAPI | AST of `api/v1/*.py` vs `app.openapi()` | 193 routes + `/health`, `/health/db`, `/ping` = **196 operations** (12 public) + 1 WebSocket; sets equal |
 | Auth column vs golden matrix | derived roles/permissions vs `authz_golden.json` | 180/180 gated operations match |
 | Type checks | `npx tsc --noEmit` in `Admin/` and `mobile/`, re-run at ≈ 12:56 IST **after** the other session's mobile edits (§5) | exit code 0, no diagnostics in both |
-| Live probes (read-only GET) | Render backend | `/health` → 200 `environment: production`; sign-in verification returns 401 for a garbage token (503 during the earlier incident) |
+| Live probes (read-only GET) | AWS backend | `/health` → 200 `environment: production`; sign-in verification returns 401 for a garbage token (503 during the earlier incident) |
 
-**Not run:** any frontend test (none exist), `multiproc` harness, live Razorpay/Firebase/Expo/Cloudinary calls, `npm install`/`expo`/EAS builds, docker compose stacks, VPS/EKS/Render deployments, backup/restore, `next lint`.
+**Not run:** any frontend test (none exist), `multiproc` harness, live Razorpay/Firebase/Expo/Cloudinary calls, `npm install`/`expo`/EAS builds, docker compose stacks, VPS/EKS deployments, backup/restore, `next lint`.
 
 ## 2. Component status
 
@@ -65,7 +78,7 @@ Stock is accounted in exact integer grams / ml / pieces (migration `e5f6a7b80923
 | Customer app | Implemented; no automated tests; unreleased UI changes in the working tree | §5 |
 | Admin panel | Implemented except placeholders (Reports, Reviews, Audit Log); usability pass 2026-10-17 (grouped/sticky/mobile nav, working search, Delivery queue page, error/404 pages, Docker Firebase build args) — `tsc` and `next build` pass, **not exercised signed-in**; no automated tests; hosting unclear | [ADMIN_OPERATIONS](../05-domains/ADMIN_OPERATIONS.md) |
 | Promo website | Static marketing pages, no API | – |
-| Deployment | **Unresolved** (VPS vs EKS vs Render vs Vercel) | [DEPLOYMENT](../09-deployment-operations/DEPLOYMENT.md) |
+| Deployment | **Unresolved** (VPS vs EKS vs AWS vs Vercel) | [DEPLOYMENT](../09-deployment-operations/DEPLOYMENT.md) |
 | Observability, backups, incident process | Largely absent | [PRODUCTION_READINESS](../10-project-management/PRODUCTION_READINESS.md) |
 | Bazaar+ benefits, reviews, reports, audit viewer, farm traceability | Planned / placeholder | [ROADMAP](../10-project-management/ROADMAP.md) |
 
@@ -122,7 +135,7 @@ The latest EAS OTA update availability was **not** checked; the installed APK li
 
 ## 6. Recommended next steps (grounded in the findings above)
 
-1. Rotate the committed key (SECR-1) and confirm Render's production variables (CFG-1, FEE-1/O-3).
+1. Rotate the committed key (SECR-1) and confirm AWS's production variables (CFG-1, FEE-1/O-3).
 2. Fix the 7 fee-dependent tests; then PAY-001; then a CI gate that runs ruff + pytest + `alembic check` + `tsc` ([TASKS](../10-project-management/TASKS.md) E-1…E-3).
 3. Review the three mobile change groups separately and commit them as separate commits (type checks were clean at ≈ 12:56 IST, but others are still editing `mobile/`; re-run before committing).
 4. Resolve the deployment ambiguity and the Admin Firebase-config path (O-2, E-5).

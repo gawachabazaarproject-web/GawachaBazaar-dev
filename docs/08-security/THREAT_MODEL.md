@@ -10,7 +10,7 @@
 | Stock integrity | `inventory_lots`, reservations | Overselling, free goods, spoilage hidden |
 | Customer personal data (name, email, phone, addresses with GPS, order history) | `users`, `addresses`, `orders`, `order_addresses`, `customer_notes` | Privacy and safety (home addresses) |
 | Staff accounts and roles | Firebase + `user_roles` | Full control of prices, refunds, stock, customers |
-| Server secrets | Render/VPS/K8s env, service-account key, Razorpay secrets, DB credential | Total compromise |
+| Server secrets | AWS/VPS/K8s env, service-account key, Razorpay secrets, DB credential | Total compromise |
 | Availability of sign-in and checkout | Backend + Firebase + DB | Revenue; observed to fail platform-wide on 2026-10-14 due to a configuration value |
 | Brand/content integrity | home slides, ads, offers, product data | Defacement, misleading promotions |
 
@@ -26,7 +26,7 @@ flowchart LR
     U[Customer app / Admin browser / internet]
   end
   subgraph edge
-    E[Caddy / ALB / Render TLS]
+    E[Caddy / ALB / AWS TLS]
   end
   subgraph trusted["Backend (trust boundary: verify token, re-check roles, recompute money)"]
     B[FastAPI]
@@ -67,7 +67,7 @@ Rules that define the boundary: the client is never trusted for identity (token 
 | T11 | Leak secrets | `.env*` ignored; secrets only in host env | **SECR-1** key committed in `.mcp.json`; plaintext DB credential in a local `.env`; no secret scanning |
 | T12 | Supply-chain compromise (dependency, base image, CI) | Lockfiles for JS; fixed Node/Python major versions | No Python lockfile, no scanning, floating image tags, CI deploys on push with no checks |
 | T13 | Destroy data by mistake (test suite, scripts, migration) | DB-safety policy for tests; migrations transactional; compose gate | Seed scripts and multiproc harness can drop data if pointed at the wrong DB (guarded only for `*_test`); no restore drill |
-| T14 | Denial of service / overload | Gzip, health probes, Caddy body cap | **PERF-001:** pool starvation → 100 % timeouts and ~6 min recovery at ~100 concurrent users; HPA scales on CPU which does not move; no WAF/CDN; Render cold start ≈ 44 s |
+| T14 | Denial of service / overload | Gzip, health probes, Caddy body cap | **PERF-001:** pool starvation → 100 % timeouts and ~6 min recovery at ~100 concurrent users; HPA scales on CPU which does not move; no WAF/CDN; AWS cold start ≈ 44 s |
 | T15 | Insider data scraping (staff) | Role-limited endpoints; SUPPORT is read-only with masked phone | **PRIV-1:** order detail exposes phone/email to `orders.read`; no bulk-export endpoint exists, but reads of personal data are not access-logged |
 | T16 | Silent configuration failure (e.g. bad secret → all sign-ins 503; missing env → dev defaults) | Production start-up validation (partial) | Observed on 2026-10-14; CFG-1 |
 | T17 | Third-party outage (Firebase, Razorpay, routing, Expo) | Documented fallbacks: routing → quote/checkout fail closed (503), no guess; payments → COD; push best-effort | Firebase/Razorpay outage blocks sign-in/online payment by design; no status monitoring |
@@ -75,8 +75,8 @@ Rules that define the boundary: the client is never trusted for identity (token 
 
 ## 5. Assumptions
 
-Razorpay and Firebase behave as documented; the proxy in front of the backend overwrites `X-Forwarded-For` (true for Caddy; **not verified** for ALB/Render); the single-process deployment assumption holds; staff are not expected to be adversarial beyond the roles' permissions.
+Razorpay and Firebase behave as documented; the proxy in front of the backend overwrites `X-Forwarded-For` (true for Caddy; **not verified** for ALB/AWS); the single-process deployment assumption holds; staff are not expected to be adversarial beyond the roles' permissions.
 
 ## 6. Recommended next analysis (not done)
 
-Authenticated dynamic testing against a staging copy; Firebase App Check; review of Cloudinary upload presets and delivery URLs; review of the Render/EKS/VPS network exposure; threat modelling of the order-first payment path under a live Razorpay sandbox.
+Authenticated dynamic testing against a staging copy; Firebase App Check; review of Cloudinary upload presets and delivery URLs; review of the EKS/VPS network exposure; threat modelling of the order-first payment path under a live Razorpay sandbox.

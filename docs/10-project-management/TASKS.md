@@ -9,14 +9,14 @@ Legend: **P0** = fix before relying on the system for real money/customers · **
 | # | Task | Why | Evidence | Pri |
 |---|---|---|---|---|
 | O-1 | Rotate/revoke the API key committed in `.mcp.json`, then untrack the file | Key in git history and echoed during this audit | SECR-1 | P0 |
-| O-2 | Decide which deployment is production (VPS, EKS, Render, Admin on Vercel) and retire or label the others; document where Admin is built and how its Firebase config is injected | Docs and CI describe different targets; AWS hostname does not serve the API | DEP-1/DEP-2/ADM-1 | P0 |
-| O-3 | Confirm Render environment: `APP_ENV=production`, `DEBUG=False`, real `ALLOWED_ORIGINS`, `DELIVERY_BASE_FEE` (40?), valid or absent `FIREBASE_SERVICE_ACCOUNT_JSON` | Defaults are dev-oriented; fee change may be overridden | CFG-1, FEE-1 | P0 |
+| O-2 | Decide which deployment is production (VPS, EKS, Admin on Vercel) and retire or label the others; document where Admin is built and how its Firebase config is injected | Docs and CI describe different targets | DEP-1/DEP-2/ADM-1 | P0 |
+| O-3 | Confirm AWS environment: `APP_ENV=production`, `DEBUG=False`, real `ALLOWED_ORIGINS`, `DELIVERY_BASE_FEE` (40?), valid or absent `FIREBASE_SERVICE_ACCOUNT_JSON` | Defaults are dev-oriented; fee change may be overridden | CFG-1, FEE-1 | P0 |
 | O-4 | Fill in the real support email/phone in the app | Placeholders visible to customers | UI-3 | P0 (launch) |
 | O-5 | Obtain or confirm FCM credentials for the `yash145` EAS project; register the build SHA-1 in Firebase (done for sign-in on 2026-10-14) | Push delivery unverified; Google Sign-In needs registered keys | NOTIFICATIONS | P1 |
 | O-6 | Provide an opt-in staging environment + Razorpay test keys for end-to-end payment testing | Live Razorpay flows have never been exercised | BASELINE_AUDIT §4 | P1 |
 | O-7 | Decide retention, account-deletion and export policy; review privacy obligations | No policy, constraints block deletion | DATA-1, PRIVACY | P1 |
 | O-8 | Decide what Bazaar+ and the `WHOLESALER` role should do (or remove the claims) | Advertised benefits do not exist | BAZ-1, WHL-1 | P2 |
-| O-9 | Run a real backup **restore drill**; set up off-site, encrypted backups; confirm Render/EKS database backups | Backups never restored | BAK-1 | P0 |
+| O-9 | Run a real backup **restore drill**; set up off-site, encrypted backups; confirm EKS database backups | Backups never restored | BAK-1 | P0 |
 
 ## Engineering tasks
 

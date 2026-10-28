@@ -77,7 +77,7 @@ npx tsc --noEmit                   # Verified 2026-10-14: no diagnostics
 ```
 
 - `google-services.json` is git-ignored; place it next to `app.config.js` or set `GOOGLE_SERVICES_JSON` (EAS file secret).
-- Backend URL: in a dev client the app derives `http://<Metro host>:8000/api/v1` unless `EXPO_PUBLIC_API_URL_OVERRIDE` / `EXPO_PUBLIC_API_BASE_URL` is set. **Caution:** the local `mobile/.env` in this checkout sets the override to the hosted Render backend, so a dev build talks to that deployment, not to your laptop.
+- Backend URL: in a dev client the app derives `http://<Metro host>:8000/api/v1` unless `EXPO_PUBLIC_API_URL_OVERRIDE` / `EXPO_PUBLIC_API_BASE_URL` is set. **Caution:** the local `mobile/.env` in this checkout sets the override to the hosted backend, so a dev build talks to that deployment, not to your laptop.
 - Google Sign-In on a device requires your build's signing SHA-1 registered in the Firebase Android app (otherwise `DEVELOPER_ERROR` code 10).
 - `npm run web` (Expo web) currently crashes at start-up on `ExpoNotifications.getLastNotificationResponse` (unsupported on web) — **observed 2026-10-14** — so the web target is not usable as a preview.
 - There are no `lint` or `test` scripts in `mobile/package.json`.

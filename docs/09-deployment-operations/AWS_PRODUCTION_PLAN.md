@@ -2,7 +2,7 @@
 
 > **Status (2026-10-27): preparation only. Nothing has been deployed to AWS.** No AWS account, CLI or credentials were available, so every statement about AWS behaviour below is either (a) a list price downloaded from AWS's public price list, (b) a design decision, or (c) explicitly marked **NOT VERIFIED**. Everything marked *measured* was measured on the developer's Windows laptop (13th-gen Intel i5, Docker Desktop) with the test environment described in section 6 - **not on AWS and not on production hardware**.
 >
-> Related: [DELIVERY](../05-domains/DELIVERY.md) (routing/pricing), [DEPLOYMENT](DEPLOYMENT.md) (the existing Contabo/EKS/Render descriptions), [`docker-compose.aws.yml`](../../docker-compose.aws.yml), [`deploy/osrm/`](../../deploy/osrm), [`.forgejo/workflows/`](../../.forgejo/workflows).
+> Related: [DELIVERY](../05-domains/DELIVERY.md) (routing/pricing), [DEPLOYMENT](DEPLOYMENT.md) (the existing Contabo/EKS descriptions), [`docker-compose.aws.yml`](../../docker-compose.aws.yml), [`deploy/osrm/`](../../deploy/osrm), [`.forgejo/workflows/`](../../.forgejo/workflows).
 
 ## 1. Current architecture (audited)
 
@@ -218,7 +218,7 @@ Alarms (about 8): EC2 `StatusCheckFailed`, EC2 CPU > 80% for 10 min, **memory us
 4. Create SSM parameters under `/gawacha/staging/` (DATABASE_URL with `?sslmode=require`, Firebase project id/service account, Razorpay **test** keys + webhook secret, Cloudinary, `PACKING_POINT_*` **= the real warehouse coordinates**, `NOMINATIM_USER_AGENT`).
 5. Launch EC2 `t4g.medium` (Amazon Linux 2023 ARM), instance profile, 30 GB gp3, Elastic IP; install Docker (`deploy/scripts/bootstrap-server.sh` as a base; skip SSH hardening that assumes port 22).
 6. Clone the repo to `/opt/gawachabazaar`; run `deploy/osrm/build.sh` with `OUT=/opt/gawachabazaar/osrm-data`; set `OSRM_DATA_DIR`.
-7. Render `.env.aws` from SSM; `ENV_FILE=.env.aws COMPOSE_FILE_NAME=docker-compose.aws.yml deploy/scripts/deploy.sh` (migrations run first); create the first admin (`backend/scripts/create_admin.py`); in Admin -> Settings choose the packing point.
+7. AWS `.env.aws` from SSM; `ENV_FILE=.env.aws COMPOSE_FILE_NAME=docker-compose.aws.yml deploy/scripts/deploy.sh` (migrations run first); create the first admin (`backend/scripts/create_admin.py`); in Admin -> Settings choose the packing point.
 8. DNS (Route 53): `api-staging`, `admin-staging`, `staging` A records -> the Elastic IP; Caddy obtains certificates.
 9. `deploy/scripts/smoke-test.sh .env.aws`; check `/readiness`.
 10. Mobile: build a *preview* profile with `EXPO_PUBLIC_API_BASE_URL` = staging API and the **staging Firebase project**; log in with a Firebase test user.

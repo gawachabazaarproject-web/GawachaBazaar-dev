@@ -3,7 +3,7 @@
 Used on 2026-10-27 to run the real app on a Xiaomi phone (Android 14) with **real Firebase login** and **Razorpay test mode**, against a **local disposable database**. Results: [AWS_PRODUCTION_PLAN.md](../09-deployment-operations/AWS_PRODUCTION_PLAN.md) section 6.4.
 
 ## Safety rules
-- `backend/.env` may contain the **hosted (Render) `DATABASE_URL`**. Never start the backend for a device test without overriding `DATABASE_URL` to a local `*_test` database. Environment variables override `.env`; do not rely on `.env`.
+- `backend/.env` may contain the **hosted `DATABASE_URL`**. Never start the backend for a device test without overriding `DATABASE_URL` to a local `*_test` database. Environment variables override `.env`; do not rely on `.env`.
 - Use Razorpay **test** keys only (`rzp_test_...`). The launcher used for the run refuses to start otherwise.
 - The debug build is installed as a **different application id** so the user's production app is untouched.
 

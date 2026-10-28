@@ -24,7 +24,9 @@ function resolveBaseUrl(): string {
   if (override) return override;
   const hostUri = Constants.expoConfig?.hostUri;
   const host = hostUri?.split(":")[0];
-  if (host) return `http://${host}:${BACKEND_PORT}/api/v1`;
+  // Release builds (and OTA updates) must never derive a cleartext LAN host: only
+  // a dev client has a Metro host worth reusing.
+  if (host && __DEV__) return `http://${host}:${BACKEND_PORT}/api/v1`;
   return process.env.EXPO_PUBLIC_API_BASE_URL ?? "";
 }
 
@@ -80,7 +82,7 @@ export const apiClient = axios.create({
 });
 
 /** Fire-and-forget ping to the dependency-free /health route so a sleeping
- * host (Render's free tier spins down when idle) starts waking while the
+ * host (one that spins down when idle) starts waking while the
  * splash screen and font load run, instead of on the first real request. */
 export function warmBackend(): void {
   if (!BASE_URL) return;

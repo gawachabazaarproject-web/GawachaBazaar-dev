@@ -41,7 +41,7 @@ Without it the gateway uses anonymous credentials so token verification still wo
 
 ### Observed incident (2026-10-14)
 
-Every client showed "Could not validate credentials." and then "Sign-in is temporarily unavailable". The Render service had `FIREBASE_SERVICE_ACCOUNT_JSON` set to a **file path** (`/etc/secrets/firebase-service-account.json`) with no usable file behind it. `_get_app()` treats a non-file value as inline JSON, raised "not valid JSON", and every token verification returned 503. Deleting the variable restored password sign-in (verified by the user). Lesson recorded in [KNOWN_ISSUES](../10-project-management/KNOWN_ISSUES.md): a bad service-account value takes down all sign-ins even though token verification does not need it. A proposed fix (fall back to anonymous credentials when the account fails to load) was offered but **not implemented**.
+Every client showed "Could not validate credentials." and then "Sign-in is temporarily unavailable". The AWS backend had `FIREBASE_SERVICE_ACCOUNT_JSON` set to a **file path** (`/etc/secrets/firebase-service-account.json`) with no usable file behind it. `_get_app()` treats a non-file value as inline JSON, raised "not valid JSON", and every token verification returned 503. Deleting the variable restored password sign-in (verified by the user). Lesson recorded in [KNOWN_ISSUES](../10-project-management/KNOWN_ISSUES.md): a bad service-account value takes down all sign-ins even though token verification does not need it. A proposed fix (fall back to anonymous credentials when the account fails to load) was offered but **not implemented**.
 
 ## Business rules and constraints
 
@@ -60,7 +60,7 @@ Every client showed "Could not validate credentials." and then "Sign-in is tempo
 | Firebase public-key fetch fails | 503 `AUTH_UNAVAILABLE` |
 | Token for another Firebase project | 401 "Could not validate credentials." |
 | Token expired mid-session | 401 `TOKEN_EXPIRED`; clients refresh once and retry |
-| Backend asleep (Render cold start ≈ 44 s) | Mobile retries sync with back-off and shows a loader; first request may exceed the 15 s client timeout |
+| Backend asleep (AWS cold start ≈ 44 s) | Mobile retries sync with back-off and shows a loader; first request may exceed the 15 s client timeout |
 | User disabled in Firebase | Refused after the (cached 60 s) revocation lookup — only when the service account is configured |
 
 ## Security notes and gaps

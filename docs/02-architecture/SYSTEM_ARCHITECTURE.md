@@ -15,7 +15,7 @@ flowchart LR
   subgraph Edge["Edge (differs per deployment)"]
     C[Caddy - VPS compose]
     L[AWS ALB - EKS manifests]
-    R[Render service - live backend]
+    R[AWS backend - live backend]
   end
   subgraph Backend["FastAPI backend (1 process)"]
     MW[Middleware<br/>CORS - SecurityHeaders - RequestID - GZip]

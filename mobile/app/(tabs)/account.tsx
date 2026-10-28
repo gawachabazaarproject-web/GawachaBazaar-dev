@@ -56,6 +56,17 @@ export default function AccountScreen() {
         { icon: "settings", label: "Settings", onPress: () => router.push("/account/settings") },
       ],
     },
+    {
+      label: "HELP & LEGAL",
+      items: [
+        { icon: "file-text", label: "Terms & Conditions", onPress: () => router.push("/account/legal/terms" as never) },
+        { icon: "shield", label: "Privacy Policy", onPress: () => router.push("/account/legal/privacy" as never) },
+        { icon: "rotate-ccw", label: "Cancellation, Return & Refund", onPress: () => router.push("/account/legal/refund" as never) },
+        { icon: "truck", label: "Shipping & Delivery", onPress: () => router.push("/account/legal/shipping" as never) },
+        { icon: "headphones", label: "Contact Us", onPress: () => router.push("/account/support") },
+        { icon: "book-open", label: "More policies", onPress: () => router.push("/account/legal" as never) },
+      ],
+    },
   ];
 
   const initial = user?.name?.trim().charAt(0).toUpperCase() || "?";

@@ -28,7 +28,7 @@ class Settings(BaseSettings):
     # Google OAuth, phone OTP); this backend only verifies Firebase ID
     # tokens with the Admin SDK and maps the verified UID to a `users` row.
     # FIREBASE_SERVICE_ACCOUNT_JSON is the service-account key JSON as a
-    # single secret env value (Render secret) - never commit it. When it is
+    # single secret env value (host secret) - never commit it. When it is
     # empty, Application Default Credentials (GOOGLE_APPLICATION_CREDENTIALS)
     # are used instead. ID-token verification itself only needs the
     # project id; the key is needed for admin operations (creating staff

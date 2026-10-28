@@ -36,11 +36,11 @@ Legend — **When:** *runtime* = read when the process starts/handles requests; 
 | `BAZAAR_PLUS_ORDERS_REQUIRED`, `BAZAAR_TIMEZONE` | Bazaar+ threshold and month boundary zone | No | runtime | No | `6`, `Asia/Kolkata` |
 | `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET` | Image uploads; empty ⇒ uploads return 503 | No | runtime | key + secret **Yes** | empty |
 | `ALLOWED_ORIGINS` | CORS allow-list; JSON list or comma-separated | No (but needed for browser clients) | runtime | No | `["http://localhost:3000","http://localhost:5173"]` |
-| `PORT` (Render) | Injected by the host; `start.sh` honours it | – | runtime | No | – |
+| `PORT` | Injected by the host; `start.sh` honours it | – | runtime | No | – |
 
 Start-up validation in production (`check_production_secrets`): empty `FIREBASE_PROJECT_ID`, or `RAZORPAY_KEY_ID` without both Razorpay secrets, aborts start-up. It does **not** check `DEBUG`, `ALLOWED_ORIGINS`, or the default `DATABASE_URL` (RISK_REGISTER R-17).
 
-Legacy/unused: `JWT_SECRET_KEY`, `JWT_ALGORITHM`, `ACCESS_TOKEN_EXPIRE_MINUTES`, `REFRESH_TOKEN_EXPIRE_DAYS` are **not read by any code** (the Firebase migration removed them; `deploy/FIREBASE_AUTH.md` says they can be deleted from Render; a stale `JWT_SECRET_KEY` was found in a developer `.env`).
+Legacy/unused: `JWT_SECRET_KEY`, `JWT_ALGORITHM`, `ACCESS_TOKEN_EXPIRE_MINUTES`, `REFRESH_TOKEN_EXPIRE_DAYS` are **not read by any code** (the Firebase migration removed them; `deploy/FIREBASE_AUTH.md` says they can be deleted from the backend environment; a stale `JWT_SECRET_KEY` was found in a developer `.env`).
 
 ## 2. Production Docker Compose (`docker-compose.prod.yml` + `.env.production`)
 

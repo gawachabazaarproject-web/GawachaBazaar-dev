@@ -21,7 +21,7 @@ interface RealtimeEvent {
  * common case (still connected) feel instant instead of waiting out that
  * poll interval. */
 const RECONNECT_DELAY_MS = 3000;
-/** Client->server ping cadence. Hosts' proxies (Render) silently drop idle
+/** Client->server ping cadence. Hosts' proxies silently drop idle
  * WebSockets, and a phone that was backgrounded often never fires onclose -
  * so the socket looks open while delivering nothing. The server answers each
  * ping; no frame at all for DEAD_AFTER_MS means the socket is dead. */

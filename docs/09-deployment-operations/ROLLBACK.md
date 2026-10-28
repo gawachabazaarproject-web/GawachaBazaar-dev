@@ -14,7 +14,7 @@
 |---|---|---|
 | **EKS (CI)** | `kubectl -n gawachabazaar rollout undo deployment/gawachabazaar-backend` (or `set image …:<previous SHA>`; images are tagged with the commit SHA and kept in Docker Hub) | Deployments keep revision history by default; the workflow adds the pull secret by patch. **The image runs `alembic upgrade head` on start**, so rolling back code does **not** roll back the schema; old code against a newer schema may break. Re-deploying a commit by pushing a revert to `main` re-runs the whole pipeline (no gates) |
 | **VPS compose** | `git checkout <previous-good commit>` then `deploy/scripts/deploy.sh` (rebuilds and restarts); images are tagged `latest` locally, so there is no stored previous image — rebuild from git | If a migration fails during an update the **old backend keeps running** (the `migrate` gate). A successful but bad migration needs a restore or a forward fix |
-| **Render** | Dashboard: redeploy a previous deploy/commit (not in the repository) | Same schema caveat; `start.sh` migrates on boot |
+| **AWS** | Dashboard: redeploy a previous deploy/commit (not in the repository) | Same schema caveat; `start.sh` migrates on boot |
 | **Config-only issue** | Restore the previous value of the environment variable and redeploy/restart | Example: removing a bad `FIREBASE_SERVICE_ACCOUNT_JSON` restored sign-in on 2026-10-14 |
 
 ## Database migrations

@@ -50,7 +50,7 @@
 | ID | Severity | Status | Issue | Evidence |
 |---|---|---|---|---|
 | CI-001 | High | Confirmed | Production (EKS) deploys on every push to `main` with no test, lint, scan or migration gate | [QUALITY_GATES](../07-testing/QUALITY_GATES.md) |
-| DEP-1 (new) | High | Unresolved | Three backend deployment descriptions (VPS compose, EKS, Render) plus Admin on Vercel; the repository cannot say which is production; the AWS hostname was found not to serve the API (commit `88d6090`) | [DEPLOYMENT](../09-deployment-operations/DEPLOYMENT.md) |
+| DEP-1 (new) | High | Unresolved | Three backend deployment descriptions (VPS compose, EKS) plus Admin on Vercel; the repository cannot say which is production; | [DEPLOYMENT](../09-deployment-operations/DEPLOYMENT.md) |
 | DEP-2 (new) | Medium | Confirmed | Two diverging K8s backend manifests; ALB ingress exposes no Admin route; Admin Deployment has no Firebase config | DEPLOYMENT |
 | ADM-1 (new) | High (for Docker/CI Admin) | Confirmed | The Admin image built by Docker/compose/CI receives no `NEXT_PUBLIC_FIREBASE_*` values (only the API URL), so sign-in cannot work in that image | [ENVIRONMENT_VARIABLES](../06-development/ENVIRONMENT_VARIABLES.md) §4 |
 | OPS-002 | Low–Med | Confirmed | Concurrent `alembic upgrade head` start-up race (6/6) | DEFECT_LOG |
@@ -59,8 +59,8 @@
 | OPS-5 (new) | Medium | Contradiction | K8s HPA scales the backend 1→3 although the design requires a single process | [DEPLOYMENT](../09-deployment-operations/DEPLOYMENT.md) |
 | PERF-001 | Medium | Confirmed (exploratory) | DB pool 5+10 vs 40 request threads ⇒ 100 users → 100 % timeouts, ~6 min recovery; CPU-based HPA cannot see it | [PERFORMANCE_RESULTS](../testing/PERFORMANCE_RESULTS.md) |
 | OBS-1 (new) | Medium | Confirmed | No metrics, error tracking, uptime monitoring or alerting; reconciliation markers are unmonitored | [MONITORING_AND_LOGGING](../09-deployment-operations/MONITORING_AND_LOGGING.md) |
-| BAK-1 (new) | High (if relied on) | Confirmed | Backups exist for the compose stack only, same disk, unencrypted, never restored; unknown for Render/EKS | [BACKUP_AND_RECOVERY](../09-deployment-operations/BACKUP_AND_RECOVERY.md) |
-| COLD-1 (new) | Medium (UX) | Observed 2026-10-14 | Render free-tier cold start ≈ 44 s vs a 15 s client timeout (mitigated by retries/loader in the working tree, uncommitted) | [NON_FUNCTIONAL_REQUIREMENTS](../01-requirements/NON_FUNCTIONAL_REQUIREMENTS.md) |
+| BAK-1 (new) | High (if relied on) | Confirmed | Backups exist for the compose stack only, same disk, unencrypted, never restored; unknown for EKS | [BACKUP_AND_RECOVERY](../09-deployment-operations/BACKUP_AND_RECOVERY.md) |
+| COLD-1 (new) | Medium (UX) | Observed 2026-10-14 | AWS cold start ≈ 44 s vs a 15 s client timeout (mitigated by retries/loader in the working tree, uncommitted) | [NON_FUNCTIONAL_REQUIREMENTS](../01-requirements/NON_FUNCTIONAL_REQUIREMENTS.md) |
 
 ## D. Product gaps and misleading UI
 
@@ -68,7 +68,7 @@
 |---|---|---|---|---|
 | UI-1 (new) | Medium | Confirmed | Admin **Reports**, **Reviews** and **Audit Log** pages are 19-line placeholders; the audit rows are written but only product/category activity feeds read them | [ADMIN_OPERATIONS](../05-domains/ADMIN_OPERATIONS.md) |
 | UI-2 (new) | Medium | Confirmed | Checkout's harvest/delivery slot picker is local state, never sent to the backend | [CART_AND_CHECKOUT](../05-domains/CART_AND_CHECKOUT.md) |
-| UI-3 (new) | High (launch) | Confirmed | Support screen shows placeholder contact details (`support@gawachabazaar.example`, `+91 12345 67890`); the deploy checklist lists this as unchecked | `mobile/app/account/support.tsx`, [`deploy/README.md`](../../deploy/README.md) |
+| UI-3 (new) | High (launch) | **Fixed 2026-10-28** (real contacts + in-app policy screens + website `/legal`; Grievance Officer name/WhatsApp still to supply) | Support screen shows placeholder contact details (`support@gawachabazaar.example`, `+91 12345 67890`); the deploy checklist lists this as unchecked | `mobile/app/account/support.tsx`, [`deploy/README.md`](../../deploy/README.md) |
 | BAZ-1 (new) | Low | Confirmed | Bazaar+ has no benefit; the app advertises five "upcoming" ones | [DELIVERY](../05-domains/DELIVERY.md) |
 | WHL-1 (new) | Low | Confirmed | `WHOLESALER` role grants nothing | [USER_ROLES_AND_PERMISSIONS](../01-requirements/USER_ROLES_AND_PERMISSIONS.md) |
 | PERM-1 (new) | Low | Confirmed | 10 of 41 permissions are not enforced via `require_permission` (UI-only or unused) | same |

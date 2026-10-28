@@ -18,12 +18,12 @@ The new app code (tap routing, token rotation) is JS-only and can ship by OTA on
 | File | Used by | Where it lives |
 |---|---|---|
 | `GOOGLE_SERVICES_JSON` (`google-services.json`) | the Android **app build** (EAS) | EAS file variable; local copy git-ignored in `mobile/` |
-| `google-services-account.json` (service-account key) | the **backend** Firebase Admin SDK (sign-in verification, staff/password admin) | Render Secret File, mounted at `/etc/secrets/google-services-account.json` |
+| `google-services-account.json` (service-account key) | the **backend** Firebase Admin SDK (sign-in verification, staff/password admin) | mounted secret file at `/etc/secrets/google-services-account.json` |
 
-`core/firebase.py` loads the Admin credential from `FIREBASE_SERVICE_ACCOUNT_JSON` (inline JSON or a file path) and, if that is empty, from `/etc/secrets/google-services-account.json` automatically. `FIREBASE_PROJECT_ID` must be set (production refuses to start without it). Local development: leave both empty (sign-in still verifies), or set `FIREBASE_SERVICE_ACCOUNT_JSON` to a git-ignored local key file path. Redeploy Render after adding or changing the secret file.
+`core/firebase.py` loads the Admin credential from `FIREBASE_SERVICE_ACCOUNT_JSON` (inline JSON or a file path) and, if that is empty, from `/etc/secrets/google-services-account.json` automatically. `FIREBASE_PROJECT_ID` must be set (production refuses to start without it). Local development: leave both empty (sign-in still verifies), or set `FIREBASE_SERVICE_ACCOUNT_JSON` to a git-ignored local key file path. Redeploy AWS after adding or changing the secret file.
 
 ## Things that are NOT needed
-- **No new Render variable.** Push goes through the Expo push service; the FCM V1 key lives in EAS. The Admin SDK credential is not used to send push.
+- **No new backend variable.** Push goes through the Expo push service; the FCM V1 key lives in EAS. The Admin SDK credential is not used to send push.
 - **EAS build needs `google-services.json`.** It is git-ignored, so a cloud build only gets it from an EAS file variable named `GOOGLE_SERVICES_JSON` (read by `mobile/app.config.js`). Check: `eas env:list` (preview environment). Without it the APK cannot obtain a push token.
 - APK for WhatsApp: `cd mobile && eas build --platform android --profile preview` (already APK + internal; `production` stays AAB).
 

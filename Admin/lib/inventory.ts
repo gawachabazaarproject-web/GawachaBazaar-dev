@@ -5,7 +5,7 @@
  * recomputed independently here.
  */
 
-import { AMOUNT_UNITS_BY_DIMENSION, UNITS, convert, dimensionOf, formatSize, packTotalText } from "@/lib/units";
+import { AMOUNT_UNITS_BY_DIMENSION, UNITS, convert, dimensionOf, formatSize, packTotalText } from "./units.ts";
 
 export interface AdminInventoryLotListItem {
   id: number;

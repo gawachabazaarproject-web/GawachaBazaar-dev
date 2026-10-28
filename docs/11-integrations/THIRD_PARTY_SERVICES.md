@@ -20,7 +20,6 @@
 
 | Service | Role | Evidence |
 |---|---|---|
-| **Render** | Hosts the backend (and its PostgreSQL) that the installed app talks to (probed `/health` 200 on 2026-10-14; free-tier cold start ≈ 44 s) | [DEPLOYMENT](../09-deployment-operations/DEPLOYMENT.md) |
 | **Vercel** | Admin panel hosting (per `Admin/.env.example` and an observed `*.vercel.app` login page) | – |
 | **Contabo VPS + Caddy + Let's Encrypt + Docker Compose** | Documented single-server production stack (not shown to be live) | `deploy/`, `docker-compose.prod.yml` |
 | **AWS EKS, ALB, ACM, ECR/Docker Hub** | CI/CD target and Kubernetes manifests (not shown to serve the API) | `.forgejo/workflows/deploy.yml`, `k8s/` |
@@ -34,7 +33,7 @@ No email, SMS or WhatsApp provider (Firebase sends its own emails/OTPs), no anal
 
 ## Cross-cutting notes
 
-- **Costs/limits to watch:** Firebase phone-OTP SMS (billable), Razorpay fees, Google Distance Matrix billing, Cloudinary credits, Expo push/EAS quotas, Render free-tier sleep.
+- **Costs/limits to watch:** Firebase phone-OTP SMS (billable), Razorpay fees, Google Distance Matrix billing, Cloudinary credits, Expo push/EAS quotas.
 - **Credentials:** see [SECRETS_MANAGEMENT](../08-security/SECRETS_MANAGEMENT.md) — including the committed `21st` MCP key (that service is a developer-tooling dependency, not part of the application runtime).
 - **Failure isolation:** only Firebase and the database are on the critical path of every request; Razorpay is on the path of online payment only; Cloudinary/routing/Expo failures degrade gracefully.
 - **Terms/licensing** of third-party content (Unsplash images, fonts) were not reviewed.

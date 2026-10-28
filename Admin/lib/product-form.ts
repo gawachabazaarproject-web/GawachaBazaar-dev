@@ -4,7 +4,7 @@
  * operator's remembered choices (browser storage; only a convenience).
  */
 
-import { UNITS, displayUnit } from "@/lib/units";
+import { UNITS, displayUnit } from "./units.ts";
 
 /** "tomato", "red-onion". A name without Latin letters or digits (e.g. Marathi)
  * has no readable web address, so a short unique one is made instead. */
