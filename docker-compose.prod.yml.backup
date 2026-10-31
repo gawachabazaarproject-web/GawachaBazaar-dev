@@ -1,0 +1,224 @@
+# Gawacha Bazaar - production stack for a single Contabo VPS.
+#
+#   docker compose --env-file .env.production -f docker-compose.prod.yml up -d --build
+#
+# (deploy/scripts/deploy.sh wraps exactly that.) See deploy/README.md.
+#
+# Topology - only Caddy publishes ports; everything else is reachable
+# solely on the internal `backend`/`web` networks:
+#
+#   internet :80/:443 -> caddy -+-> website:3000   (SITE_DOMAIN)
+#                               +-> admin:3001     (ADMIN_DOMAIN)
+#                               +-> backend:8000   (API_DOMAIN, incl. /api/v1/ws/events)
+#                                     |
+#                                     +-> db:5432  (postgres, never published)
+#   db-backup -> db  (nightly pg_dump into ./backups)
+#   migrate   -> db  (one-shot `alembic upgrade head` before backend starts)
+
+x-backend-env: &backend-env
+  APP_NAME: GawachaBazaar
+  APP_ENV: production
+  DEBUG: "False"
+  DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-gawacha}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@db:5432/${POSTGRES_DB:-gawachabazaar}
+  FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID:?FIREBASE_PROJECT_ID is required}
+  FIREBASE_SERVICE_ACCOUNT_JSON: ${FIREBASE_SERVICE_ACCOUNT_JSON:-}
+  # Razorpay - empty key id = online payments off (COD only). If the key id
+  # is set, the backend refuses to start without the secret + webhook secret.
+  RAZORPAY_KEY_ID: ${RAZORPAY_KEY_ID:-}
+  RAZORPAY_KEY_SECRET: ${RAZORPAY_KEY_SECRET:-}
+  RAZORPAY_WEBHOOK_SECRET: ${RAZORPAY_WEBHOOK_SECRET:-}
+  ALLOWED_ORIGINS: '["https://${ADMIN_DOMAIN}","https://${SITE_DOMAIN}"]'
+  CLOUDINARY_CLOUD_NAME: ${CLOUDINARY_CLOUD_NAME:-}
+  CLOUDINARY_API_KEY: ${CLOUDINARY_API_KEY:-}
+  CLOUDINARY_API_SECRET: ${CLOUDINARY_API_SECRET:-}
+  # Delivery pricing + routing. Defaults equal the code defaults, so leaving
+  # these unset in .env.production changes nothing. Redis is the route cache
+  # (optional: if it is down, delivery still works, just without caching).
+  FREE_DELIVERY_MIN_ITEMS: ${FREE_DELIVERY_MIN_ITEMS:-15}
+  DELIVERY_BASE_FEE: ${DELIVERY_BASE_FEE:-20}
+  DELIVERY_PER_KM: ${DELIVERY_PER_KM:-10}
+  DELIVERY_MAX_CHARGED_KM: ${DELIVERY_MAX_CHARGED_KM:-30}
+  DELIVERY_MAX_DISTANCE_KM: ${DELIVERY_MAX_DISTANCE_KM:-0}
+  DELIVERY_MIN_ORDER_VALUE: ${DELIVERY_MIN_ORDER_VALUE:-0}
+  # COD delivery OTP. The secret has NO default on purpose: production refuses to start
+  # while enforcement is on and DELIVERY_OTP_SECRET is shorter than 32 characters.
+  DELIVERY_OTP_ENFORCED: ${DELIVERY_OTP_ENFORCED:-true}
+  DELIVERY_OTP_SECRET: ${DELIVERY_OTP_SECRET:-}
+  DELIVERY_OTP_EXPIRY_MINUTES: ${DELIVERY_OTP_EXPIRY_MINUTES:-240}
+  DELIVERY_OTP_MAX_ATTEMPTS: ${DELIVERY_OTP_MAX_ATTEMPTS:-5}
+  DELIVERY_OTP_RESEND_LIMIT: ${DELIVERY_OTP_RESEND_LIMIT:-3}
+  DELIVERY_OTP_RESEND_WINDOW_MINUTES: ${DELIVERY_OTP_RESEND_WINDOW_MINUTES:-15}
+  # Refer & Earn + delivery partners. REQUIRED BUSINESS DECISIONS - every value
+  # is a placeholder and Refer & Earn is OFF until REFERRAL_ENABLED=true.
+  REFERRAL_ENABLED: ${REFERRAL_ENABLED:-false}
+  REFERRAL_REFERRER_REWARD: ${REFERRAL_REFERRER_REWARD:-50}
+  REFERRAL_REFERRED_REWARD: ${REFERRAL_REFERRED_REWARD:-50}
+  REFERRAL_MIN_ORDER_VALUE: ${REFERRAL_MIN_ORDER_VALUE:-199}
+  REFERRAL_APPLY_WINDOW_DAYS: ${REFERRAL_APPLY_WINDOW_DAYS:-14}
+  REFERRAL_QUALIFY_WINDOW_DAYS: ${REFERRAL_QUALIFY_WINDOW_DAYS:-30}
+  REFERRAL_MAX_REWARDS_PER_REFERRER: ${REFERRAL_MAX_REWARDS_PER_REFERRER:-20}
+  PARTNER_EARNING_BASE: ${PARTNER_EARNING_BASE:-20}
+  PARTNER_EARNING_PER_KM: ${PARTNER_EARNING_PER_KM:-5}
+  PARTNER_EARNING_COD_BONUS: ${PARTNER_EARNING_COD_BONUS:-0}
+  PARTNER_LOCATION_MIN_INTERVAL_SECONDS: ${PARTNER_LOCATION_MIN_INTERVAL_SECONDS:-3}
+  PACKING_POINT_LATITUDE: ${PACKING_POINT_LATITUDE:-}
+  PACKING_POINT_LONGITUDE: ${PACKING_POINT_LONGITUDE:-}
+  ROUTING_PROVIDER: ${ROUTING_PROVIDER:-osrm}
+  OSRM_BASE_URL: ${OSRM_BASE_URL:-https://router.project-osrm.org}
+  ROUTING_TIMEOUT_SECONDS: ${ROUTING_TIMEOUT_SECONDS:-3}
+  REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+  ROUTE_CACHE_TTL_SECONDS: ${ROUTE_CACHE_TTL_SECONDS:-604800}
+  NOMINATIM_BASE_URL: ${NOMINATIM_BASE_URL:-https://nominatim.openstreetmap.org}
+  NOMINATIM_USER_AGENT: ${NOMINATIM_USER_AGENT:-GawachaBazaar/1.0 (gawachabazaar.project@gmail.com)}
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-gawacha}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      POSTGRES_DB: ${POSTGRES_DB:-gawachabazaar}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks: [backend]
+    shm_size: 256mb
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    logging: *default-logging
+
+  # Route-distance cache only (no persistence needed; losing it just means a
+  # few extra OSRM calls). Not published; reachable on the backend network only.
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--save", "", "--appendonly", "no", "--maxmemory", "64mb", "--maxmemory-policy", "allkeys-lru"]
+    networks: [backend]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    logging: *default-logging
+
+  migrate:
+    build:
+      context: ./backend
+    image: gawachabazaar/backend:latest
+    command: ["alembic", "upgrade", "head"]
+    environment: *backend-env
+    networks: [backend]
+    restart: "no"
+    depends_on:
+      db:
+        condition: service_healthy
+    logging: *default-logging
+
+  backend:
+    # Same build as `migrate` (cached, so it's built once) - declared on
+    # both so compose never tries to *pull* this local-only tag.
+    build:
+      context: ./backend
+    image: gawachabazaar/backend:latest
+    restart: unless-stopped
+    environment: *backend-env
+    networks: [backend]
+    # No `ports:` on purpose - see backend/Dockerfile's note on
+    # --forwarded-allow-ips. Caddy is the only way in.
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_started
+    logging: *default-logging
+
+  admin:
+    build:
+      context: ./Admin
+      args:
+        NEXT_PUBLIC_API_BASE_URL: https://${API_DOMAIN:?API_DOMAIN is required}/api/v1
+        NEXT_PUBLIC_FIREBASE_API_KEY: ${NEXT_PUBLIC_FIREBASE_API_KEY:?NEXT_PUBLIC_FIREBASE_API_KEY is required}
+        NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: ${NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN:?NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN is required}
+        NEXT_PUBLIC_FIREBASE_PROJECT_ID: ${NEXT_PUBLIC_FIREBASE_PROJECT_ID:?NEXT_PUBLIC_FIREBASE_PROJECT_ID is required}
+        NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: ${NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET:?NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET is required}
+        NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: ${NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID:?NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID is required}
+        NEXT_PUBLIC_FIREBASE_APP_ID: ${NEXT_PUBLIC_FIREBASE_APP_ID:?NEXT_PUBLIC_FIREBASE_APP_ID is required}
+    image: gawachabazaar/admin:latest
+    restart: unless-stopped
+    networks: [web]
+    logging: *default-logging
+
+  website:
+    build:
+      context: ./website
+    image: gawachabazaar/website:latest
+    restart: unless-stopped
+    networks: [web]
+    logging: *default-logging
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      ACME_EMAIL: ${ACME_EMAIL:?ACME_EMAIL is required}
+      SITE_DOMAIN: ${SITE_DOMAIN:?SITE_DOMAIN is required}
+      ADMIN_DOMAIN: ${ADMIN_DOMAIN:?ADMIN_DOMAIN is required}
+      API_DOMAIN: ${API_DOMAIN:?API_DOMAIN is required}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks: [web, backend]
+    depends_on:
+      - backend
+      - admin
+      - website
+    logging: *default-logging
+
+  db-backup:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      PGHOST: db
+      PGUSER: ${POSTGRES_USER:-gawacha}
+      PGPASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      PGDATABASE: ${POSTGRES_DB:-gawachabazaar}
+      BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-14}
+      BACKUP_INTERVAL_SECONDS: ${BACKUP_INTERVAL_SECONDS:-86400}
+    volumes:
+      - ./deploy/scripts/backup-db.sh:/usr/local/bin/backup-db.sh:ro
+      - ./backups:/backups
+    entrypoint: ["/bin/sh", "/usr/local/bin/backup-db.sh", "--loop"]
+    networks: [backend]
+    depends_on:
+      db:
+        condition: service_healthy
+    logging: *default-logging
+
+networks:
+  backend:
+  web:
+
+volumes:
+  postgres_data:
+    name: gawachabazaar_prod_postgres_data
+  caddy_data:
+    name: gawachabazaar_prod_caddy_data
+  caddy_config:
+    name: gawachabazaar_prod_caddy_config
