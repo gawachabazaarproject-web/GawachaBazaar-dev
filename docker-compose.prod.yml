@@ -19,7 +19,7 @@ x-backend-env: &backend-env
   APP_NAME: GawachaBazaar
   APP_ENV: production
   DEBUG: "False"
-  DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-gawacha}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@db:5432/${POSTGRES_DB:-gawachabazaar}
+  DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
   FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID:?FIREBASE_PROJECT_ID is required}
   FIREBASE_SERVICE_ACCOUNT_JSON: ${FIREBASE_SERVICE_ACCOUNT_JSON:-}
   # Razorpay - empty key id = online payments off (COD only). If the key id
@@ -78,27 +78,6 @@ x-logging: &default-logging
     max-file: "5"
 
 services:
-  db:
-    image: postgres:16-alpine
-    restart: unless-stopped
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER:-gawacha}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
-      POSTGRES_DB: ${POSTGRES_DB:-gawachabazaar}
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    networks: [backend]
-    shm_size: 256mb
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
-      start_period: 10s
-    logging: *default-logging
-
-  # Route-distance cache only (no persistence needed; losing it just means a
-  # few extra OSRM calls). Not published; reachable on the backend network only.
   redis:
     image: redis:7-alpine
     restart: unless-stopped
@@ -119,9 +98,6 @@ services:
     environment: *backend-env
     networks: [backend]
     restart: "no"
-    depends_on:
-      db:
-        condition: service_healthy
     logging: *default-logging
 
   backend:
@@ -132,12 +108,12 @@ services:
     image: gawachabazaar/backend:latest
     restart: unless-stopped
     environment: *backend-env
+    volumes:
+      - /home/ubuntu/firebase-service-account.json:/run/secrets/firebase-service-account.json:ro
     networks: [backend]
     # No `ports:` on purpose - see backend/Dockerfile's note on
     # --forwarded-allow-ips. Caddy is the only way in.
     depends_on:
-      db:
-        condition: service_healthy
       migrate:
         condition: service_completed_successfully
       redis:
@@ -191,33 +167,11 @@ services:
       - website
     logging: *default-logging
 
-  db-backup:
-    image: postgres:16-alpine
-    restart: unless-stopped
-    environment:
-      PGHOST: db
-      PGUSER: ${POSTGRES_USER:-gawacha}
-      PGPASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
-      PGDATABASE: ${POSTGRES_DB:-gawachabazaar}
-      BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-14}
-      BACKUP_INTERVAL_SECONDS: ${BACKUP_INTERVAL_SECONDS:-86400}
-    volumes:
-      - ./deploy/scripts/backup-db.sh:/usr/local/bin/backup-db.sh:ro
-      - ./backups:/backups
-    entrypoint: ["/bin/sh", "/usr/local/bin/backup-db.sh", "--loop"]
-    networks: [backend]
-    depends_on:
-      db:
-        condition: service_healthy
-    logging: *default-logging
-
 networks:
   backend:
   web:
 
 volumes:
-  postgres_data:
-    name: gawachabazaar_prod_postgres_data
   caddy_data:
     name: gawachabazaar_prod_caddy_data
   caddy_config:
