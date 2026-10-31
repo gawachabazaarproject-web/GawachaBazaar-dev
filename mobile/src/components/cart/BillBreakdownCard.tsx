@@ -20,7 +20,7 @@ export interface BillBreakdownCardProps {
  * the illustrative per-product MRP layer (productEmbellishments.ts) -
  * items with no MRP entry simply contribute nothing to it, so the
  * number is never inflated beyond what's actually shown on-screen.
- * The delivery fee is the backend quote (free for a 15+ product Bazaar,
+ * The delivery fee is the backend quote (free for a 10+ product Bazaar,
  * otherwise base + per-km) - the order is re-priced server-side at checkout.
  */
 export function BillBreakdownCard({ items, totalAmount, currency, deliveryFee = null, grandTotal }: BillBreakdownCardProps) {

@@ -78,7 +78,7 @@ export default function HomeScreen() {
         <ShopHeader
           locationLabel={defaultAddress ? `${defaultAddress.label} - ${defaultAddress.city} (${defaultAddress.postal_code})` : "Add an address"}
           onLocationPress={() => router.push("/address")}
-          onAccountPress={() => router.push("/(tabs)/account")}
+          onWishlistPress={() => router.push("/wishlist")}
           onCartPress={() => router.push("/cart")}
         />
 
@@ -204,7 +204,7 @@ export default function HomeScreen() {
           </View>
         ) : null}
 
-        {/* Bazaar offer: 15+ items = free delivery, 6 Bazaars/week = Bazaar+ */}
+        {/* Bazaar offer: 10+ items = free delivery, 6 Bazaars/week = Bazaar+ */}
         {mode === "regular" ? <BazaarSection onStartPress={() => router.push("/bazaar" as never)} /> : null}
 
         {/* Vidarbha Regional Specialties */}

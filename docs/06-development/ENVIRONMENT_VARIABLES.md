@@ -22,7 +22,7 @@ Legend — **When:** *runtime* = read when the process starts/handles requests; 
 | `RAZORPAY_KEY_SECRET` | API secret; also verifies checkout signatures | Required if key id set | runtime | **Yes** | empty |
 | `RAZORPAY_WEBHOOK_SECRET` | HMAC secret for webhooks | Required if key id set | runtime | **Yes** | empty |
 | `RAZORPAY_BASE_URL`, `RAZORPAY_TIMEOUT_SECONDS` | API base and timeout | No | runtime | No | `https://api.razorpay.com/v1`, `10.0` |
-| `FREE_DELIVERY_MIN_ITEMS` | Distinct products for free delivery | No | runtime | No | `15` |
+| `FREE_DELIVERY_MIN_ITEMS` | Distinct products for free delivery | No | runtime | No | `10` |
 | `DELIVERY_BASE_FEE` | Base delivery fee (Rs) | No | runtime | No | `20` (was 40 from 2026-10-14 to 2026-10-27) |
 | `DELIVERY_PER_KM` | Fee per road km (Rs) | No | runtime | No | `10` |
 | `DELIVERY_MAX_CHARGED_KM` | Distance cap for pricing | No | runtime | No | `30.0` |

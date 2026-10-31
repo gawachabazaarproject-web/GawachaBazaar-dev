@@ -114,7 +114,7 @@ class Order(Base):
         server_default="0",
         nullable=False,
     )
-    # Delivery charge included in `total_amount` (0 for a Bazaar of 15+
+    # Delivery charge included in `total_amount` (0 for a Bazaar of 10+
     # items and for every order placed before delivery fees existed). See
     # app/services/delivery.py.
     delivery_fee: Mapped[Decimal] = mapped_column(

@@ -4,9 +4,9 @@ import { Feather } from "@expo/vector-icons";
 import { Text } from "@/components/Text";
 import { colors, radius, spacing } from "@/theme";
 
-/** Bazaar progress: a basket of 15+ different products ships free (the backend applies
+/** Bazaar progress: a basket of 10+ different products ships free (the backend applies
  * the same rule at checkout - see app/services/delivery.py). */
-export function FreeDeliveryProgress({ itemCount, minItems = 15 }: { itemCount: number; minItems?: number }) {
+export function FreeDeliveryProgress({ itemCount, minItems = 10 }: { itemCount: number; minItems?: number }) {
   const remaining = Math.max(0, minItems - itemCount);
   const progress = Math.min(1, itemCount / minItems);
   const unlocked = remaining <= 0;

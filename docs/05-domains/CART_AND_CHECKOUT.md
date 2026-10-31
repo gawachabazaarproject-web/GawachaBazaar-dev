@@ -70,4 +70,4 @@
 - Bulk-converted orders carry `delivery_fee = 0` and no promotion ([BULK_ORDERS](BULK_ORDERS.md)).
 - **The harvest/delivery slot picker is illustrative.** `HarvestSlotSelector` keeps the day/slot in local component state (the source comment says "illustrative"); it is shown in the summary but **never sent to the backend** — no slot column, field or endpoint exists. `FEATURES.md` lists it as a checkout feature; it does not affect any order.
 - Stale `PENDING` checkout sessions are never cleaned up ([DATA_RETENTION](../04-database/DATA_RETENTION.md)).
-- The mobile app mirrors `FREE_DELIVERY_MIN_ITEMS` (15) and the Bazaar+ threshold (6) as hard-coded fallbacks in `BazaarSection.tsx`/`bazaar/index.tsx`; the backend values win when the API answers.
+- The mobile app mirrors `FREE_DELIVERY_MIN_ITEMS` (10) and the Bazaar+ threshold (6) as hard-coded fallbacks in `BazaarSection.tsx`/`bazaar/index.tsx`; the backend values win when the API answers.

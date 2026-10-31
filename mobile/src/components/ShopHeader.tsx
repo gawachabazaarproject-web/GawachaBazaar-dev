@@ -11,7 +11,7 @@ const LOGO_HEIGHT = 40;
 export interface ShopHeaderProps {
   locationLabel: string;
   onLocationPress: () => void;
-  onAccountPress: () => void;
+  onWishlistPress: () => void;
   onCartPress?: () => void;
   /** Compact by default; Home's version keeps a hair more breathing room. */
   compact?: boolean;
@@ -21,14 +21,14 @@ export interface ShopHeaderProps {
  * Shared header for every shopping screen (Home, Search, Cart,
  * Categories) - one brand/navigation language across the app. Logo +
  * full delivery address (the address IS the primary content, given the
- * width it needs) + cart/account shortcuts. Row 2: illustrative ETA badge
+ * width it needs) + cart/wishlist shortcuts. Row 2: illustrative ETA badge
  * (explicitly authorized, no real logistics system behind it) + the
  * Marathi brand line.
  */
 export function ShopHeader({
   locationLabel,
   onLocationPress,
-  onAccountPress,
+  onWishlistPress,
   onCartPress,
   compact = true,
 }: ShopHeaderProps) {
@@ -56,11 +56,11 @@ export function ShopHeader({
         </Pressable>
         {onCartPress ? (
           <Pressable style={styles.iconButton} onPress={onCartPress} accessibilityRole="button" accessibilityLabel="Cart">
-            <Feather name="shopping-bag" size={18} color={colors.textPrimary} />
+            <Feather name="shopping-cart" size={18} color={colors.textPrimary} />
           </Pressable>
         ) : null}
-        <Pressable style={styles.iconButton} onPress={onAccountPress} accessibilityRole="button" accessibilityLabel="Account">
-          <Feather name="user" size={18} color={colors.textPrimary} />
+        <Pressable style={styles.iconButton} onPress={onWishlistPress} accessibilityRole="button" accessibilityLabel="Wishlist">
+          <Feather name="heart" size={18} color={colors.textPrimary} />
         </Pressable>
       </View>
       <View style={styles.subRow}>

@@ -600,7 +600,7 @@ export interface HomeSlideResponse {
 }
 
 // ---------------------------------------------------------------------------
-// Bazaar offer (free delivery at 15+ items, Gawacha Bazaar+)
+// Bazaar offer (free delivery at 10+ items, Gawacha Bazaar+)
 // ---------------------------------------------------------------------------
 export interface DeliveryQuoteResponse {
   fee: string;

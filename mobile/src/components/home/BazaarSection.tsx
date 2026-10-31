@@ -9,7 +9,7 @@ import { colors, radius, spacing } from "@/theme";
 
 /** Mirrors the backend defaults (FREE_DELIVERY_MIN_ITEMS / BAZAAR_PLUS_*);
  * the live values from /bazaar/status win whenever they are available. */
-const DEFAULT_MIN_ITEMS = 15;
+const DEFAULT_MIN_ITEMS = 10;
 const DEFAULT_ORDERS_REQUIRED = 6;
 
 export interface BazaarSectionProps {
@@ -17,7 +17,7 @@ export interface BazaarSectionProps {
 }
 
 /**
- * "Bazaar" offer card: fill a basket with 15+ items for free delivery, and
+ * "Bazaar" offer card: fill a basket with 10+ items for free delivery, and
  * place six such Bazaars in a month to become eligible for Gawacha Bazaar+.
  * Progress is real - cart units from the live cart, Bazaar orders from the
  * backend's rolling-window count (GET /bazaar/status).
@@ -59,7 +59,7 @@ export function BazaarSection({ onStartPress }: BazaarSectionProps) {
           Pick {minItems} different products in one basket and we deliver it free.
         </Text>
 
-        {/* The hook: 15+ -> free delivery */}
+        {/* The hook: 10+ -> free delivery */}
         <View style={styles.hookRow}>
           <View style={styles.hookNumberWrap}>
             <Text variant="displayXL" color={colors.accent} style={styles.hookNumber}>

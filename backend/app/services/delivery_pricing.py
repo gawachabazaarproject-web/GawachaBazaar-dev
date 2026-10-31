@@ -17,7 +17,7 @@ Rule (pricing version PRICING_VERSION):
 Example with base 20 / per-km 10: 0-1000 m -> Rs 30, 1001-2000 m -> Rs 40,
 5200 m -> Rs 80, 10100 m -> Rs 130.
   maximum delivery radius  DELIVERY_MAX_DISTANCE_KM  (km; 0 = no limit)
-  free-delivery threshold  FREE_DELIVERY_MIN_ITEMS   (distinct products, 15)
+  free-delivery threshold  FREE_DELIVERY_MIN_ITEMS   (distinct products, 10)
   minimum order value      DELIVERY_MIN_ORDER_VALUE  (Rs, 0 = off)
 """
 

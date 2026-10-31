@@ -282,7 +282,7 @@ export default function CheckoutScreen() {
   // checkout will actually charge - cart.total_amount never includes a
   // discount, since discounting only ever happens as part of order
   // creation on the backend (see PromotionService.evaluate_for_cart).
-  // The delivery fee comes from the backend quote (free for a 15+ item
+  // The delivery fee comes from the backend quote (free for a 10+ item
   // Bazaar; otherwise base + per-km) and is added on top - the order
   // itself is priced again server-side at checkout with the same rule.
   const deliveryFee = Number.parseFloat(deliveryQuote?.fee ?? "0");

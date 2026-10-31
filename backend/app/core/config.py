@@ -64,7 +64,7 @@ class Settings(BaseSettings):
     # Bazaar orders (each with >= FREE_DELIVERY_MIN_ITEMS different products)
     # in the current calendar month (BAZAAR_TIMEZONE) is eligible for
     # Gawacha Bazaar+.
-    FREE_DELIVERY_MIN_ITEMS: int = 15
+    FREE_DELIVERY_MIN_ITEMS: int = 10
     DELIVERY_BASE_FEE: Decimal = Decimal("20")
     DELIVERY_PER_KM: Decimal = Decimal("10")
     DELIVERY_MAX_CHARGED_KM: float = 30.0

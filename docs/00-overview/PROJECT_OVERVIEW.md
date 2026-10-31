@@ -23,7 +23,7 @@ Gawacha Bazaar is a farm-to-home fresh-food marketplace for **Nagpur, India**. I
 
 - **Catalogue:** categories (one nesting level), products with multiple sizes ("variants"), time-ranged prices, images on Cloudinary.
 - **Ordering:** server-owned cart; checkout with address, optional promo code, delivery fee; **Cash on Delivery** or **online payment through Razorpay**.
-- **Delivery fee and the "Bazaar" offer:** free delivery for baskets with 15+ *different products*; otherwise base fee plus a per-km charge by road distance from the packing point ([DELIVERY.md](../05-domains/DELIVERY.md)). "Bazaar+" tracks six Bazaar orders per calendar month.
+- **Delivery fee and the "Bazaar" offer:** free delivery for baskets with 10+ *different products*; otherwise base fee plus a per-km charge by road distance from the packing point ([DELIVERY.md](../05-domains/DELIVERY.md)). "Bazaar+" tracks six Bazaar orders per calendar month.
 - **Stock:** lots per warehouse, FIFO allocation at checkout, 30-minute reservation, consumption on delivery, reserve levels and alerts ([INVENTORY.md](../05-domains/INVENTORY.md)).
 - **Fulfilment:** picking → packed → ready → assigned to a delivery partner → out for delivery → delivered; COD cash is recorded as collected at delivery.
 - **Cancellation and refunds:** customers or admins cancel before delivery; paid online orders create a refund request that an admin approves and processes ([REFUNDS.md](../05-domains/REFUNDS.md)).

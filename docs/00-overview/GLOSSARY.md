@@ -4,7 +4,7 @@
 
 | Term | Meaning in this project | Source |
 |---|---|---|
-| **Bazaar** | A basket with at least `FREE_DELIVERY_MIN_ITEMS` (default 15) *different products*; ships free. The same product in two sizes counts once. | [`delivery.py`](../../backend/app/services/delivery.py), [`bazaar.py`](../../backend/app/services/bazaar.py) |
+| **Bazaar** | A basket with at least `FREE_DELIVERY_MIN_ITEMS` (default 10) *different products*; ships free. The same product in two sizes counts once. | [`delivery.py`](../../backend/app/services/delivery.py), [`bazaar.py`](../../backend/app/services/bazaar.py) |
 | **Bazaar+** | Customer status unlocked by `BAZAAR_PLUS_ORDERS_REQUIRED` (default 6) Bazaar orders in the current calendar month (`BAZAAR_TIMEZONE`, default `Asia/Kolkata`); cancelled/expired orders do not count. The benefit itself is not implemented in the backend beyond exposing eligibility at `GET /bazaar/status`. | [`bazaar.py`](../../backend/app/services/bazaar.py) |
 | **Base fee / per-km fee** | `DELIVERY_BASE_FEE` (default 20) plus `DELIVERY_PER_KM` (default 10) × road km (capped at `DELIVERY_MAX_CHARGED_KM`, default 30), rounded up to a whole rupee. | [`delivery.py`](../../backend/app/services/delivery.py), [`config.py`](../../backend/app/core/config.py) |
 | **Packing point** | The one active warehouse (`inventory_locations.is_packing_point`) from which delivery distance is measured; env `PACKING_POINT_*` is the fallback. | [`inventory.py`](../../backend/app/services/inventory.py) `set_packing_point`, [`delivery.py`](../../backend/app/services/delivery.py) |

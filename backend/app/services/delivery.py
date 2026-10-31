@@ -1,7 +1,7 @@
 """Delivery pricing and the "Bazaar" offer.
 
 Rule (all values configurable, see app/core/config.py and delivery_pricing.py):
-  * A basket of FREE_DELIVERY_MIN_ITEMS (15) or more DIFFERENT PRODUCTS - a
+  * A basket of FREE_DELIVERY_MIN_ITEMS (10) or more DIFFERENT PRODUCTS - a
     "Bazaar" - ships free.
   * Anything smaller pays DELIVERY_BASE_FEE plus DELIVERY_PER_KM per km of
     ROAD distance from the packing point to the delivery address (OSRM via

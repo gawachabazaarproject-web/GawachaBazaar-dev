@@ -740,7 +740,7 @@ class OrderService:
         if data.promo_code and evaluation.code_was_invalid:
             raise BusinessValidationError(evaluation.message)
 
-        # Delivery fee: free for a Bazaar (15+ different products), otherwise base + per-km.
+        # Delivery fee: free for a Bazaar (10+ different products), otherwise base + per-km.
         # Computed here from the real cart and the real address - the same
         # function the cart's quote endpoint uses - never from the client.
         # No network here (DEL-1). The route was resolved before the locks;

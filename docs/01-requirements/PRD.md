@@ -30,7 +30,7 @@
 
 ## 4. Product rules that shape the experience (all implemented; details in [BUSINESS_RULES](../05-domains/BUSINESS_RULES.md))
 
-1. A basket with 15+ different products ships free; otherwise Rs 20 + Rs 10 per whole km of road distance, minimum 1 km (capped at 30 km). *(Defaults; configurable; base fee Rs 20 confirmed by the owner 2026-10-27.)*
+1. A basket with 10+ different products ships free; otherwise Rs 20 + Rs 10 per whole km of road distance, minimum 1 km (capped at 30 km). *(Defaults; configurable; base fee Rs 20 confirmed by the owner 2026-10-27.)*
 2. Stock is held for 30 minutes at checkout; unpaid holds expire automatically.
 3. Online orders are created only after the payment is confirmed; if the order cannot be placed the money is refunded automatically.
 4. Orders can be cancelled until delivery; refunds for paid online orders need explicit admin approval.

@@ -1,4 +1,4 @@
-"""Bazaar offer schemas (free delivery at 15+ items, Gawacha Bazaar+)."""
+"""Bazaar offer schemas (free delivery at 10+ items, Gawacha Bazaar+)."""
 
 from decimal import Decimal
 

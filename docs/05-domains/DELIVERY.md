@@ -6,12 +6,12 @@
 ## The fee rule
 
 ```
-distinct products in the basket  >=  FREE_DELIVERY_MIN_ITEMS (15)   ->  fee = 0   ("a Bazaar")
+distinct products in the basket  >=  FREE_DELIVERY_MIN_ITEMS (10)   ->  fee = 0   ("a Bazaar")
 otherwise  fee = ceil( DELIVERY_BASE_FEE + DELIVERY_PER_KM x charged_km )
              charged_km = min(road_km, DELIVERY_MAX_CHARGED_KM)
 ```
 
-Defaults (all environment-configurable, [ENVIRONMENT_VARIABLES](../06-development/ENVIRONMENT_VARIABLES.md)): `FREE_DELIVERY_MIN_ITEMS=15`, **`DELIVERY_BASE_FEE=20`** (owner decision 2026-10-27; it was briefly 40), `DELIVERY_PER_KM=10`, `DELIVERY_MAX_CHARGED_KM=30`. The result is rounded **up** to a whole rupee (`ROUND_CEILING`). Maximum fee at defaults: 20 + 10 × 30 = **Rs 320**.
+Defaults (all environment-configurable, [ENVIRONMENT_VARIABLES](../06-development/ENVIRONMENT_VARIABLES.md)): `FREE_DELIVERY_MIN_ITEMS=10`, **`DELIVERY_BASE_FEE=20`** (owner decision 2026-10-27; it was briefly 40), `DELIVERY_PER_KM=10`, `DELIVERY_MAX_CHARGED_KM=30`. The result is rounded **up** to a whole rupee (`ROUND_CEILING`). Maximum fee at defaults: 20 + 10 × 30 = **Rs 320**.
 
 - **"Items" are distinct products** (`product_id`), not units and not variants: the same product in two sizes counts once (`distinct_product_count`).
 - **Order of use:** one pure function, `calculate_delivery_fee`, is called by the cart quote (`GET /bazaar/delivery-quote`) and by checkout, so the two cannot drift.
@@ -22,7 +22,7 @@ Defaults (all environment-configurable, [ENVIRONMENT_VARIABLES](../06-developmen
 - **Unroutable pins:** OSRM answers "Ok" for points far from any road (swapped lat/lng returned `distance: 0` on the live server). The provider rejects a snap distance over 2000 m (`MAX_SNAP_METERS`) as "no route" -> 422.
 - **Addresses without a map location:** when an origin is configured, checkout refuses the address (422, "confirm its location on the map"), and `GET /bazaar/delivery-quote` returns `needs_location: true`. With **no origin configured** the old behaviour remains (base fee only, `distance_estimated: true`).
 - **Maximum radius / minimum order:** `DELIVERY_MAX_DISTANCE_KM` (0 = unlimited; applies to Bazaar orders too, which then also need a route) and `DELIVERY_MIN_ORDER_VALUE` (0 = off; compared with the post-discount goods total at checkout).
-- **Free-delivery progress:** `items_to_free_delivery = max(0, 15 − distinct products)`.
+- **Free-delivery progress:** `items_to_free_delivery = max(0, 10 − distinct products)`.
 - **Bulk-converted orders:** orders created by bulk conversion are created with `delivery_fee = 0` and are not priced by this function ([BULK_ORDERS](BULK_ORDERS.md)).
 
 > **Note:** seven tests used to hard-code the previous Rs 20 base fee; the suite now pins `DELIVERY_BASE_FEE`/`DELIVERY_PER_KM` in `tests/conftest.py`, so they no longer depend on the deployable default.
@@ -52,13 +52,13 @@ Assignment, out-for-delivery and delivered transitions, COD cash collection, par
 | Address without GPS | Base fee only, `distance_estimated = true` |
 | Packing point deleted/deactivated | Falls back to env origin, else base fee only |
 | Extreme/bad coordinates | Out-of-range coordinates -> 422; a real route longer than 30 km is billed as 30 km; beyond `DELIVERY_MAX_DISTANCE_KM` -> not deliverable |
-| Client shows a different fee than charged | Not possible by design (same function); the mobile app hard-codes 15 and 6 only as fallbacks before the API answers |
+| Client shows a different fee than charged | Not possible by design (same function); the mobile app hard-codes 10 and 6 only as fallbacks before the API answers |
 
 Gaps: public OSRM demo server in the default configuration (see below); fee changes require a deploy or env change (no admin UI for fee parameters — Admin Settings only sets the packing point); no per-zone pricing, surge, minimum-order rule or delivery-time estimate.
 
 ## `POST /delivery/quote` and address search (added 2026-10-26)
 
-`POST /api/v1/delivery/quote` (CUSTOMER) `{"address_id": 127}` -> `{available, distance_km, distance_meters, estimated_duration_minutes, delivery_fee, free_delivery, currency, reason}`. The address must belong to the caller (404 otherwise, also when missing); no coordinates -> 422; origin not configured -> 422; outside `DELIVERY_MAX_DISTANCE_KM` -> **200** with `available:false`, `delivery_fee:null` and a `reason`; routing down -> 503. The fee uses the caller's current cart (15+ distinct products = free) through the same `calculate_delivery_fee` as checkout, which re-derives distance and fee itself and stores `orders.delivery_distance_meters`, `routing_provider`, `warehouse_id` (the packing-point location, null for the env-var origin). The client can send nothing but an address id; `CheckoutRequest` carries no amounts. The older `GET /bazaar/delivery-quote` (used by the app) shares the same function.
+`POST /api/v1/delivery/quote` (CUSTOMER) `{"address_id": 127}` -> `{available, distance_km, distance_meters, estimated_duration_minutes, delivery_fee, free_delivery, currency, reason}`. The address must belong to the caller (404 otherwise, also when missing); no coordinates -> 422; origin not configured -> 422; outside `DELIVERY_MAX_DISTANCE_KM` -> **200** with `available:false`, `delivery_fee:null` and a `reason`; routing down -> 503. The fee uses the caller's current cart (10+ distinct products = free) through the same `calculate_delivery_fee` as checkout, which re-derives distance and fee itself and stores `orders.delivery_distance_meters`, `routing_provider`, `warehouse_id` (the packing-point location, null for the env-var origin). The client can send nothing but an address id; `CheckoutRequest` carries no amounts. The older `GET /bazaar/delivery-quote` (used by the app) shares the same function.
 
 `POST /api/v1/delivery/geocode` (CUSTOMER, 10/min) `{"query": "..."}` -> candidate map locations via Nominatim (`countrycodes=in`, 1 request/s spacing, identifying `User-Agent`). It is meant for a **Search** button followed by the customer confirming the pin - never for search-as-you-type on the public server. Saving an address stores `geocode_provider`, `geocode_provider_id` (optional, from the chosen candidate) and a server-set `geocoded_at`; latitude/longitude are range-validated. The mobile address form now has **Find this address on the map** (calls `/delivery/geocode`, customer taps the right result) next to **Use current location** (device GPS, only a helper); both are **unverified on a device**.
 
@@ -120,11 +120,11 @@ Measured on a 8 GB Docker VM: extract+partition+customize about 13 min, peak 2.2
 
 ## Pricing rule v2 `ceil-km-v1` (2026-10-27)
 
-`billable_km = max(1, ceil(distance_meters / 1000))` (integer arithmetic), capped at `floor(DELIVERY_MAX_CHARGED_KM)`; `fee = DELIVERY_BASE_FEE + DELIVERY_PER_KM x billable_km` (Decimal; free for a 15+ product Bazaar). Distance is the server-side OSRM road distance only. This **replaces** the earlier "base + per_km x exact km, rounded up to a rupee" rule: a 1.5 km trip now bills 2 km. With base 20 / per-km 10: 0-1000 m = Rs 30, 1001-2000 m = Rs 40, 5200 m = Rs 80, 10100 m = Rs 130 (tested: 0, 1, 999, 1000, 1001, 1999, 2000, 2001, 5000, 5200, 10000, 10100 m).
+`billable_km = max(1, ceil(distance_meters / 1000))` (integer arithmetic), capped at `floor(DELIVERY_MAX_CHARGED_KM)`; `fee = DELIVERY_BASE_FEE + DELIVERY_PER_KM x billable_km` (Decimal; free for a 10+ product Bazaar). Distance is the server-side OSRM road distance only. This **replaces** the earlier "base + per_km x exact km, rounded up to a rupee" rule: a 1.5 km trip now bills 2 km. With base 20 / per-km 10: 0-1000 m = Rs 30, 1001-2000 m = Rs 40, 5200 m = Rs 80, 10100 m = Rs 130 (tested: 0, 1, 999, 1000, 1001, 1999, 2000, 2001, 5000, 5200, 10000, 10100 m).
 
 Every order stores `delivery_distance_meters`, `routing_provider`, `warehouse_id`, `delivery_fee` and the snapshot `delivery_pricing_version`, `delivery_base_fee`, `delivery_per_km`, `delivery_billable_km` (migration `b1c2d3e4f501`; null on older and free orders). The server recomputes at checkout; client-sent `delivery_fee`, `distance_km`, `total_amount`, `warehouse_id` are ignored (regression test).
 
-**Base fee decided (2026-10-27, owner): Rs 20 everywhere** - code default, `.env.production.example`, both compose files and `backend/.env.example`. A hosting environment that still sets `DELIVERY_BASE_FEE=40` would override it: check the live host's variables on release. The 30 km billing cap and free delivery for 15+ different products are retained.
+**Base fee decided (2026-10-27, owner): Rs 20 everywhere** - code default, `.env.production.example`, both compose files and `backend/.env.example`. A hosting environment that still sets `DELIVERY_BASE_FEE=40` would override it: check the live host's variables on release. The 30 km billing cap and free delivery for 10+ different products are retained.
 
 ## Delivery partners and COD
 

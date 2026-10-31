@@ -111,7 +111,7 @@ and the sidebar can collapse (the Orders count becomes a dot).
 | Reservations | Stock reserved at checkout, released on cancel/expiry, proactive expiry sweep every 120 s |
 | Packaging | Packaging operations turning input lots into labelled output lots |
 | Cart and orders | Server-owned cart, checkout transaction, order snapshots, cancellation, order history |
-| Delivery pricing | Free for 15+ distinct products, else base + per-km by road distance; Bazaar+ eligibility; quote endpoint |
+| Delivery pricing | Free for 10+ distinct products, else base + per-km by road distance; Bazaar+ eligibility; quote endpoint |
 | Payments | COD and Razorpay, server-side verification, signed webhooks (idempotent), retry, refund workflow (approve / reject / process) |
 | Fulfillment | Picking -> packed -> ready -> assigned -> out for delivery -> delivered; delivery-partner views |
 | Suppliers | Supplier records, supplied products, performance evaluations |

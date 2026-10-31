@@ -53,7 +53,7 @@ Legend: **SECRET** = must never be committed or logged · **PUBLIC** = shipped i
 | `ALLOWED_ORIGINS` | the exact Admin/website origins, e.g. `["https://admin.gawachabazaar.in"]` (not `*`, not localhost) |
 | `DELIVERY_OTP_ENFORCED` | `true` |
 | `REFERRAL_ENABLED` | `false` unless the owner decides otherwise |
-| `DELIVERY_BASE_FEE`, `DELIVERY_PER_KM`, `DELIVERY_MAX_CHARGED_KM`, `DELIVERY_MAX_DISTANCE_KM`, `DELIVERY_MIN_ORDER_VALUE`, `FREE_DELIVERY_MIN_ITEMS` | pricing rules (defaults: 20 / 10 / 30 / 0 = no limit / 0 / 15); make sure the host environment does not override the base fee with an old value |
+| `DELIVERY_BASE_FEE`, `DELIVERY_PER_KM`, `DELIVERY_MAX_CHARGED_KM`, `DELIVERY_MAX_DISTANCE_KM`, `DELIVERY_MIN_ORDER_VALUE`, `FREE_DELIVERY_MIN_ITEMS` | pricing rules (defaults: 20 / 10 / 30 / 0 = no limit / 0 / 10); make sure the host environment does not override the base fee with an old value |
 | `PACKING_POINT_LATITUDE`, `PACKING_POINT_LONGITUDE` | the real warehouse (or set it in Admin -> Settings); needed for per-km delivery pricing |
 | `OSRM_BASE_URL` | self-hosted OSRM (the public demo server is development-only; delivery quotes fail rather than guess if routing is down) |
 | `NOMINATIM_BASE_URL`, `NOMINATIM_USER_AGENT` | address search; the user-agent must contain a real contact e-mail (OpenStreetMap policy) |

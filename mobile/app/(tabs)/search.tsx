@@ -67,7 +67,7 @@ export default function SearchScreen() {
       <ShopHeader
         locationLabel={defaultAddress ? `${defaultAddress.label} - ${defaultAddress.city}` : "Add an address"}
         onLocationPress={() => router.push("/address")}
-        onAccountPress={() => router.push("/(tabs)/account")}
+        onWishlistPress={() => router.push("/wishlist")}
         onCartPress={() => router.push("/cart")}
       />
 

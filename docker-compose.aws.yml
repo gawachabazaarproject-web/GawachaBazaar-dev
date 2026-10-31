@@ -31,7 +31,7 @@ x-backend-env: &backend-env
   # Delivery pricing + routing. Defaults equal the code defaults, so leaving
   # these unset in .env.production changes nothing. Redis is the route cache
   # (optional: if it is down, delivery still works, just without caching).
-  FREE_DELIVERY_MIN_ITEMS: ${FREE_DELIVERY_MIN_ITEMS:-15}
+  FREE_DELIVERY_MIN_ITEMS: ${FREE_DELIVERY_MIN_ITEMS:-10}
   DELIVERY_BASE_FEE: ${DELIVERY_BASE_FEE:-20}
   DELIVERY_PER_KM: ${DELIVERY_PER_KM:-10}
   DELIVERY_MAX_CHARGED_KM: ${DELIVERY_MAX_CHARGED_KM:-30}

@@ -16,7 +16,7 @@ import { colors, fontFamily, radius, spacing } from "@/theme";
 
 /** Mirrors the backend defaults (FREE_DELIVERY_MIN_ITEMS / BAZAAR_PLUS_*);
  * live values from /bazaar/status win when available. */
-const DEFAULT_MIN_ITEMS = 15;
+const DEFAULT_MIN_ITEMS = 10;
 const DEFAULT_ORDERS_REQUIRED = 6;
 
 /** Planned Gawacha Bazaar+ perks. These are announcements of what is coming,
@@ -132,7 +132,7 @@ export default function BazaarScreen() {
 
   const header = (
     <View>
-      {/* Offer + 15-item indicator */}
+      {/* Offer + 10-item indicator */}
       <View style={styles.pad}>
         <LinearGradient
           colors={["#0F3B2B", "#0A2A1F", "#061A12"]}

@@ -41,7 +41,7 @@ export function CartBar() {
   // basket bar). Product
   // detail keeps its Add-to-cart footer, so the pill floats just above it.
   const rootSegment = segments[0];
-  const hiddenOnScreen = rootSegment === "cart" || rootSegment === "checkout" || rootSegment === "bazaar";
+  const hiddenOnScreen = rootSegment === "cart" || rootSegment === "checkout" || rootSegment === "bazaar" || rootSegment === "product";
   const onProduct = rootSegment === "product";
 
   const itemCount = cart?.items.reduce((sum, i) => sum + Math.round(Number.parseFloat(i.quantity)), 0) ?? 0;
