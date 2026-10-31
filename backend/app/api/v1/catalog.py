@@ -43,6 +43,7 @@ from app.schemas.catalog import (
     UpdateProductVariantRequest,
 )
 from app.services.catalog import CatalogService
+from app.services.catalog_cache import catalog_cache
 from app.services.image_upload import release_image, upload_image
 
 router = APIRouter()
@@ -183,7 +184,12 @@ def list_categories(
     page_size: int = Query(default=20, ge=1, le=MAX_PAGE_SIZE),
     db: Session = Depends(get_db),
 ) -> CategoryListResponse:
-    return CatalogService(db).list_public_categories(parent_id, page, page_size)
+    return catalog_cache.get_or_load(
+        "categories",
+        {"parent_id": parent_id, "page": page, "page_size": page_size},
+        CategoryListResponse,
+        lambda: CatalogService(db).list_public_categories(parent_id, page, page_size),
+    )
 
 
 @router.get(
@@ -194,7 +200,12 @@ def list_categories(
 def get_category(
     category_id: int, db: Session = Depends(get_db)
 ) -> CategoryDetailResponse:
-    return CatalogService(db).get_public_category(category_id)
+    return catalog_cache.get_or_load(
+        "category",
+        {"id": category_id},
+        CategoryDetailResponse,
+        lambda: CatalogService(db).get_public_category(category_id),
+    )
 
 
 @router.get(
@@ -209,7 +220,15 @@ def list_products(
     page_size: int = Query(default=20, ge=1, le=MAX_PAGE_SIZE),
     db: Session = Depends(get_db),
 ) -> ProductListResponse:
-    return CatalogService(db).list_public_products(category_id, page, page_size, q=q)
+    loader = lambda: CatalogService(db).list_public_products(category_id, page, page_size, q=q)  # noqa: E731
+    if q is not None:  # free-text searches are high-cardinality: not worth caching
+        return loader()
+    return catalog_cache.get_or_load(
+        "products",
+        {"category_id": category_id, "page": page, "page_size": page_size},
+        ProductListResponse,
+        loader,
+    )
 
 
 @router.get(
@@ -218,7 +237,12 @@ def list_products(
     summary="Get an active product with images, active variants, and current prices",
 )
 def get_product(product_id: int, db: Session = Depends(get_db)) -> ProductResponse:
-    return CatalogService(db).get_public_product(product_id)
+    return catalog_cache.get_or_load(
+        "product",
+        {"id": product_id},
+        ProductResponse,
+        lambda: CatalogService(db).get_public_product(product_id),
+    )
 
 
 # ---------------------------------------------------------------------------

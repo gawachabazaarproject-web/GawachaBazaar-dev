@@ -31,6 +31,7 @@ Legend — **When:** *runtime* = read when the process starts/handles requests; 
 | `DELIVERY_MAX_DISTANCE_KM`, `DELIVERY_MIN_ORDER_VALUE` | Maximum road distance deliverable (0 = none); minimum order value after discount (0 = off) | No | runtime | No | `0`, `0` |
 | `DB_POOL_SIZE`, `DB_MAX_OVERFLOW`, `MAX_INFLIGHT_REQUESTS`, `INFLIGHT_QUEUE_TIMEOUT_SECONDS` | SQLAlchemy pool per worker; in-flight HTTP cap (must be <= pool total); queue wait before 503 `SERVER_BUSY` | No | runtime | No | `12`, `12`, `24`, `15` |
 | `DB_STATEMENT_TIMEOUT_MS`, `DB_IDLE_IN_TRANSACTION_TIMEOUT_MS`, `DB_POOL_TIMEOUT_SECONDS`, `DB_POOL_RECYCLE_SECONDS` | Server-side query / idle-transaction guards (0 = off); pool wait; connection recycle | No | runtime | No | `20000`, `60000`, `10`, `1800` |
+| `CATALOG_CACHE_TTL_SECONDS` | Max age of cached public catalog responses (writes invalidate instantly; 0 = off) | No | runtime | No | `60` |
 | `REDIS_URL`, `ROUTE_CACHE_TTL_SECONDS` | Route-distance cache (empty = in-process); TTL | No | runtime | URL may hold a password: **Yes** | empty, `604800` |
 | `GEOCODING_PROVIDER`, `NOMINATIM_BASE_URL`, `NOMINATIM_USER_AGENT`, `GEOCODING_TIMEOUT_SECONDS` | Address search (`POST /delivery/geocode`); Nominatim policy needs an identifying User-Agent | No | runtime | No | `nominatim`, public URL, project UA, `5.0` |
 | `BAZAAR_PLUS_ORDERS_REQUIRED`, `BAZAAR_TIMEZONE` | Bazaar+ threshold and month boundary zone | No | runtime | No | `6`, `Asia/Kolkata` |

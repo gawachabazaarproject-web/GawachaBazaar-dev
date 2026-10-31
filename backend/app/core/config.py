@@ -103,6 +103,9 @@ class Settings(BaseSettings):
     # Redis being down never breaks delivery - routing is simply called directly.
     REDIS_URL: str = ""
     ROUTE_CACHE_TTL_SECONDS: int = 7 * 24 * 3600
+    # Public catalog responses (categories, products, ads, slides, offers) are
+    # cached this long at most; writes invalidate them instantly. 0 = off.
+    CATALOG_CACHE_TTL_SECONDS: int = 60
     # Geocoding (address search -> coordinates). Public Nominatim allows ~1
     # request/second and forbids autocomplete; it needs an identifying User-Agent.
     GEOCODING_PROVIDER: Literal["nominatim"] = "nominatim"

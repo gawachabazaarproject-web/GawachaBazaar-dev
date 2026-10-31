@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.dependencies.database import get_db
 from app.schemas.offer import OfferResponse
+from app.services.catalog_cache import catalog_cache
 from app.services.offers import OfferService
 
 router = APIRouter()
@@ -14,4 +15,6 @@ router = APIRouter()
 
 @router.get("", response_model=list[OfferResponse], summary="List live offers for the Home carousel")
 def list_offers(db: Session = Depends(get_db)) -> list[OfferResponse]:
-    return OfferService(db).list_live_offers()
+    return catalog_cache.get_or_load(
+        "offers", {}, list[OfferResponse], lambda: OfferService(db).list_live_offers()
+    )

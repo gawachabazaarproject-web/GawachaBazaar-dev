@@ -35,7 +35,10 @@ export const queryClient = new QueryClient({
  * (possibly cold) backend wakes up.
  */
 const CACHE_KEY = "gb.queryCache.v1";
-const PERSISTED_ROOTS = new Set(["categories", "products", "ads", "home-slides", "offers"]);
+const PERSISTED_ROOTS = new Set(["categories", "category", "products", "product", "ads", "home-slides", "offers"]);
+/** Detail screens and search/listing pages pile up as people browse; keep only
+ * the most recently fetched ones so the stored cache stays small and fast. */
+const MAX_PERSISTED_PER_ROOT: Record<string, number> = { product: 60, category: 30, products: 30 };
 const MAX_CACHE_AGE_MS = 24 * 60 * 60_000;
 
 export async function restoreQueryCache(): Promise<void> {
@@ -50,18 +53,35 @@ export async function restoreQueryCache(): Promise<void> {
   }
 }
 
+function saveQueryCache(): void {
+  try {
+    const state = dehydrate(queryClient, {
+      shouldDehydrateQuery: (q) => q.state.status === "success" && PERSISTED_ROOTS.has(String(q.queryKey[0])),
+    });
+    for (const [root, max] of Object.entries(MAX_PERSISTED_PER_ROOT)) {
+      const mine = state.queries.filter((q) => q.queryKey[0] === root);
+      if (mine.length <= max) continue;
+      const drop = new Set(
+        mine.sort((a, b) => b.state.dataUpdatedAt - a.state.dataUpdatedAt).slice(max).map((q) => q.queryHash),
+      );
+      state.queries = state.queries.filter((q) => !drop.has(q.queryHash));
+    }
+    void AsyncStorage.setItem(CACHE_KEY, JSON.stringify({ savedAt: Date.now(), state })).catch(() => undefined);
+  } catch {
+    // Best-effort only.
+  }
+}
+
 let persistTimer: ReturnType<typeof setTimeout> | null = null;
 queryClient.getQueryCache().subscribe(() => {
   if (persistTimer) return;
   persistTimer = setTimeout(() => {
     persistTimer = null;
-    try {
-      const state = dehydrate(queryClient, {
-        shouldDehydrateQuery: (q) => q.state.status === "success" && PERSISTED_ROOTS.has(String(q.queryKey[0])),
-      });
-      void AsyncStorage.setItem(CACHE_KEY, JSON.stringify({ savedAt: Date.now(), state })).catch(() => undefined);
-    } catch {
-      // Best-effort only.
-    }
+    saveQueryCache();
   }, 2000);
+});
+
+// The 2s debounce can lose the last updates when the OS kills a backgrounded app.
+AppState.addEventListener("change", (s) => {
+  if (s !== "active") saveQueryCache();
 });

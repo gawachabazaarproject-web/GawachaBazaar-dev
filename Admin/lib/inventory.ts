@@ -6,6 +6,7 @@
  */
 
 import { AMOUNT_UNITS_BY_DIMENSION, UNITS, convert, dimensionOf, formatSize, packTotalText } from "./units.ts";
+import { invalidateMemo, memoized } from "@/lib/memo-cache";
 
 export interface AdminInventoryLotListItem {
   id: number;
@@ -403,9 +404,15 @@ export async function fetchLotDetail(accessToken: string, id: number): Promise<A
   return request(accessToken, `/inventory/admin/lots/${id}`);
 }
 
+const LOCATIONS_MEMO = "inventory:locations";
+
+/** Warehouses change rarely and many screens read them, so they are kept for
+ * 5 minutes; every location mutation below clears the cache. */
 export async function fetchLocations(accessToken: string): Promise<Location[]> {
-  const result = await request<{ items: Location[] }>(accessToken, "/inventory/locations?page_size=100");
-  return result.items;
+  return memoized(LOCATIONS_MEMO, 5 * 60_000, async () => {
+    const result = await request<{ items: Location[] }>(accessToken, "/inventory/locations?page_size=100");
+    return result.items;
+  });
 }
 
 export interface CreateLocationPayload {
@@ -427,22 +434,29 @@ export async function updateLocationCoordinates(
   latitude: number | null,
   longitude: number | null,
 ): Promise<Location> {
-  return request(accessToken, `/inventory/locations/${id}`, {
+  const updated = await request<Location>(accessToken, `/inventory/locations/${id}`, {
     method: "PATCH",
     body: JSON.stringify({ latitude, longitude }),
   });
+  invalidateMemo(LOCATIONS_MEMO);
+  return updated;
 }
 
 export async function deleteLocation(accessToken: string, id: number): Promise<void> {
   await request(accessToken, `/inventory/locations/${id}`, { method: "DELETE" });
+  invalidateMemo(LOCATIONS_MEMO);
 }
 
 export async function setPackingPoint(accessToken: string, id: number): Promise<Location> {
-  return request(accessToken, `/inventory/locations/${id}/packing-point`, { method: "POST" });
+  const updated = await request<Location>(accessToken, `/inventory/locations/${id}/packing-point`, { method: "POST" });
+  invalidateMemo(LOCATIONS_MEMO);
+  return updated;
 }
 
 export async function createLocation(accessToken: string, payload: CreateLocationPayload): Promise<Location> {
-  return request(accessToken, "/inventory/locations", { method: "POST", body: JSON.stringify(payload) });
+  const created = await request<Location>(accessToken, "/inventory/locations", { method: "POST", body: JSON.stringify(payload) });
+  invalidateMemo(LOCATIONS_MEMO);
+  return created;
 }
 
 export async function fetchBatches(accessToken: string, productId?: number): Promise<Batch[]> {

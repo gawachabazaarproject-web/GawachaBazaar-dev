@@ -109,6 +109,29 @@ class RouteCache:
         except Exception as exc:  # noqa: BLE001
             self._trip("unlock", exc)
 
+    def get_int(self, key: str) -> int | None:
+        """Shared counter value (0 when unset); None when Redis is unusable."""
+        client = self._client()
+        if client is None:
+            return None
+        try:
+            return int(client.get(key) or 0)
+        except Exception as exc:  # noqa: BLE001
+            self._trip("get_int", exc)
+            return None
+
+    def incr(self, key: str) -> bool:
+        """Atomically bump a shared counter; False when Redis is unusable."""
+        client = self._client()
+        if client is None:
+            return False
+        try:
+            client.incr(key)
+            return True
+        except Exception as exc:  # noqa: BLE001
+            self._trip("incr", exc)
+            return False
+
     def set(self, key: str, value: dict, ttl: int) -> None:
         payload = json.dumps(value)
         client = self._client()

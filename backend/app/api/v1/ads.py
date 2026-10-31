@@ -16,6 +16,7 @@ from app.schemas.ad import (
     UpdateAdRequest,
 )
 from app.services.ad import AdService
+from app.services.catalog_cache import catalog_cache
 from app.services.image_upload import upload_image
 
 router = APIRouter()
@@ -23,7 +24,9 @@ router = APIRouter()
 
 @router.get("", response_model=list[AdResponse], summary="List Active Ads")
 def list_ads(db: Session = Depends(get_db)) -> list[AdResponse]:
-    return AdService(db).list_active_ads()
+    return catalog_cache.get_or_load(
+        "ads", {}, list[AdResponse], lambda: AdService(db).list_active_ads()
+    )
 
 
 @router.get(

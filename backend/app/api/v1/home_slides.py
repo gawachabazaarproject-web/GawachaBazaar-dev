@@ -13,6 +13,7 @@ from app.schemas.home_slide import (
     HomeSlideResponse,
     UpdateHomeSlideRequest,
 )
+from app.services.catalog_cache import catalog_cache
 from app.services.home_slide import HomeSlideService
 from app.services.image_upload import upload_image
 
@@ -21,7 +22,9 @@ router = APIRouter()
 
 @router.get("", response_model=list[HomeSlideResponse], summary="List Active Home Slides")
 def list_home_slides(db: Session = Depends(get_db)) -> list[HomeSlideResponse]:
-    return HomeSlideService(db).list_active()
+    return catalog_cache.get_or_load(
+        "home_slides", {}, list[HomeSlideResponse], lambda: HomeSlideService(db).list_active()
+    )
 
 
 @router.get(

@@ -215,6 +215,8 @@ worker/replica** today:
 2. **WebSocket registry** (`core/realtime.py`) - events only reach clients on the same process.
 3. **Reservation expiry sweep** - runs in each process (harmless but duplicated).
 
+**Catalog cache.** Public catalog reads (`GET /catalog/categories`, `/catalog/products`, product and category detail, `/ads`, `/home-slides`, `/offers`) go through [`catalog_cache.py`](../backend/app/services/catalog_cache.py): Redis when `REDIS_URL` is set, else in-process. Keys embed a catalog version that SQLAlchemy listeners bump after any committed write to a catalog, price, stock or promotion table, so admin edits and order stock changes show on the next request; `CATALOG_CACHE_TTL_SECONDS` (60) only covers time-based changes. Free-text searches, carts, orders and checkout quotes are never cached. A Redis error bypasses the cache (reads go to PostgreSQL). The mobile app also persists public catalog queries for 24 h (`mobile/src/api/queryClient.ts`) and Admin memoizes the warehouse list (`Admin/lib/memo-cache.ts`).
+
 To scale horizontally, move 1 and 2 to Redis (rate-limit storage, pub/sub for events) and make
 the sweep a single scheduled job. The delivery distance cache is per-process but harmless to
 duplicate.
