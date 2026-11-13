@@ -13,7 +13,7 @@ import { PressableScale } from "@/components/PressableScale";
 import { EmptyState } from "@/components/EmptyState";
 import { ProductCard, productSummaryToCardData } from "@/components/ProductCard";
 import { CART_BAR_CLEARANCE } from "@/components/CartBar";
-import { useAllProducts, useCategory } from "@/features/catalog/useCatalog";
+import { useCategory, useCategoryProducts, useSubcategoryProductIds } from "@/features/catalog/useCatalog";
 import { getCategoryPhoto } from "@/utils/categoryVisuals";
 import { CATEGORY_MARATHI, getDepartments, getCategoryStory } from "@/utils/categoryDepartments";
 import { ProductSummaryResponse } from "@/types/api";
@@ -32,7 +32,9 @@ export default function CategoryScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { data: category, isLoading: categoryLoading } = useCategory(categoryId);
-  const { data: productsData, isLoading: productsLoading } = useAllProducts();
+  const { data: productsData, isLoading: productsLoading } = useCategoryProducts(categoryId);
+  const childIds = useMemo(() => category?.children.map((c) => c.id) ?? [], [category]);
+  const idsByChild = useSubcategoryProductIds(childIds);
   const [selectedDepartmentId, setSelectedDepartmentId] = useState<string | null>(null);
 
   const allProducts = useMemo(() => productsData?.items ?? [], [productsData]);
@@ -46,7 +48,7 @@ export default function CategoryScreen() {
         id: String(child.id),
         name: child.name,
         imageUrl: getCategoryPhoto(child.slug, child.image_url),
-        matches: (p: ProductSummaryResponse) => p.category_id === child.id,
+        matches: (p: ProductSummaryResponse) => idsByChild.get(child.id)?.has(p.id) ?? p.category_id === child.id,
       }));
     }
     return getDepartments(category.slug).map((dept) => {
@@ -59,12 +61,12 @@ export default function CategoryScreen() {
         matches: (p: ProductSummaryResponse) => slugSet.has(p.slug),
       };
     });
-  }, [category, productsBySlug]);
+  }, [category, productsBySlug, idsByChild]);
 
   const categoryProducts = useMemo(() => {
     if (!category) return [];
-    const ids = new Set([category.id, ...category.children.map((c) => c.id)]);
-    return allProducts.filter((p) => ids.has(p.category_id));
+    // The API already returned this category plus every subcategory's products.
+    return allProducts;
   }, [allProducts, category]);
 
   const selectedSection = sections.find((s) => s.id === selectedDepartmentId) ?? null;

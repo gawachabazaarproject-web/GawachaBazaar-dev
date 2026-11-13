@@ -20,8 +20,11 @@ function resolveBaseUrl(): string {
   // Optional: force a dev build onto another backend (e.g. the deployed one,
   // which sits next to its database and is far faster than a laptop backend
   // talking to a remote DB). Unset = the normal Metro-host behaviour below.
+  // Dev builds only: `eas update` bundles the developer's local .env, so an
+  // override left there would otherwise be shipped to every installed app
+  // (it once pointed OTA users at a URL without the /api/v1 path).
   const override = process.env.EXPO_PUBLIC_API_URL_OVERRIDE;
-  if (override) return override;
+  if (override && __DEV__) return override;
   const hostUri = Constants.expoConfig?.hostUri;
   const host = hostUri?.split(":")[0];
   // Release builds (and OTA updates) must never derive a cleartext LAN host: only

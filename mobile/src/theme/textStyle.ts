@@ -63,7 +63,7 @@ function nearestFile(files: Partial<Record<Weight, string>>, wanted: number): st
 }
 
 export function fixTextStyle(style: TextStyle, opts: { android: boolean }): TextStyle {
-  const out: TextStyle = { ...style };
+  const out = { ...style } as { -readonly [K in keyof TextStyle]: TextStyle[K] };
   const family = out.fontFamily;
   const isCustom = typeof family === "string" && family.includes("_");
 

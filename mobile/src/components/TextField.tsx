@@ -1,5 +1,5 @@
 import React, { forwardRef, useState } from "react";
-import { Pressable, StyleSheet, TextInput, TextInputProps, View } from "react-native";
+import { Pressable, StyleSheet, TextInput, TextInputInstance, TextInputProps, View } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { Text } from "./Text";
 import { colors, radius, spacing, typography } from "@/theme";
@@ -10,7 +10,7 @@ export interface TextFieldProps extends TextInputProps {
   helperText?: string;
 }
 
-export const TextField = forwardRef<TextInput, TextFieldProps>(
+export const TextField = forwardRef<TextInputInstance, TextFieldProps>(
   ({ label, error, helperText, style, onFocus, onBlur, secureTextEntry, ...rest }, ref) => {
     const [focused, setFocused] = useState(false);
     // A field passed `secureTextEntry` gets a built-in show/hide toggle -

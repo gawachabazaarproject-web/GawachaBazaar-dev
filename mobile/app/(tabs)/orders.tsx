@@ -1,5 +1,5 @@
 import React, { useMemo, useRef, useState } from "react";
-import { FlatList, Modal, Pressable, RefreshControl, StyleSheet, TextInput, useWindowDimensions, View } from "react-native";
+import { FlatList, Modal, Pressable, RefreshControl, StyleSheet, TextInput, useWindowDimensions, View, ViewInstance } from "react-native";
 import { Image } from "expo-image";
 import { useRouter } from "expo-router";
 import { Feather } from "@expo/vector-icons";
@@ -44,7 +44,7 @@ export default function OrdersScreen() {
   const [menuOpen, setMenuOpen] = useState(false);
   // The filter menu is a popover rendered in a Modal (above the list), anchored
   // to the Filter button - inside the list header the order cards drew over it.
-  const filterBtnRef = useRef<View>(null);
+  const filterBtnRef = useRef<ViewInstance>(null);
   const [menuAnchor, setMenuAnchor] = useState<{ top: number; right: number } | null>(null);
   const { width: windowWidth } = useWindowDimensions();
   const heroScale = smallScreenScale(windowWidth);
@@ -178,7 +178,7 @@ export default function OrdersScreen() {
           keyboardShouldPersistTaps="handled"
           onEndReachedThreshold={0.4}
           onEndReached={() => hasNextPage && fetchNextPage()}
-          refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor={colors.primary} />}
+          refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={async () => { await refetch(); }} tintColor={colors.primary} />}
         />
       )}
       <Modal

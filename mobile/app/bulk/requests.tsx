@@ -58,7 +58,7 @@ export default function BulkRequestsScreen() {
           )}
           onEndReachedThreshold={0.4}
           onEndReached={() => hasNextPage && fetchNextPage()}
-          ListFooterComponent={isFetchingNextPage ? <Skeleton height={80} borderRadius={0} /> : null}
+          ListFooterComponent={isFetchingNextPage ? <Skeleton height={80} borderRadius={0} /> : undefined}
         />
       )}
     </Screen>

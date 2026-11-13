@@ -66,7 +66,7 @@ export function WholesaleToggle({ mode, onChange }: WholesaleToggleProps) {
 }
 
 const styles = StyleSheet.create({
-  wrap: { paddingHorizontal: spacing.base, marginTop: spacing.lg },
+  wrap: { paddingHorizontal: spacing.base, marginTop: 0, marginBottom: spacing.xl },
   track: {
     height: 52,
     borderRadius: radius.pill,

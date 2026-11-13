@@ -101,6 +101,13 @@ export interface CategoryResponse {
   status: string;
   /** Admin-chosen display order among siblings (lower first). */
   sort_order?: number;
+  /** Tile tint chosen in Admin (#RRGGBB); absent = app default. */
+  background_color?: string | null;
+  /** Short label shown on the tile, e.g. "New". */
+  badge_text?: string | null;
+  show_on_homepage?: boolean;
+  show_in_catalog?: boolean;
+  is_featured?: boolean;
   created_at: string;
   /** Active subcategories (public list/detail reads only). */
   child_count?: number;

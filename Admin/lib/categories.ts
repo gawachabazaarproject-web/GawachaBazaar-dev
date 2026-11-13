@@ -2,9 +2,9 @@
  * Types mirror backend/app/schemas/admin_catalog.py's category schemas
  * field-for-field. `image_url` is Cloudinary-backed (see
  * uploadCategoryImage/deleteCategoryImage below) - there is still no
- * is_featured/SEO column on Category in the backend, so those
- * stay absent here rather than a fabricated default, matching the
- * honest-gap pattern already used in Products (Merchandising/Reviews).
+ * SEO column on Category in the backend, so that stays absent here
+ * rather than a fabricated default, matching the honest-gap pattern
+ * already used in Products (Merchandising/Reviews).
  */
 
 export interface AdminCategoryListItem {
@@ -17,6 +17,11 @@ export interface AdminCategoryListItem {
   parent_name: string | null;
   status: string;
   sort_order: number;
+  background_color: string | null;
+  badge_text: string | null;
+  show_on_homepage: boolean;
+  show_in_catalog: boolean;
+  is_featured: boolean;
   product_count: number;
   child_count: number;
   created_at: string;
@@ -39,6 +44,12 @@ export interface CategoryRef {
   parent_id: number | null;
   status: string;
   created_at: string;
+  // Present on responses from this build onward; optional so older API builds still type-check.
+  background_color?: string | null;
+  badge_text?: string | null;
+  show_on_homepage?: boolean;
+  show_in_catalog?: boolean;
+  is_featured?: boolean;
 }
 
 export interface AdminCategoryDetail {
@@ -50,6 +61,11 @@ export interface AdminCategoryDetail {
   parent_id: number | null;
   parent_name: string | null;
   status: string;
+  background_color: string | null;
+  badge_text: string | null;
+  show_on_homepage: boolean;
+  show_in_catalog: boolean;
+  is_featured: boolean;
   product_count: number;
   created_at: string;
   updated_at: string;
@@ -102,6 +118,7 @@ export interface AdminCategoryListParams {
   status?: string;
   parent_id?: number;
   q?: string;
+  show_on_homepage?: boolean;
 }
 
 export async function fetchAdminCategories(
@@ -113,6 +130,23 @@ export async function fetchAdminCategories(
     if (value !== undefined && value !== "") search.set(key, String(value));
   });
   return request(accessToken, `/catalog/categories/admin?${search.toString()}`);
+}
+
+export interface AdminCategorySummary {
+  total: number;
+  active: number;
+  homepage: number;
+  inactive: number;
+  without_products: number;
+}
+
+export async function fetchCategorySummary(accessToken: string): Promise<AdminCategorySummary> {
+  return request(accessToken, "/catalog/categories/admin/summary");
+}
+
+/** Copies the look of a category as a hidden draft (no products). */
+export async function duplicateCategory(accessToken: string, id: number): Promise<CategoryRef> {
+  return request<CategoryRef>(accessToken, `/catalog/categories/${id}/duplicate`, { method: "POST" });
 }
 
 export async function fetchAdminCategoryDetail(accessToken: string, id: number): Promise<AdminCategoryDetail> {
@@ -134,6 +168,11 @@ export interface CreateCategoryPayload {
   parent_id?: number | null;
   image_url?: string | null;
   status: string;
+  background_color?: string | null;
+  badge_text?: string | null;
+  show_on_homepage?: boolean;
+  show_in_catalog?: boolean;
+  is_featured?: boolean;
 }
 
 export async function createCategory(accessToken: string, payload: CreateCategoryPayload) {
@@ -149,6 +188,11 @@ export interface UpdateCategoryPayload {
   description?: string | null;
   parent_id?: number | null;
   status?: string;
+  background_color?: string | null;
+  badge_text?: string | null;
+  show_on_homepage?: boolean;
+  show_in_catalog?: boolean;
+  is_featured?: boolean;
 }
 
 export async function updateCategory(accessToken: string, id: number, payload: UpdateCategoryPayload) {

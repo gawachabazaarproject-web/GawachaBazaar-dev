@@ -1,17 +1,17 @@
 import React, { useMemo, useRef, useState } from "react";
-import { Linking, Pressable, RefreshControl, ScrollView, StyleSheet, View } from "react-native";
+import { Linking, Pressable, RefreshControl, ScrollView, ScrollViewInstance, StyleSheet, View } from "react-native";
 import { useRouter } from "expo-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { Feather } from "@expo/vector-icons";
-import Animated, { FadeInDown, FadeInRight } from "react-native-reanimated";
+import Animated, { FadeInDown } from "react-native-reanimated";
 import { Screen } from "@/components/Screen";
 import { Text } from "@/components/Text";
 import { ProductCardData, productSummaryToCardData } from "@/components/ProductCard";
-import { ProductCardSkeleton, Skeleton } from "@/components/Skeleton";
+import { ProductCardSkeleton } from "@/components/Skeleton";
 import { ShopHeader } from "@/components/ShopHeader";
 import { HorizontalProductCard } from "@/components/HorizontalProductCard";
 import { PromoCarousel } from "@/components/home/PromoCarousel";
-import { CategoryPanel } from "@/components/home/CategoryPanel";
+import { CategoryGrid, CategoryGridSkeleton } from "@/components/home/CategoryGrid";
 import { SectionHeading } from "@/components/home/SectionHeading";
 import { ProductRail } from "@/components/home/ProductRail";
 import { BazaarSection } from "@/components/home/BazaarSection";
@@ -22,7 +22,7 @@ import { HomeFooter } from "@/components/home/HomeFooter";
 import { WholesaleToggle } from "@/components/home/WholesaleToggle";
 import { BrandAdsCarousel } from "@/components/home/BrandAdsCarousel";
 import { WholesaleProductCard } from "@/components/home/WholesaleProductCard";
-import { useCategories, useProducts } from "@/features/catalog/useCatalog";
+import { useHomeCategories, useProducts } from "@/features/catalog/useCatalog";
 import { useAddresses } from "@/features/address/useAddresses";
 import { ActiveDeliveryCodes } from "@/features/orders/ActiveDeliveryCodes";
 import { useWholesaleStore } from "@/store/wholesaleStore";
@@ -32,11 +32,11 @@ const HARVEST_SLUGS = ["ripe-tomatoes", "fresh-fenugreek", "green-peas", "chilli
 const SPECIALTY_SLUGS = ["fresh-oranges", "toned-milk", "toor-dal"];
 
 export default function HomeScreen() {
-  const scrollRef = useRef<ScrollView>(null);
+  const scrollRef = useRef<ScrollViewInstance>(null);
   const router = useRouter();
   const queryClient = useQueryClient();
   const [refreshing, setRefreshing] = useState(false);
-  const { data: categories, isLoading: categoriesLoading } = useCategories();
+  const { data: categories, isLoading: categoriesLoading } = useHomeCategories();
   const { data: productsPages, isLoading: productsLoading } = useProducts({});
   const { data: addresses } = useAddresses();
   const mode = useWholesaleStore((s) => s.mode);
@@ -128,26 +128,13 @@ export default function HomeScreen() {
         {/* Shop by category */}
         <SectionHeading index="01 / 05" eyebrow="EXPLORE" title="Shop by" scriptSuffix="category." onSeeAll={() => router.push("/(tabs)/categories")} />
         {categoriesLoading ? (
-          <View style={styles.categoryRow}>
-            {[1, 2, 3].map((i) => (
-              <Skeleton key={i} width={168} height={226} borderRadius={0} />
-            ))}
-          </View>
+          <CategoryGridSkeleton />
         ) : (
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.categoryRow}>
-            {(categories ?? []).map((category, index) => (
-              <Animated.View key={category.id} entering={FadeInRight.delay(index * 50).duration(280)}>
-                <CategoryPanel
-                  id={category.id}
-                  slug={category.slug}
-                  imageUrl={category.image_url}
-                  name={category.name}
-                  index={index}
-                  onPress={() => router.push(`/category/${category.id}`)}
-                />
-              </Animated.View>
-            ))}
-          </ScrollView>
+          <CategoryGrid
+            categories={categories ?? []}
+            limit={8}
+            onPress={(category) => router.push(`/category/${category.id}`)}
+          />
         )}
 
         {/* Today's Market */}
@@ -256,7 +243,6 @@ const styles = StyleSheet.create({
     height: 48,
   },
   carouselWrap: { marginTop: spacing.lg, marginBottom: spacing.xl },
-  categoryRow: { paddingHorizontal: spacing.base, gap: spacing.sm, flexDirection: "row" },
   skeletonRail: { flexDirection: "row", gap: spacing.md, paddingHorizontal: spacing.base, marginTop: spacing.xl },
   specialties: { marginTop: spacing.xl },
   bento: { marginTop: spacing.xl },

@@ -21,6 +21,8 @@ import { colors, radius, spacing } from "@/theme";
 const SLIDE_HEIGHT = 480;
 const POSTER_RADIUS = 20;
 const AUTO_MS = 3000;
+const PEEK = 26; // visible sliver of the previous/next card, per side
+const CARD_GAP = 6; // half the gap between cards (each card pads this on both sides)
 
 export interface PromoCarouselProps {
   /** `linkUrl` is the slide's admin-set link (in-app path or https URL), or null. */
@@ -52,12 +54,17 @@ export function PromoCarousel({ onSlidePress }: PromoCarouselProps) {
     : isError
       ? CAMPAIGN_SLIDES
       : [];
-  const { width: SLIDE_WIDTH } = useWindowDimensions();
+  // One card in focus with the neighbours peeking in from both sides.
+  const { width: screenWidth } = useWindowDimensions();
+  const SLIDE_WIDTH = screenWidth - PEEK * 2;
   const scrollX = useSharedValue(0);
   const dotProgress = useSharedValue(0);
   const scrollRef = useRef<Animated.ScrollView>(null);
   const [active, setActive] = useState(0);
-  const pausedRef = useRef(false);
+  const [dragging, setDragging] = useState(false);
+  // Bumped when a manual swipe settles so the auto-advance timer restarts
+  // even if the user lands back on the same slide.
+  const [resumeKey, setResumeKey] = useState(0);
 
   const scrollHandler = useAnimatedScrollHandler((event) => {
     scrollX.value = event.contentOffset.x;
@@ -74,7 +81,7 @@ export function PromoCarousel({ onSlidePress }: PromoCarouselProps) {
       setActive(index);
       restartProgress();
     },
-    [restartProgress]
+    [restartProgress, SLIDE_WIDTH]
   );
 
   useEffect(() => {
@@ -83,20 +90,21 @@ export function PromoCarousel({ onSlidePress }: PromoCarouselProps) {
   }, []);
 
   useEffect(() => {
-    if (pausedRef.current) return;
+    if (dragging || slides.length < 2) return;
     const id = setTimeout(() => {
       goTo((active + 1) % slides.length);
     }, AUTO_MS);
     return () => clearTimeout(id);
-  }, [active, goTo]);
+  }, [active, goTo, dragging, resumeKey, slides.length]);
 
   const onMomentumEnd = useCallback(
     (e: { nativeEvent: { contentOffset: { x: number } } }) => {
       const index = Math.round(e.nativeEvent.contentOffset.x / SLIDE_WIDTH);
-      setActive(index);
+      setActive(Math.max(0, Math.min(index, slides.length - 1)));
+      setResumeKey((k) => k + 1);
       restartProgress();
     },
-    [restartProgress]
+    [restartProgress, SLIDE_WIDTH, slides.length]
   );
 
   if (slides.length === 0) {
@@ -109,15 +117,17 @@ export function PromoCarousel({ onSlidePress }: PromoCarouselProps) {
       <Animated.ScrollView
         ref={scrollRef}
         horizontal
-        pagingEnabled
+        snapToInterval={SLIDE_WIDTH}
+        snapToAlignment="start"
+        decelerationRate="fast"
+        disableIntervalMomentum
+        contentContainerStyle={{ paddingHorizontal: PEEK }}
         showsHorizontalScrollIndicator={false}
         onScroll={scrollHandler}
         scrollEventThrottle={16}
-        onScrollBeginDrag={() => {
-          pausedRef.current = true;
-        }}
+        onScrollBeginDrag={() => setDragging(true)}
         onMomentumScrollEnd={(e) => {
-          pausedRef.current = false;
+          setDragging(false);
           onMomentumEnd(e);
         }}
       >
@@ -249,7 +259,7 @@ const styles = StyleSheet.create({
   slide: {
     height: SLIDE_HEIGHT,
     backgroundColor: colors.background,
-    paddingHorizontal: spacing.base,
+    paddingHorizontal: CARD_GAP,
   },
   poster: {
     flex: 1,
@@ -277,8 +287,8 @@ const styles = StyleSheet.create({
   },
   indicatorRow: {
     position: "absolute",
-    left: spacing.base + spacing.lg,
-    right: spacing.base + spacing.lg,
+    left: PEEK + CARD_GAP + spacing.lg,
+    right: PEEK + CARD_GAP + spacing.lg,
     bottom: spacing.md,
     flexDirection: "row",
     alignItems: "center",

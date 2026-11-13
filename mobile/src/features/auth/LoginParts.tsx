@@ -6,6 +6,7 @@ import {
   ScrollView,
   StyleSheet,
   TextInput,
+  TextInputInstance,
   TextInputProps,
   View,
   useWindowDimensions,
@@ -150,7 +151,7 @@ interface LoginFieldProps extends TextInputProps {
   error?: string | null;
 }
 
-export const LoginField = React.forwardRef<TextInput, LoginFieldProps>(
+export const LoginField = React.forwardRef<TextInputInstance, LoginFieldProps>(
   ({ label, icon, error, secureTextEntry, ...rest }, ref) => {
     const s = useLoginScale();
     const [revealed, setRevealed] = useState(false);

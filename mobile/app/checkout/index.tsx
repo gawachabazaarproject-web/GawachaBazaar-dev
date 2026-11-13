@@ -40,10 +40,12 @@ export default function CheckoutScreen() {
 
   const [selectedAddressId, setSelectedAddressId] = useState<number | null>(null);
   const { data: deliveryQuote, error: quoteError } = useDeliveryQuote(selectedAddressId);
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("COD");
+  // Nothing is pre-selected: the customer must pick an address, a delivery
+  // day + slot and a payment method before the order can be placed.
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | null>(null);
   const [result, setResult] = useState<PlaceOrderResult | null>(null);
-  const [day, setDay] = useState<Day>("today");
-  const [slot, setSlot] = useState<Slot>("morning");
+  const [day, setDay] = useState<Day | null>(null);
+  const [slot, setSlot] = useState<Slot | null>(null);
 
   const [promoInput, setPromoInput] = useState("");
   const [promoEvaluation, setPromoEvaluation] = useState<PromotionEvaluationResponse | null>(null);
@@ -72,9 +74,10 @@ export default function CheckoutScreen() {
     setPromoEvaluation(null);
   };
 
+  // The chosen address may have been deleted from the address screen.
   useEffect(() => {
-    if (!selectedAddressId && addresses && addresses.length > 0) {
-      setSelectedAddressId((addresses.find((a) => a.is_default) ?? addresses[0]).id);
+    if (selectedAddressId && addresses && !addresses.some((a) => a.id === selectedAddressId)) {
+      setSelectedAddressId(null);
     }
   }, [addresses, selectedAddressId]);
 
@@ -140,7 +143,7 @@ export default function CheckoutScreen() {
   };
 
   const handlePlaceOrder = () => {
-    if (!selectedAddressId) return;
+    if (!selectedAddressId || !paymentMethod || !day || !slot) return;
     // Only the latest attempt's error should be on screen.
     onlineCheckout.clearError();
     placeOrder.reset();
@@ -288,6 +291,15 @@ export default function CheckoutScreen() {
   const deliveryFee = Number.parseFloat(deliveryQuote?.fee ?? "0");
   const goodsTotal = promoEvaluation?.eligible ? promoEvaluation.final_total : cart.total_amount ?? "0";
   const total = String(Number.parseFloat(goodsTotal) + deliveryFee);
+  const missingStep = !selectedAddressId
+    ? "Select a delivery address"
+    : !day || !slot
+      ? "Select a delivery day and slot"
+      : !paymentMethod
+        ? "Select a payment method"
+        : null;
+  const orderBlocked =
+    !!missingStep || !!quoteError || !!deliveryQuote?.needs_location || placeOrder.isPending || onlineCheckout.busy;
   const deliveryLabel = deliveryQuote && !deliveryQuote.free_delivery
     ? `Delivery ${formatMoney(deliveryFee, cart.currency ?? "INR")}`
     : "Free delivery";
@@ -490,7 +502,7 @@ export default function CheckoutScreen() {
             deliveryFee={deliveryQuote ? deliveryFee : null}
             currency={cart.currency}
             slotLabel={slotSummary(day, slot)}
-            paymentLabel={paymentMethod === "UPI" ? "Pay online" : "Cash / UPI on Delivery"}
+            paymentLabel={!paymentMethod ? "Select payment method" : paymentMethod === "UPI" ? "Pay online" : "Cash / UPI on Delivery"}
           />
           {promoEvaluation?.eligible ? (
             <View style={styles.discountSummaryRow}>
@@ -511,7 +523,11 @@ export default function CheckoutScreen() {
       </ScrollView>
 
       <View style={[styles.footer, { bottom: insets.bottom + spacing.md }]}>
-        {paymentMethod === "COD" ? (
+        {missingStep ? (
+          <Text variant="caption" color={colors.error} style={styles.footerNote}>
+            {missingStep} to continue
+          </Text>
+        ) : paymentMethod === "COD" ? (
           <Text variant="caption" color={colors.textSecondary} style={styles.footerNote}>
             Amount to pay on delivery: {formatMoney(total, cart.currency ?? "INR")}
           </Text>
@@ -561,9 +577,9 @@ export default function CheckoutScreen() {
             </Text>
           </View>
           <Pressable
-            style={[styles.placeOrderButton, (!selectedAddressId || !!quoteError || !!deliveryQuote?.needs_location || placeOrder.isPending || onlineCheckout.busy) && styles.disabled]}
+            style={[styles.placeOrderButton, orderBlocked && styles.disabled]}
             onPress={handlePlaceOrder}
-            disabled={!selectedAddressId || !!quoteError || !!deliveryQuote?.needs_location || placeOrder.isPending || onlineCheckout.busy}
+            disabled={orderBlocked}
           >
             <Text variant="bodyMedium" color={colors.textOnAccent}>
               {placeOrder.isPending || onlineCheckout.busy ? "Please wait..." : paymentMethod === "UPI" ? "Pay Now" : "Place Order"}

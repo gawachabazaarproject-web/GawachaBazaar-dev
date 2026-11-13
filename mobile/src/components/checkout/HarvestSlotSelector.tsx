@@ -18,7 +18,8 @@ function dayLabel(offsetDays: number): string {
 }
 
 /** Short summary such as "Today, 6:30 AM – 9:00 AM" for the footer/summary. */
-export function slotSummary(day: Day, slot: Slot): string {
+export function slotSummary(day: Day | null, slot: Slot | null): string {
+  if (!day || !slot) return "Select delivery slot";
   return `${day === "today" ? "Today" : "Tomorrow"}, ${SLOT_TIME[slot]}`;
 }
 
@@ -34,8 +35,8 @@ export function HarvestSlotSelector({
   onDayChange,
   onSlotChange,
 }: {
-  day: Day;
-  slot: Slot;
+  day: Day | null;
+  slot: Slot | null;
   onDayChange: (d: Day) => void;
   onSlotChange: (s: Slot) => void;
 }) {

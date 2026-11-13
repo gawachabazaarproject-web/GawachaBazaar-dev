@@ -28,6 +28,7 @@ import { ImageDropzone } from "@/components/ImageDropzone";
 import { Icon } from "@/components/icons";
 import { BusyLabel, PageLoader } from "@/components/Spinner";
 import { SearchableSelect } from "@/components/SearchableSelect";
+import { CategoryDisplay, CategoryDisplayFields, DEFAULT_DISPLAY } from "@/components/CategoryDisplayFields";
 
 export default function CategoryDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -50,6 +51,7 @@ export default function CategoryDetailPage({ params }: { params: Promise<{ id: s
   const [error, setError] = useState<string | null>(null);
 
   const [general, setGeneral] = useState({ name: "", slug: "", parent_id: "", description: "", status: "" });
+  const [display, setDisplay] = useState<CategoryDisplay>(DEFAULT_DISPLAY);
   const [savingGeneral, setSavingGeneral] = useState(false);
   const [generalError, setGeneralError] = useState<string | null>(null);
   const [isDirty, setIsDirty] = useState(false);
@@ -78,6 +80,13 @@ export default function CategoryDetailPage({ params }: { params: Promise<{ id: s
         parent_id: detail.parent_id ? String(detail.parent_id) : "",
         description: detail.description ?? "",
         status: detail.status,
+      });
+      setDisplay({
+        background_color: detail.background_color ?? "",
+        badge_text: detail.badge_text ?? "",
+        show_on_homepage: detail.show_on_homepage,
+        show_in_catalog: detail.show_in_catalog,
+        is_featured: detail.is_featured,
       });
       setIsDirty(false);
       fetchCategoryActivity(token, categoryId).then(setActivity).catch(() => undefined);
@@ -118,6 +127,11 @@ export default function CategoryDetailPage({ params }: { params: Promise<{ id: s
     setIsDirty(true);
   };
 
+  const updateDisplay = (next: CategoryDisplay) => {
+    setDisplay(next);
+    setIsDirty(true);
+  };
+
   const handleSave = async () => {
     const token = getAccessToken();
     if (!token) return;
@@ -130,6 +144,11 @@ export default function CategoryDetailPage({ params }: { params: Promise<{ id: s
         parent_id: general.parent_id ? Number(general.parent_id) : null,
         description: general.description || null,
         status: general.status,
+        background_color: display.background_color || null,
+        badge_text: display.badge_text.trim() || null,
+        show_on_homepage: display.show_on_homepage,
+        show_in_catalog: display.show_in_catalog,
+        is_featured: display.is_featured,
       });
       await load();
     } catch (err) {
@@ -357,6 +376,16 @@ export default function CategoryDetailPage({ params }: { params: Promise<{ id: s
               />
             </Field>
           </div>
+        </div>
+        <div className="mb-4 border-t border-neutral-100 pt-4">
+          <h3 className="mb-3 text-sm font-semibold text-primary-900">Storefront display</h3>
+          <CategoryDisplayFields
+            value={display}
+            onChange={updateDisplay}
+            name={general.name}
+            imageUrl={category.image_url}
+            disabled={!canEdit}
+          />
         </div>
         {generalError && (
           <p className="mb-2 rounded border border-status-danger/30 bg-status-dangerLight px-3 py-2 text-sm text-status-danger">

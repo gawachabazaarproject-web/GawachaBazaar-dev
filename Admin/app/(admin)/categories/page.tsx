@@ -7,9 +7,12 @@ import { readInitialQuery, useDebounced, useUrlQuerySync } from "@/lib/use-list-
 import {
   AdminCategoryListItem,
   CategoryApiError,
+  AdminCategorySummary,
   CATEGORY_STATUSES,
   deleteCategory,
+  duplicateCategory,
   fetchAdminCategories,
+  fetchCategorySummary,
   updateCategory,
 } from "@/lib/categories";
 import { hasPermission } from "@/lib/permissions";
@@ -72,7 +75,9 @@ export default function CategoriesPage() {
   const dq = useDebounced(q);
   useUrlQuerySync((v) => { setQ(v); });
   const [status, setStatus] = useState("");
-  const hasFilters = Boolean(q || status);
+  const [homepage, setHomepage] = useState<"" | "yes" | "no">("");
+  const [summary, setSummary] = useState<AdminCategorySummary | null>(null);
+  const hasFilters = Boolean(q || status || homepage);
 
   const canCreate = Boolean(user && hasPermission(user.roles, "categories.create"));
   const canEdit = Boolean(user && hasPermission(user.roles, "categories.update"));
@@ -92,8 +97,10 @@ export default function CategoriesPage() {
         page_size: PAGE_SIZE,
         q: dq || undefined,
         status: status || undefined,
+        show_on_homepage: homepage === "" ? undefined : homepage === "yes",
       });
       setItems(result.items);
+      fetchCategorySummary(token).then(setSummary).catch(() => undefined);
     } catch (err) {
       setError(err instanceof CategoryApiError ? err.message : "Unable to load categories.");
     } finally {
@@ -101,7 +108,7 @@ export default function CategoriesPage() {
       loadedOnce.current = true;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dq, status]);
+  }, [dq, status, homepage]);
 
   useEffect(() => {
     load();
@@ -116,6 +123,19 @@ export default function CategoriesPage() {
       await load();
     } catch (err) {
       setActionError(err instanceof CategoryApiError ? err.message : "Unable to update this category.");
+    }
+  };
+
+  const handleDuplicate = async (row: AdminCategoryListItem) => {
+    const token = getAccessToken();
+    if (!token) return;
+    setActionError(null);
+    try {
+      const copy = await duplicateCategory(token, row.id);
+      // Lands on the hidden draft so it can be renamed before it goes live.
+      router.push(`/categories/${copy.id}`);
+    } catch (err) {
+      setActionError(err instanceof CategoryApiError ? err.message : "Unable to duplicate this category.");
     }
   };
 
@@ -140,6 +160,7 @@ export default function CategoriesPage() {
   const clearFilters = () => {
     setQ("");
     setStatus("");
+    setHomepage("");
   };
 
   return (
@@ -147,7 +168,7 @@ export default function CategoriesPage() {
       <PageHeader
         eyebrow="Catalog"
         title="Categories"
-        description="Organize and control how customers discover products across Gawacha Bazaar."
+        description="Manage your storefront categories, illustrations, visibility, and display order."
         actions={
           <>
             {canEdit && (
@@ -170,6 +191,29 @@ export default function CategoriesPage() {
         }
       />
 
+      <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-5">
+        {[
+          { label: "Total", value: summary?.total, apply: () => clearFilters(), active: !hasFilters },
+          { label: "Active", value: summary?.active, apply: () => { clearFilters(); setStatus("ACTIVE"); }, active: status === "ACTIVE" && !homepage },
+          { label: "On Home", value: summary?.homepage, apply: () => { clearFilters(); setStatus("ACTIVE"); setHomepage("yes"); }, active: homepage === "yes" },
+          { label: "Inactive", value: summary?.inactive, apply: () => { clearFilters(); setStatus("INACTIVE"); }, active: status === "INACTIVE" },
+          { label: "No products", value: summary?.without_products, apply: undefined, active: false },
+        ].map((card) => (
+          <button
+            key={card.label}
+            type="button"
+            disabled={!card.apply}
+            onClick={card.apply}
+            className={`rounded border bg-white px-4 py-3 text-left ${
+              card.active ? "border-primary-600 ring-1 ring-primary-600" : "border-neutral-200"
+            } ${card.apply ? "hover:bg-neutral-50" : "cursor-default"}`}
+          >
+            <span className="block text-xs font-medium uppercase tracking-wide text-neutral-500">{card.label}</span>
+            <span className="block text-2xl font-semibold text-primary-900">{card.value ?? "-"}</span>
+          </button>
+        ))}
+      </div>
+
       <div className="mb-4 flex flex-wrap items-center gap-2 rounded border border-neutral-200 bg-white p-3">
         <input
           value={q}
@@ -187,6 +231,16 @@ export default function CategoriesPage() {
             <option key={s} value={s}>{s}</option>
           ))}
         </select>
+        <select
+          value={homepage}
+          onChange={(e) => setHomepage(e.target.value as "" | "yes" | "no")}
+          className="rounded border border-neutral-300 bg-white px-2 py-1.5 text-sm text-neutral-700"
+          aria-label="Home visibility"
+        >
+          <option value="">Home: All</option>
+          <option value="yes">On Home</option>
+          <option value="no">Not on Home</option>
+        </select>
         {hasFilters && (
           <button onClick={clearFilters} className="text-sm font-medium text-primary-700 hover:underline">
             Clear filters
@@ -202,7 +256,7 @@ export default function CategoriesPage() {
 
       <div className="overflow-hidden rounded border border-neutral-200 bg-white">
         {loading ? (
-          <TableSkeleton rows={6} columns={7} />
+          <TableSkeleton rows={6} columns={8} />
         ) : error ? (
           <ErrorState message={error} onRetry={load} />
         ) : rows.length === 0 ? (
@@ -230,6 +284,7 @@ export default function CategoriesPage() {
                   <th className="px-4 py-2 font-medium">Category</th>
                   <th className="px-4 py-2 font-medium">Slug</th>
                   <th className="px-4 py-2 font-medium">Products</th>
+                  <th className="px-4 py-2 font-medium">Home</th>
                   <th className="px-4 py-2 font-medium">Status</th>
                   <th className="px-4 py-2 font-medium">Updated</th>
                   <th className="px-4 py-2 text-right font-medium">Actions</th>
@@ -247,7 +302,12 @@ export default function CategoriesPage() {
                         {row.depth > 0 && <span className="text-neutral-300">└</span>}
                         {row.image_url ? (
                           // eslint-disable-next-line @next/next/no-img-element
-                          <img src={row.image_url} alt="" className="h-10 w-10 rounded object-cover" />
+                          <img
+                            src={row.image_url}
+                            alt=""
+                            className="h-10 w-10 rounded object-contain"
+                            style={row.background_color ? { backgroundColor: row.background_color } : undefined}
+                          />
                         ) : (
                           <span className="h-10 w-10 rounded bg-neutral-100" />
                         )}
@@ -261,6 +321,13 @@ export default function CategoriesPage() {
                     </td>
                     <td className="px-4 py-3 font-mono text-xs text-neutral-500">{row.slug}</td>
                     <td className="px-4 py-3 text-neutral-600">{row.product_count}</td>
+                    <td className="px-4 py-3 text-xs">
+                      {row.show_on_homepage ? (
+                        <span className="rounded-full bg-status-successLight px-2 py-0.5 font-medium text-status-success">Visible</span>
+                      ) : (
+                        <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-neutral-500">Hidden</span>
+                      )}
+                    </td>
                     <td className="px-4 py-3">
                       <StatusBadge status={row.status} />
                     </td>
@@ -273,6 +340,11 @@ export default function CategoriesPage() {
                             className="text-primary-700 hover:underline"
                           >
                             + Subcategory
+                          </button>
+                        )}
+                        {canCreate && (
+                          <button onClick={() => handleDuplicate(row)} className="text-neutral-600 hover:underline">
+                            Duplicate
                           </button>
                         )}
                         {canEdit && row.status !== "ARCHIVED" && (

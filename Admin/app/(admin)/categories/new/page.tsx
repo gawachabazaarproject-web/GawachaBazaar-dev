@@ -15,6 +15,7 @@ import { PageHeader } from "@/components/PageHeader";
 import { Icon } from "@/components/icons";
 import { BusyLabel } from "@/components/Spinner";
 import { SearchableSelect } from "@/components/SearchableSelect";
+import { CategoryDisplay, CategoryDisplayFields, DEFAULT_DISPLAY } from "@/components/CategoryDisplayFields";
 
 function slugify(value: string): string {
   return value.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
@@ -34,6 +35,7 @@ function NewCategoryForm() {
   const [preview, setPreview] = useState<string | null>(null);
   const [description, setDescription] = useState("");
   const [status, setStatus] = useState("ACTIVE");
+  const [display, setDisplay] = useState<CategoryDisplay>(DEFAULT_DISPLAY);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -70,6 +72,11 @@ function NewCategoryForm() {
         description: description || null,
         parent_id: parentId ? Number(parentId) : null,
         status,
+        background_color: display.background_color || null,
+        badge_text: display.badge_text.trim() || null,
+        show_on_homepage: display.show_on_homepage,
+        show_in_catalog: display.show_in_catalog,
+        is_featured: display.is_featured,
       });
       if (imageFile) {
         // The category exists at this point - if only the photo fails,
@@ -86,7 +93,7 @@ function NewCategoryForm() {
   };
 
   return (
-    <div className="mx-auto max-w-2xl">
+    <div className="mx-auto max-w-3xl">
       <button onClick={() => router.push("/categories")} className="mb-4 flex items-center gap-1 text-sm text-neutral-500 hover:text-primary-800">
         <Icon name="chevron-left" size={14} /> Back to categories
       </button>
@@ -134,7 +141,7 @@ function NewCategoryForm() {
           />
         </Field>
 
-        <Field label="Status">
+        <Field label="Status" hint="Save as Inactive to prepare a category without showing it to customers yet.">
           <select
             value={status}
             onChange={(e) => setStatus(e.target.value)}
@@ -164,6 +171,11 @@ function NewCategoryForm() {
             />
           </div>
         </Field>
+
+        <div className="mb-6 border-t border-neutral-100 pt-4">
+          <h2 className="mb-3 text-sm font-semibold text-primary-900">Storefront display</h2>
+          <CategoryDisplayFields value={display} onChange={setDisplay} name={name} imageUrl={preview} />
+        </div>
 
         {error && (
           <p className="mb-4 rounded border border-status-danger/30 bg-status-dangerLight px-3 py-2 text-sm text-status-danger">

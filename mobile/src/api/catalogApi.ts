@@ -9,10 +9,12 @@ export interface ListProductsParams {
 }
 
 export const catalogApi = {
-  listCategories: (parentId?: number) =>
+  /** `homepage` = only the categories the admin shows on Home (older API
+   * builds ignore it and return everything). */
+  listCategories: (parentId?: number, opts: { homepage?: boolean } = {}) =>
     apiClient
       .get<CategoryListResponse>("/catalog/categories", {
-        params: { parent_id: parentId, page_size: 100 },
+        params: { parent_id: parentId, page_size: 100, homepage: opts.homepage ? true : undefined },
       })
       .then((r) => r.data.items),
 

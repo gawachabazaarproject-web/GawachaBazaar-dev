@@ -102,17 +102,39 @@ function withLanCleartext(config) {
 const SHORT_CXX_DIRS = `
 // withAndroidRelease: keep CMake build paths under the Windows 260-char limit.
 subprojects { sub ->
-  sub.plugins.withId('com.android.library') {
-    sub.android.externalNativeBuild.cmake.buildStagingDirectory =
-        new File(rootDir, ".cxx/\${sub.name.replace('react-native-', 'rn-')}")
+  ['com.android.library', 'com.android.application'].each { pluginId ->
+    sub.plugins.withId(pluginId) {
+      def cxxRoot = System.getProperty('os.name').toLowerCase().contains('windows') ? new File('C:/gbcxx') : new File(rootDir, '.cxx')
+      sub.android.externalNativeBuild.cmake.version = '3.31.6' // Ninja 1.12 is long-path aware (3.22.1's is not)
+      sub.android.externalNativeBuild.cmake.buildStagingDirectory =
+          new File(cxxRoot, "\${sub.name.replace('react-native-', 'rn-')}")
+    }
+  }
+}
+`;
+
+const APP_CXX = `
+// withAndroidRelease: app-module CMake dir + long-path-aware CMake/Ninja (Windows).
+android {
+  externalNativeBuild {
+    cmake {
+      version = '3.31.6'
+      buildStagingDirectory = System.getProperty('os.name').toLowerCase().contains('windows') ? new File('C:/gbcxx/app') : new File(projectDir, '.cxx')
+    }
   }
 }
 `;
 
 function withShortNativeBuildDirs(config) {
-  return withProjectBuildGradle(config, (cfg) => {
+  config = withProjectBuildGradle(config, (cfg) => {
     if (!cfg.modResults.contents.includes("withAndroidRelease: keep CMake build paths")) {
       cfg.modResults.contents += SHORT_CXX_DIRS;
+    }
+    return cfg;
+  });
+  return withAppBuildGradle(config, (cfg) => {
+    if (!cfg.modResults.contents.includes("withAndroidRelease: app-module CMake dir")) {
+      cfg.modResults.contents += APP_CXX;
     }
     return cfg;
   });

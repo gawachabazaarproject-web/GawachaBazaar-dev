@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { Pressable, StyleSheet, TextInput, View } from "react-native";
+import { Pressable, StyleSheet, TextInput, TextInputInstance, View } from "react-native";
 import { Text } from "@/components/Text";
 import { Button } from "@/components/Button";
 import { useAuthStore, PhoneMode } from "@/store/authStore";
@@ -100,7 +100,7 @@ export function OtpStep({ onVerified, onChangeNumber }: { onVerified?: () => voi
   const [expired, setExpired] = useState(false);
   const [verifying, setVerifying] = useState(false);
   const [resending, setResending] = useState(false);
-  const inputRef = useRef<TextInput>(null);
+  const inputRef = useRef<TextInputInstance>(null);
 
   const verify = async (value = code) => {
     if (value.length !== CODE_LENGTH || verifying) {

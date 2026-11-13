@@ -1,7 +1,7 @@
 import React, { useEffect } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import { Tabs } from "expo-router";
-import { BottomTabBarProps } from "@react-navigation/bottom-tabs";
+import type { BottomTabBarProps } from "expo-router/build/layouts/Tabs";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
@@ -26,7 +26,7 @@ const LABELS: Record<string, string> = {
   account: "Account",
 };
 
-function CustomTabBar({ state, navigation }: BottomTabBarProps) {
+function CustomTabBar({ state, emitter, navigateToTab }: BottomTabBarProps) {
   const insets = useSafeAreaInsets();
   return (
     <View style={[styles.wrapper, { paddingBottom: insets.bottom }]}>
@@ -41,8 +41,8 @@ function CustomTabBar({ state, navigation }: BottomTabBarProps) {
               label={LABELS[route.name] ?? route.name}
               onPress={() => {
                 Haptics.selectionAsync();
-                const event = navigation.emit({ type: "tabPress", target: route.key, canPreventDefault: true });
-                if (!focused && !event.defaultPrevented) navigation.navigate(route.name);
+                const event = emitter.emit({ type: "tabPress", target: route.key, canPreventDefault: true });
+                if (!focused && !event.defaultPrevented) navigateToTab(route.key);
               }}
             />
           );
