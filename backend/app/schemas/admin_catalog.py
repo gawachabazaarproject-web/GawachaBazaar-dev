@@ -120,10 +120,25 @@ class AdminCategoryListItemResponse(BaseSchema):
     parent_name: str | None
     status: str
     sort_order: int = 0
+    background_color: str | None = None
+    badge_text: str | None = None
+    show_on_homepage: bool = True
+    show_in_catalog: bool = True
+    is_featured: bool = False
     product_count: int
     child_count: int
     created_at: datetime
     updated_at: datetime
+
+
+class AdminCategorySummaryResponse(BaseSchema):
+    """Real counts for the Category Management header cards."""
+
+    total: int
+    active: int
+    homepage: int
+    inactive: int
+    without_products: int
 
 
 class AdminCategoryListResponse(BaseSchema):
@@ -142,6 +157,12 @@ class AdminCategoryDetailResponse(BaseSchema):
     parent_id: int | None
     parent_name: str | None
     status: str
+    sort_order: int = 0
+    background_color: str | None = None
+    badge_text: str | None = None
+    show_on_homepage: bool = True
+    show_in_catalog: bool = True
+    is_featured: bool = False
     product_count: int
     created_at: datetime
     updated_at: datetime

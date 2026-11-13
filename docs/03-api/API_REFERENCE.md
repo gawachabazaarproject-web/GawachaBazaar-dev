@@ -1,15 +1,15 @@
 # API Reference
 
-> **Status:** Verified (generated from source). **Generated:** 2026-10-27 by [`docs/_tools/gen_api_reference.py`](../_tools/gen_api_reference.py).
+> **Status:** Verified (generated from source). **Generated:** 2026-11-13 by [`docs/_tools/gen_api_reference.py`](../_tools/gen_api_reference.py).
 > **Evidence:** router decorators in [`backend/app/api/v1/`](../../backend/app/api/v1), router mounting in [`router.py`](../../backend/app/api/v1/router.py), the app's own OpenAPI document (`app.openapi()`), and the reviewed role matrix [`backend/tests/authz_golden.json`](../../backend/tests/authz_golden.json).
 
 Conventions (envelope, errors, pagination): [API_CONVENTIONS.md](API_CONVENTIONS.md). Webhook: [WEBHOOKS.md](WEBHOOKS.md). Roles and permissions: [USER_ROLES_AND_PERMISSIONS](../01-requirements/USER_ROLES_AND_PERMISSIONS.md).
 
-**242 HTTP operations + 1 WebSocket.** Interactive docs (`/docs`, `/redoc`, `/openapi.json`) are served only when `APP_ENV` is not `production` ([`main.py`](../../backend/app/main.py)).
+**244 HTTP operations + 1 WebSocket.** Interactive docs (`/docs`, `/redoc`, `/openapi.json`) are served only when `APP_ENV` is not `production` ([`main.py`](../../backend/app/main.py)).
 
 How to read the **Auth** column: `roles A/B` = caller must hold at least one of those roles (checked live against `user_roles`); `perm x.y` = the caller's roles must grant that permission in the static map ([`permissions.py`](../../backend/app/core/permissions.py)); `signed-in user` = any ACTIVE user whose token verified (email/password users also need a verified email). Router-level role gates apply to every route in that router. **Request** column: `name(p|q|h)` are path/query/header parameters; the schema name is the JSON body model. **Response** lists declared success responses (`code: Schema`); every error uses the uniform envelope.
 
-Field-level request/response schemas live in the OpenAPI document (270 schemas at generation time) and the Pydantic models in [`backend/app/schemas/`](../../backend/app/schemas); they are not repeated here to avoid drift.
+Field-level request/response schemas live in the OpenAPI document (271 schemas at generation time) and the Pydantic models in [`backend/app/schemas/`](../../backend/app/schemas); they are not repeated here to avoid drift.
 
 ## Index
 
@@ -21,7 +21,7 @@ Field-level request/response schemas live in the OpenAPI document (270 schemas a
 | [bazaar](#bazaar) | 2 |
 | [bulk_orders](#bulk-orders) | 18 |
 | [cart](#cart) | 8 |
-| [catalog](#catalog) | 29 |
+| [catalog](#catalog) | 31 |
 | [customers](#customers) | 13 |
 | [dashboard](#dashboard) | 1 |
 | [delivery](#delivery) | 2 |
@@ -60,13 +60,13 @@ Source: [`backend/app/api/v1/ads.py`](../../backend/app/api/v1/ads.py)
 
 | Method | Path | Auth | Request | Response | Notes |
 |---|---|---|---|---|---|
-| GET | `/api/v1/ads` | Public | - | 200: array | List Active Ads [L25](../../backend/app/api/v1/ads.py#L25) |
-| GET | `/api/v1/ads/admin` | perm ads.read | - | 200: array | Admin: List All Ads [L32](../../backend/app/api/v1/ads.py#L32) |
-| POST | `/api/v1/ads/admin` | perm ads.manage | multipart: Body_admin_create_ad_api_v1_ads_admin_post | 201: AdminAdDetailResponse | Admin: Create Ad (with creative image) [L56](../../backend/app/api/v1/ads.py#L56) |
-| DELETE | `/api/v1/ads/admin/{ad_id}` | perm ads.manage | ad_id(p) | 204 | Admin: Delete Ad [L105](../../backend/app/api/v1/ads.py#L105) |
-| GET | `/api/v1/ads/admin/{ad_id}` | perm ads.read | ad_id(p) | 200: AdminAdDetailResponse | Admin: Get Ad Detail [L42](../../backend/app/api/v1/ads.py#L42) |
-| PATCH | `/api/v1/ads/admin/{ad_id}` | perm ads.manage | ad_id(p), UpdateAdRequest | 200: AdminAdDetailResponse | Admin: Update Ad [L95](../../backend/app/api/v1/ads.py#L95) |
-| POST | `/api/v1/ads/admin/{ad_id}/image` | perm ads.manage | ad_id(p), multipart: Body_admin_replace_ad_image_api_v1_ads_admin__ad_id__image_post | 200: AdminAdDetailResponse | Admin: Replace Ad Creative Image [L82](../../backend/app/api/v1/ads.py#L82) |
+| GET | `/api/v1/ads` | Public | - | 200: array | List Active Ads [L26](../../backend/app/api/v1/ads.py#L26) |
+| GET | `/api/v1/ads/admin` | perm ads.read | - | 200: array | Admin: List All Ads [L35](../../backend/app/api/v1/ads.py#L35) |
+| POST | `/api/v1/ads/admin` | perm ads.manage | multipart: Body_admin_create_ad_api_v1_ads_admin_post | 201: AdminAdDetailResponse | Admin: Create Ad (with creative image) [L59](../../backend/app/api/v1/ads.py#L59) |
+| DELETE | `/api/v1/ads/admin/{ad_id}` | perm ads.manage | ad_id(p) | 204 | Admin: Delete Ad [L108](../../backend/app/api/v1/ads.py#L108) |
+| GET | `/api/v1/ads/admin/{ad_id}` | perm ads.read | ad_id(p) | 200: AdminAdDetailResponse | Admin: Get Ad Detail [L45](../../backend/app/api/v1/ads.py#L45) |
+| PATCH | `/api/v1/ads/admin/{ad_id}` | perm ads.manage | ad_id(p), UpdateAdRequest | 200: AdminAdDetailResponse | Admin: Update Ad [L98](../../backend/app/api/v1/ads.py#L98) |
+| POST | `/api/v1/ads/admin/{ad_id}/image` | perm ads.manage | ad_id(p), multipart: Body_admin_replace_ad_image_api_v1_ads_admin__ad_id__image_post | 200: AdminAdDetailResponse | Admin: Replace Ad Creative Image [L85](../../backend/app/api/v1/ads.py#L85) |
 
 ## auth
 
@@ -133,35 +133,37 @@ Source: [`backend/app/api/v1/catalog.py`](../../backend/app/api/v1/catalog.py)
 
 | Method | Path | Auth | Request | Response | Notes |
 |---|---|---|---|---|---|
-| GET | `/api/v1/catalog/categories` | Public | parent_id(q), page(q), page_size(q) | 200: CategoryListResponse | List active categories [L180](../../backend/app/api/v1/catalog.py#L180) |
-| POST | `/api/v1/catalog/categories` | perm categories.create | CreateCategoryRequest | 201: CategoryResponse | Create a category [L237](../../backend/app/api/v1/catalog.py#L237) |
-| GET | `/api/v1/catalog/categories/admin` | perm categories.read | page(q), page_size(q), status(q), parent_id(q), q(q) | 200: AdminCategoryListResponse | List/search/filter every category regardless of status (admin panel) [L132](../../backend/app/api/v1/catalog.py#L132) |
-| GET | `/api/v1/catalog/categories/admin/{category_id}` | perm categories.read | category_id(p) | 200: AdminCategoryDetailResponse | Get the complete admin detail for any category regardless of status [L149](../../backend/app/api/v1/catalog.py#L149) |
-| GET | `/api/v1/catalog/categories/admin/{category_id}/activity` | perm categories.read | category_id(p) | 200: ProductActivityResponse | Real audit-log activity for this category [L162](../../backend/app/api/v1/catalog.py#L162) |
-| PUT | `/api/v1/catalog/categories/reorder` | perm categories.update | ReorderCategoriesRequest | 204 | Set the display order of sibling categories/subcategories [L250](../../backend/app/api/v1/catalog.py#L250) |
-| DELETE | `/api/v1/catalog/categories/{category_id}` | perm categories.delete | category_id(p) | 204 | Delete a category that has no products or subcategories [L277](../../backend/app/api/v1/catalog.py#L277) |
-| GET | `/api/v1/catalog/categories/{category_id}` | Public | category_id(p) | 200: CategoryDetailResponse | Get an active category (with direct active children) [L194](../../backend/app/api/v1/catalog.py#L194) |
-| PATCH | `/api/v1/catalog/categories/{category_id}` | perm categories.update | category_id(p), UpdateCategoryRequest | 200: CategoryResponse | Update a category (including lifecycle status) [L263](../../backend/app/api/v1/catalog.py#L263) |
-| DELETE | `/api/v1/catalog/categories/{category_id}/image` | perm categories.update | category_id(p) | 200: CategoryResponse | Remove a category's image [L311](../../backend/app/api/v1/catalog.py#L311) |
-| POST | `/api/v1/catalog/categories/{category_id}/image` | perm categories.update | category_id(p), multipart: Body_upload_category_image_api_v1_catalog_categories__category_id__image_post | 200: CategoryResponse | Upload (or replace) a category's image via Cloudinary [L290](../../backend/app/api/v1/catalog.py#L290) |
-| DELETE | `/api/v1/catalog/images/{image_id}` | perm products.manage_media | image_id(p) | 204 | Delete a product image [L469](../../backend/app/api/v1/catalog.py#L469) |
-| PATCH | `/api/v1/catalog/images/{image_id}` | perm products.manage_media | image_id(p), UpdateProductImageRequest | 200: ProductImageResponse | Update a product image, including primary image handoff [L455](../../backend/app/api/v1/catalog.py#L455) |
-| PATCH | `/api/v1/catalog/prices/{price_id}` | perm products.manage_pricing | price_id(p), UpdatePriceRequest | 200: PriceResponse | Activate/deactivate or end a price's validity window [L523](../../backend/app/api/v1/catalog.py#L523) |
-| GET | `/api/v1/catalog/products` | Public | category_id(q), q(q), page(q), page_size(q) | 200: ProductListResponse | List active products, optionally filtered by category and/or name search [L205](../../backend/app/api/v1/catalog.py#L205) |
-| POST | `/api/v1/catalog/products` | perm products.create | CreateProductRequest | 201: ProductResponse | Create a product [L331](../../backend/app/api/v1/catalog.py#L331) |
-| GET | `/api/v1/catalog/products/admin` | perm products.read | page(q), page_size(q), status(q), category_id(q), q(q), price_min(q), price_max(q), created_from(q), created_to(q), updated_from(q), updated_to(q) | 200: AdminProductListResponse | List/search/filter every product regardless of status (admin panel) [L67](../../backend/app/api/v1/catalog.py#L67) |
-| GET | `/api/v1/catalog/products/admin/{product_id}` | perm products.read | product_id(p) | 200: AdminProductDetailResponse | Get the complete admin detail for any product regardless of status [L102](../../backend/app/api/v1/catalog.py#L102) |
-| GET | `/api/v1/catalog/products/admin/{product_id}/activity` | perm products.read | product_id(p) | 200: ProductActivityResponse | Real audit-log activity for this product and its variants/prices [L115](../../backend/app/api/v1/catalog.py#L115) |
-| POST | `/api/v1/catalog/products/quick-create` | perm products.create | QuickCreateProductRequest | 201: ProductResponse | Create a whole product - sizes, prices, photo, opening stock - in one transaction [L345](../../backend/app/api/v1/catalog.py#L345) |
-| DELETE | `/api/v1/catalog/products/{product_id}` | perm products.delete | product_id(p) | 204 | Permanently delete a product (refused if it has order/quote/supplier history - archive it instead) [L366](../../backend/app/api/v1/catalog.py#L366) |
-| GET | `/api/v1/catalog/products/{product_id}` | Public | product_id(p) | 200: ProductResponse | Get an active product with images, active variants, and current prices [L220](../../backend/app/api/v1/catalog.py#L220) |
-| PATCH | `/api/v1/catalog/products/{product_id}` | perm products.update | product_id(p), UpdateProductRequest | 200: ProductResponse | Update a product (including lifecycle status) [L379](../../backend/app/api/v1/catalog.py#L379) |
-| POST | `/api/v1/catalog/products/{product_id}/images` | perm products.manage_media | product_id(p), CreateProductImageRequest | 201: ProductImageResponse | Add a product image [L441](../../backend/app/api/v1/catalog.py#L441) |
-| POST | `/api/v1/catalog/products/{product_id}/images/upload` | perm products.manage_media | product_id(p), multipart: Body_upload_product_image_api_v1_catalog_products__product_id__images_upload_post | 201: ProductImageResponse | Upload a product image via Cloudinary and attach it to the product [L483](../../backend/app/api/v1/catalog.py#L483) |
-| POST | `/api/v1/catalog/products/{product_id}/variants` | perm products.update | product_id(p), CreateProductVariantRequest | 201: ProductVariantResponse | Create a product variant [L394](../../backend/app/api/v1/catalog.py#L394) |
-| DELETE | `/api/v1/catalog/variants/{variant_id}` | perm products.delete | variant_id(p) | 204 | Delete a size that was only just added: no orders, quotes, stock, carts or price changes (hide it instead otherwise) [L427](../../backend/app/api/v1/catalog.py#L427) |
-| PATCH | `/api/v1/catalog/variants/{variant_id}` | perm products.update | variant_id(p), UpdateProductVariantRequest | 200: ProductVariantResponse | Update a product variant (including lifecycle status) [L408](../../backend/app/api/v1/catalog.py#L408) |
-| POST | `/api/v1/catalog/variants/{variant_id}/prices` | perm products.manage_pricing | variant_id(p), CreatePriceRequest | 201: PriceResponse | Create a new price for a variant (preserves price history) [L509](../../backend/app/api/v1/catalog.py#L509) |
+| GET | `/api/v1/catalog/categories` | Public | parent_id(q), page(q), page_size(q), homepage(q) | 200: CategoryListResponse | List active categories [L197](../../backend/app/api/v1/catalog.py#L197) |
+| POST | `/api/v1/catalog/categories` | perm categories.create | CreateCategoryRequest | 201: CategoryResponse | Create a category [L278](../../backend/app/api/v1/catalog.py#L278) |
+| GET | `/api/v1/catalog/categories/admin` | perm categories.read | page(q), page_size(q), status(q), parent_id(q), q(q), show_on_homepage(q) | 200: AdminCategoryListResponse | List/search/filter every category regardless of status (admin panel) [L134](../../backend/app/api/v1/catalog.py#L134) |
+| GET | `/api/v1/catalog/categories/admin/summary` | perm categories.read | - | 200: AdminCategorySummaryResponse | Real category counts for the admin header cards [L154](../../backend/app/api/v1/catalog.py#L154) |
+| GET | `/api/v1/catalog/categories/admin/{category_id}` | perm categories.read | category_id(p) | 200: AdminCategoryDetailResponse | Get the complete admin detail for any category regardless of status [L166](../../backend/app/api/v1/catalog.py#L166) |
+| GET | `/api/v1/catalog/categories/admin/{category_id}/activity` | perm categories.read | category_id(p) | 200: ProductActivityResponse | Real audit-log activity for this category [L179](../../backend/app/api/v1/catalog.py#L179) |
+| PUT | `/api/v1/catalog/categories/reorder` | perm categories.update | ReorderCategoriesRequest | 204 | Set the display order of sibling categories/subcategories [L305](../../backend/app/api/v1/catalog.py#L305) |
+| DELETE | `/api/v1/catalog/categories/{category_id}` | perm categories.delete | category_id(p) | 204 | Delete a category that has no products or subcategories [L332](../../backend/app/api/v1/catalog.py#L332) |
+| GET | `/api/v1/catalog/categories/{category_id}` | Public | category_id(p) | 200: CategoryDetailResponse | Get an active category (with direct active children) [L217](../../backend/app/api/v1/catalog.py#L217) |
+| PATCH | `/api/v1/catalog/categories/{category_id}` | perm categories.update | category_id(p), UpdateCategoryRequest | 200: CategoryResponse | Update a category (including lifecycle status) [L318](../../backend/app/api/v1/catalog.py#L318) |
+| POST | `/api/v1/catalog/categories/{category_id}/duplicate` | perm categories.create | category_id(p) | 201: CategoryResponse | Duplicate a category as a hidden draft (no products or subcategories) [L292](../../backend/app/api/v1/catalog.py#L292) |
+| DELETE | `/api/v1/catalog/categories/{category_id}/image` | perm categories.update | category_id(p) | 200: CategoryResponse | Remove a category's image [L366](../../backend/app/api/v1/catalog.py#L366) |
+| POST | `/api/v1/catalog/categories/{category_id}/image` | perm categories.update | category_id(p), multipart: Body_upload_category_image_api_v1_catalog_categories__category_id__image_post | 200: CategoryResponse | Upload (or replace) a category's image via Cloudinary [L345](../../backend/app/api/v1/catalog.py#L345) |
+| DELETE | `/api/v1/catalog/images/{image_id}` | perm products.manage_media | image_id(p) | 204 | Delete a product image [L524](../../backend/app/api/v1/catalog.py#L524) |
+| PATCH | `/api/v1/catalog/images/{image_id}` | perm products.manage_media | image_id(p), UpdateProductImageRequest | 200: ProductImageResponse | Update a product image, including primary image handoff [L510](../../backend/app/api/v1/catalog.py#L510) |
+| PATCH | `/api/v1/catalog/prices/{price_id}` | perm products.manage_pricing | price_id(p), UpdatePriceRequest | 200: PriceResponse | Activate/deactivate or end a price's validity window [L578](../../backend/app/api/v1/catalog.py#L578) |
+| GET | `/api/v1/catalog/products` | Public | category_id(q), q(q), page(q), page_size(q) | 200: ProductListResponse | List active products, optionally filtered by category and/or name search [L233](../../backend/app/api/v1/catalog.py#L233) |
+| POST | `/api/v1/catalog/products` | perm products.create | CreateProductRequest | 201: ProductResponse | Create a product [L386](../../backend/app/api/v1/catalog.py#L386) |
+| GET | `/api/v1/catalog/products/admin` | perm products.read | page(q), page_size(q), status(q), category_id(q), q(q), price_min(q), price_max(q), created_from(q), created_to(q), updated_from(q), updated_to(q) | 200: AdminProductListResponse | List/search/filter every product regardless of status (admin panel) [L69](../../backend/app/api/v1/catalog.py#L69) |
+| GET | `/api/v1/catalog/products/admin/{product_id}` | perm products.read | product_id(p) | 200: AdminProductDetailResponse | Get the complete admin detail for any product regardless of status [L104](../../backend/app/api/v1/catalog.py#L104) |
+| GET | `/api/v1/catalog/products/admin/{product_id}/activity` | perm products.read | product_id(p) | 200: ProductActivityResponse | Real audit-log activity for this product and its variants/prices [L117](../../backend/app/api/v1/catalog.py#L117) |
+| POST | `/api/v1/catalog/products/quick-create` | perm products.create | QuickCreateProductRequest | 201: ProductResponse | Create a whole product - sizes, prices, photo, opening stock - in one transaction [L400](../../backend/app/api/v1/catalog.py#L400) |
+| DELETE | `/api/v1/catalog/products/{product_id}` | perm products.delete | product_id(p) | 204 | Permanently delete a product (refused if it has order/quote/supplier history - archive it instead) [L421](../../backend/app/api/v1/catalog.py#L421) |
+| GET | `/api/v1/catalog/products/{product_id}` | Public | product_id(p) | 200: ProductResponse | Get an active product with images, active variants, and current prices [L256](../../backend/app/api/v1/catalog.py#L256) |
+| PATCH | `/api/v1/catalog/products/{product_id}` | perm products.update | product_id(p), UpdateProductRequest | 200: ProductResponse | Update a product (including lifecycle status) [L434](../../backend/app/api/v1/catalog.py#L434) |
+| POST | `/api/v1/catalog/products/{product_id}/images` | perm products.manage_media | product_id(p), CreateProductImageRequest | 201: ProductImageResponse | Add a product image [L496](../../backend/app/api/v1/catalog.py#L496) |
+| POST | `/api/v1/catalog/products/{product_id}/images/upload` | perm products.manage_media | product_id(p), multipart: Body_upload_product_image_api_v1_catalog_products__product_id__images_upload_post | 201: ProductImageResponse | Upload a product image via Cloudinary and attach it to the product [L538](../../backend/app/api/v1/catalog.py#L538) |
+| POST | `/api/v1/catalog/products/{product_id}/variants` | perm products.update | product_id(p), CreateProductVariantRequest | 201: ProductVariantResponse | Create a product variant [L449](../../backend/app/api/v1/catalog.py#L449) |
+| DELETE | `/api/v1/catalog/variants/{variant_id}` | perm products.delete | variant_id(p) | 204 | Delete a size that was only just added: no orders, quotes, stock, carts or price changes (hide it instead otherwise) [L482](../../backend/app/api/v1/catalog.py#L482) |
+| PATCH | `/api/v1/catalog/variants/{variant_id}` | perm products.update | variant_id(p), UpdateProductVariantRequest | 200: ProductVariantResponse | Update a product variant (including lifecycle status) [L463](../../backend/app/api/v1/catalog.py#L463) |
+| POST | `/api/v1/catalog/variants/{variant_id}/prices` | perm products.manage_pricing | variant_id(p), CreatePriceRequest | 201: PriceResponse | Create a new price for a variant (preserves price history) [L564](../../backend/app/api/v1/catalog.py#L564) |
 
 ## customers
 
@@ -251,12 +253,12 @@ Source: [`backend/app/api/v1/home_slides.py`](../../backend/app/api/v1/home_slid
 
 | Method | Path | Auth | Request | Response | Notes |
 |---|---|---|---|---|---|
-| GET | `/api/v1/home-slides` | Public | - | 200: array | List Active Home Slides [L23](../../backend/app/api/v1/home_slides.py#L23) |
-| GET | `/api/v1/home-slides/admin` | perm ads.read | - | 200: array | Admin: List All Home Slides [L30](../../backend/app/api/v1/home_slides.py#L30) |
-| POST | `/api/v1/home-slides/admin` | perm ads.manage | multipart: Body_admin_create_home_slide_api_v1_home_slides_admin_post | 201: AdminHomeSlideResponse | Admin: Create Home Slide (with image) [L43](../../backend/app/api/v1/home_slides.py#L43) |
-| DELETE | `/api/v1/home-slides/admin/{slide_id}` | perm ads.manage | slide_id(p) | 204 | Admin: Delete Home Slide [L99](../../backend/app/api/v1/home_slides.py#L99) |
-| PATCH | `/api/v1/home-slides/admin/{slide_id}` | perm ads.manage | slide_id(p), UpdateHomeSlideRequest | 200: AdminHomeSlideResponse | Admin: Update Home Slide [L87](../../backend/app/api/v1/home_slides.py#L87) |
-| POST | `/api/v1/home-slides/admin/{slide_id}/image` | perm ads.manage | slide_id(p), multipart: Body_admin_replace_home_slide_image_api_v1_home_slides_admin__slide_id__image_post | 200: AdminHomeSlideResponse | Admin: Replace Home Slide Image [L74](../../backend/app/api/v1/home_slides.py#L74) |
+| GET | `/api/v1/home-slides` | Public | - | 200: array | List Active Home Slides [L24](../../backend/app/api/v1/home_slides.py#L24) |
+| GET | `/api/v1/home-slides/admin` | perm ads.read | - | 200: array | Admin: List All Home Slides [L33](../../backend/app/api/v1/home_slides.py#L33) |
+| POST | `/api/v1/home-slides/admin` | perm ads.manage | multipart: Body_admin_create_home_slide_api_v1_home_slides_admin_post | 201: AdminHomeSlideResponse | Admin: Create Home Slide (with image) [L46](../../backend/app/api/v1/home_slides.py#L46) |
+| DELETE | `/api/v1/home-slides/admin/{slide_id}` | perm ads.manage | slide_id(p) | 204 | Admin: Delete Home Slide [L102](../../backend/app/api/v1/home_slides.py#L102) |
+| PATCH | `/api/v1/home-slides/admin/{slide_id}` | perm ads.manage | slide_id(p), UpdateHomeSlideRequest | 200: AdminHomeSlideResponse | Admin: Update Home Slide [L90](../../backend/app/api/v1/home_slides.py#L90) |
+| POST | `/api/v1/home-slides/admin/{slide_id}/image` | perm ads.manage | slide_id(p), multipart: Body_admin_replace_home_slide_image_api_v1_home_slides_admin__slide_id__image_post | 200: AdminHomeSlideResponse | Admin: Replace Home Slide Image [L77](../../backend/app/api/v1/home_slides.py#L77) |
 
 ## inventory
 
@@ -307,7 +309,7 @@ Source: [`backend/app/api/v1/offers.py`](../../backend/app/api/v1/offers.py)
 
 | Method | Path | Auth | Request | Response | Notes |
 |---|---|---|---|---|---|
-| GET | `/api/v1/offers` | Public | - | 200: array | List live offers for the Home carousel [L16](../../backend/app/api/v1/offers.py#L16) |
+| GET | `/api/v1/offers` | Public | - | 200: array | List live offers for the Home carousel [L17](../../backend/app/api/v1/offers.py#L17) |
 
 ## orders
 

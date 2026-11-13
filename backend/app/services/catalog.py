@@ -44,6 +44,7 @@ from app.schemas.admin_catalog import (
     AdminCategoryDetailResponse,
     AdminCategoryListItemResponse,
     AdminCategoryListResponse,
+    AdminCategorySummaryResponse,
     AdminProductDetailResponse,
     AdminProductListItemResponse,
     AdminProductListResponse,
@@ -108,7 +109,7 @@ class CatalogService:
     # ------------------------------------------------------------------
 
     def list_public_categories(
-        self, parent_id: int | None, page: int, page_size: int
+        self, parent_id: int | None, page: int, page_size: int, homepage: bool = False
     ) -> CategoryListResponse:
         query = self.db.query(Category).filter(Category.status == _ACTIVE)
         if parent_id is not None:
@@ -119,6 +120,12 @@ class CatalogService:
             # The storefront's shelf is the top level; subcategories are
             # reached through their parent.
             query = query.filter(Category.parent_id.is_(None))
+        # Admin visibility switches. `homepage` is the Home tile grid; the
+        # plain list (View all, subcategories) honours "show in catalog".
+        if homepage:
+            query = query.filter(Category.show_on_homepage.is_(True))
+        else:
+            query = query.filter(Category.show_in_catalog.is_(True))
 
         total = query.count()
         items = (
@@ -323,6 +330,11 @@ class CatalogService:
             description=data.description,
             image_url=data.image_url,
             status=data.status,
+            background_color=data.background_color,
+            badge_text=data.badge_text,
+            show_on_homepage=data.show_on_homepage,
+            show_in_catalog=data.show_in_catalog,
+            is_featured=data.is_featured,
             sort_order=0 if last_order is None else last_order + 1,
         )
         self.db.add(category)
@@ -472,6 +484,7 @@ class CatalogService:
         status: str | None = None,
         parent_id: int | None = None,
         q: str | None = None,
+        show_on_homepage: bool | None = None,
     ) -> AdminCategoryListResponse:
         parent = aliased(Category)
         query = self.db.query(Category, parent.name).outerjoin(parent, Category.parent_id == parent.id)
@@ -480,6 +493,8 @@ class CatalogService:
             query = query.filter(Category.status == status)
         if parent_id is not None:
             query = query.filter(Category.parent_id == parent_id)
+        if show_on_homepage is not None:
+            query = query.filter(Category.show_on_homepage.is_(show_on_homepage))
         if q:
             like = f"%{q}%"
             query = query.filter(or_(Category.name.ilike(like), Category.slug.ilike(like)))
@@ -521,6 +536,11 @@ class CatalogService:
                 parent_name=parent_name,
                 status=c.status,
                 sort_order=c.sort_order,
+                background_color=c.background_color,
+                badge_text=c.badge_text,
+                show_on_homepage=c.show_on_homepage,
+                show_in_catalog=c.show_in_catalog,
+                is_featured=c.is_featured,
                 product_count=product_counts.get(c.id, 0),
                 child_count=child_counts.get(c.id, 0),
                 created_at=c.created_at,
@@ -554,11 +574,76 @@ class CatalogService:
             parent_id=category.parent_id,
             parent_name=parent_name,
             status=category.status,
+            sort_order=category.sort_order,
+            background_color=category.background_color,
+            badge_text=category.badge_text,
+            show_on_homepage=category.show_on_homepage,
+            show_in_catalog=category.show_in_catalog,
+            is_featured=category.is_featured,
             product_count=product_count,
             created_at=category.created_at,
             updated_at=category.updated_at,
             children=[CategoryResponse.model_validate(c) for c in children],
         )
+
+    def admin_category_summary(self) -> AdminCategorySummaryResponse:
+        """Header-card counts, straight from the database. Archived
+        categories are not counted as part of the live shelf."""
+        live = Category.status != "ARCHIVED"
+        placed = select(self._placements().subquery().c.category_id)
+        return AdminCategorySummaryResponse(
+            total=self.db.query(Category.id).filter(live).count(),
+            active=self.db.query(Category.id).filter(Category.status == _ACTIVE).count(),
+            homepage=self.db.query(Category.id)
+            .filter(Category.status == _ACTIVE, Category.show_on_homepage.is_(True))
+            .count(),
+            inactive=self.db.query(Category.id).filter(Category.status == "INACTIVE").count(),
+            without_products=self.db.query(Category.id)
+            .filter(live, Category.id.notin_(placed))
+            .count(),
+        )
+
+    def duplicate_category(self, category_id: int, admin_user_id: int) -> CategoryResponse:
+        """Copy a category's look as a hidden (INACTIVE) draft at the end of
+        its siblings. Products and subcategories are never copied."""
+        source = self.get_category_or_404(category_id)
+        base_name = f"{source.name} (copy)"[:150]
+        base_slug = f"{source.slug}-copy"[:170]
+        slug, n = base_slug, 1
+        while self.db.query(Category.id).filter(Category.slug == slug).first():
+            n += 1
+            slug = f"{base_slug}-{n}"
+        last_order = (
+            self.db.query(func.max(Category.sort_order))
+            .filter(Category.parent_id == source.parent_id)
+            .scalar()
+        )
+        copy = Category(
+            parent_id=source.parent_id,
+            name=base_name,
+            slug=slug,
+            description=source.description,
+            image_url=source.image_url,
+            status="INACTIVE",
+            background_color=source.background_color,
+            badge_text=source.badge_text,
+            show_on_homepage=False,
+            show_in_catalog=False,
+            is_featured=False,
+            sort_order=0 if last_order is None else last_order + 1,
+        )
+        self.db.add(copy)
+        self.db.flush()
+        AdminAuditService(self.db).record(
+            admin_user_id=admin_user_id,
+            action="category.duplicate",
+            resource_type="category",
+            resource_id=copy.id,
+            reason=f"copied from category {source.id}",
+        )
+        self.db.commit()
+        self.db.refresh(copy)
+        return CategoryResponse.model_validate(copy)
 
     def admin_get_category_activity(self, category_id: int) -> ProductActivityResponse:
         self.get_category_or_404(category_id)

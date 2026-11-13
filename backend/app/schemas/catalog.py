@@ -4,7 +4,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Literal
 
-from pydantic import Field, model_validator
+from pydantic import Field, field_validator, model_validator
 
 from app.schemas.base import BaseSchema
 
@@ -14,6 +14,36 @@ VariantStatus = Literal["ACTIVE", "INACTIVE", "ARCHIVED"]
 VariantUnit = Literal["KG", "G", "L", "ML", "UNIT", "DOZEN", "BOX", "PACK"]
 
 MAX_PAGE_SIZE = 100
+
+# Category tile label colour (matches the app's textPrimary token); a tile
+# background must keep WCAG AA contrast (4.5:1) against it.
+_TILE_TEXT_RGB = (0x14, 0x33, 0x26)
+_MIN_TILE_CONTRAST = 4.5
+
+
+def _luminance(rgb: tuple[int, int, int]) -> float:
+    def channel(v: int) -> float:
+        c = v / 255
+        return c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4
+
+    r, g, b = (channel(v) for v in rgb)
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b
+
+
+def validate_tile_color(value: str | None) -> str | None:
+    """`#RRGGBB` with enough contrast for the tile's dark label text."""
+    if value is None or value == "":
+        return None
+    if len(value) != 7 or value[0] != "#":
+        raise ValueError("Colour must look like #RRGGBB.")
+    try:
+        rgb = (int(value[1:3], 16), int(value[3:5], 16), int(value[5:7], 16))
+    except ValueError as exc:
+        raise ValueError("Colour must look like #RRGGBB.") from exc
+    lighter, darker = sorted((_luminance(rgb), _luminance(_TILE_TEXT_RGB)), reverse=True)
+    if (lighter + 0.05) / (darker + 0.05) < _MIN_TILE_CONTRAST:
+        raise ValueError("This colour is too dark - the category name would be hard to read.")
+    return value.upper()
 
 
 # ---------------------------------------------------------------------------
@@ -28,6 +58,21 @@ class CreateCategoryRequest(BaseSchema):
     parent_id: int | None = Field(default=None)
     status: CategoryStatus = Field(default="ACTIVE")
     image_url: str | None = Field(default=None, max_length=2048)
+    background_color: str | None = Field(default=None, max_length=7)
+    badge_text: str | None = Field(default=None, max_length=24)
+    show_on_homepage: bool = Field(default=True)
+    show_in_catalog: bool = Field(default=True)
+    is_featured: bool = Field(default=False)
+
+    @field_validator("background_color")
+    @classmethod
+    def _check_color(cls, v: str | None) -> str | None:
+        return validate_tile_color(v)
+
+    @field_validator("badge_text")
+    @classmethod
+    def _clean_badge(cls, v: str | None) -> str | None:
+        return (v.strip() or None) if v is not None else None
 
 
 class UpdateCategoryRequest(BaseSchema):
@@ -43,6 +88,28 @@ class UpdateCategoryRequest(BaseSchema):
     # `model_dump(exclude_unset=True)` + setattr loop rather than a
     # separate code path.
     image_url: str | None = Field(default=None, max_length=2048)
+    background_color: str | None = Field(default=None, max_length=7)
+    badge_text: str | None = Field(default=None, max_length=24)
+    show_on_homepage: bool | None = Field(default=None)
+    show_in_catalog: bool | None = Field(default=None)
+    is_featured: bool | None = Field(default=None)
+
+    @field_validator("background_color")
+    @classmethod
+    def _check_color(cls, v: str | None) -> str | None:
+        return validate_tile_color(v)
+
+    @field_validator("badge_text")
+    @classmethod
+    def _clean_badge(cls, v: str | None) -> str | None:
+        return (v.strip() or None) if v is not None else None
+
+    @model_validator(mode="after")
+    def _flags_not_null(self) -> "UpdateCategoryRequest":
+        for name in ("show_on_homepage", "show_in_catalog", "is_featured"):
+            if name in self.model_fields_set and getattr(self, name) is None:
+                raise ValueError(f"{name} cannot be null.")
+        return self
 
 
 class ReorderCategoriesRequest(BaseSchema):
@@ -60,6 +127,12 @@ class CategoryResponse(BaseSchema):
     parent_id: int | None
     status: str
     sort_order: int = 0
+    # Storefront tile styling / visibility (defaults keep old rows unchanged).
+    background_color: str | None = None
+    badge_text: str | None = None
+    show_on_homepage: bool = True
+    show_in_catalog: bool = True
+    is_featured: bool = False
     created_at: datetime
     # Active subcategories - filled in by the public list/detail reads;
     # 0 wherever a category is merely embedded (e.g. on a product).

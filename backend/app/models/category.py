@@ -3,6 +3,7 @@ from typing import TYPE_CHECKING
 
 from sqlalchemy import (
     BigInteger,
+    Boolean,
     CheckConstraint,
     DateTime,
     ForeignKey,
@@ -35,6 +36,10 @@ class Category(Base):
         CheckConstraint(
             "parent_id IS NULL OR parent_id <> id",
             name="ck_categories_parent_not_self",
+        ),
+        CheckConstraint(
+            "background_color IS NULL OR background_color ~ '^#[0-9A-Fa-f]{6}$'",
+            name="ck_categories_background_color_hex",
         ),
         Index("ix_categories_parent_id", "parent_id"),
         Index("ix_categories_status", "status"),
@@ -76,6 +81,12 @@ class Category(Base):
         nullable=False,
         server_default="0",
     )
+    # Storefront tile styling and visibility (admin-controlled).
+    background_color: Mapped[str | None] = mapped_column(String(7), nullable=True)
+    badge_text: Mapped[str | None] = mapped_column(String(24), nullable=True)
+    show_on_homepage: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="true")
+    show_in_catalog: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="true")
+    is_featured: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),

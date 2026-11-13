@@ -15,6 +15,7 @@ from app.schemas.admin_catalog import MAX_PAGE_SIZE as ADMIN_MAX_PAGE_SIZE
 from app.schemas.admin_catalog import (
     AdminCategoryDetailResponse,
     AdminCategoryListResponse,
+    AdminCategorySummaryResponse,
     AdminProductDetailResponse,
     AdminProductListResponse,
     ProductActivityResponse,
@@ -136,10 +137,25 @@ def admin_list_categories(
     status_: str | None = Query(default=None, alias="status"),
     parent_id: int | None = Query(default=None),
     q: str | None = Query(default=None, max_length=150, description="Category name or slug"),
+    show_on_homepage: bool | None = Query(default=None),
     current_user: User = Depends(require_permission("categories.read")),
     db: Session = Depends(get_db),
 ) -> AdminCategoryListResponse:
-    return CatalogService(db).admin_list_categories(page, page_size, status_, parent_id, q)
+    return CatalogService(db).admin_list_categories(
+        page, page_size, status_, parent_id, q, show_on_homepage
+    )
+
+
+@router.get(
+    "/categories/admin/summary",
+    response_model=AdminCategorySummaryResponse,
+    summary="Real category counts for the admin header cards",
+)
+def admin_category_summary(
+    current_user: User = Depends(require_permission("categories.read")),
+    db: Session = Depends(get_db),
+) -> AdminCategorySummaryResponse:
+    return CatalogService(db).admin_category_summary()
 
 
 @router.get(
@@ -182,13 +198,14 @@ def list_categories(
     parent_id: int | None = Query(default=None),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=MAX_PAGE_SIZE),
+    homepage: bool = Query(default=False, description="Only categories the admin shows on Home"),
     db: Session = Depends(get_db),
 ) -> CategoryListResponse:
     return catalog_cache.get_or_load(
         "categories",
-        {"parent_id": parent_id, "page": page, "page_size": page_size},
+        {"parent_id": parent_id, "page": page, "page_size": page_size, "homepage": homepage},
         CategoryListResponse,
-        lambda: CatalogService(db).list_public_categories(parent_id, page, page_size),
+        lambda: CatalogService(db).list_public_categories(parent_id, page, page_size, homepage),
     )
 
 
@@ -264,6 +281,20 @@ def create_category(
     db: Session = Depends(get_db),
 ) -> CategoryResponse:
     return CatalogService(db).create_category(payload, current_user.id)
+
+
+@router.post(
+    "/categories/{category_id}/duplicate",
+    response_model=CategoryResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Duplicate a category as a hidden draft (no products or subcategories)",
+)
+def duplicate_category(
+    category_id: int,
+    current_user: User = Depends(require_permission("categories.create")),
+    db: Session = Depends(get_db),
+) -> CategoryResponse:
+    return CatalogService(db).duplicate_category(category_id, current_user.id)
 
 
 @router.put(

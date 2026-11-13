@@ -1,6 +1,6 @@
 # Database Schema
 
-> **Status:** Verified (generated from the ORM models). **Generated:** 2026-10-27 by [`docs/_tools/gen_schema_reference.py`](../_tools/gen_schema_reference.py).
+> **Status:** Verified (generated from the ORM models). **Generated:** 2026-11-13 by [`docs/_tools/gen_schema_reference.py`](../_tools/gen_schema_reference.py).
 > **Evidence:** [`backend/app/models/`](../../backend/app/models) (SQLAlchemy 2 declarative models, 62 tables) and the migration history in [`backend/alembic/versions/`](../../backend/alembic/versions). The models were compared with a database migrated to head using `alembic check` (see [MIGRATIONS.md](MIGRATIONS.md)). `alembic_version` is Alembic's own table and is not listed.
 
 Relationships between tables: [ENTITY_RELATIONSHIPS.md](ENTITY_RELATIONSHIPS.md). Retention and lifecycle: [DATA_RETENTION.md](DATA_RETENTION.md). Business meaning of statuses: the domain documents in [`../05-domains/`](../05-domains).
@@ -163,12 +163,18 @@ Constraints and indexes:
 | `image_url` | TEXT | yes |  |  |
 | `status` | VARCHAR(30) | no |  |  |
 | `sort_order` | INTEGER | no | 0 |  |
+| `background_color` | VARCHAR(7) | yes |  |  |
+| `badge_text` | VARCHAR(24) | yes |  |  |
+| `show_on_homepage` | BOOLEAN | no | true |  |
+| `show_in_catalog` | BOOLEAN | no | true |  |
+| `is_featured` | BOOLEAN | no | false |  |
 | `created_at` | DATETIME | no | now() |  |
 | `updated_at` | DATETIME | no | now() |  |
 
 Constraints and indexes:
 
 - UNIQUE `uq_categories_slug`: (slug)
+- CHECK `ck_categories_background_color_hex`: `background_color IS NULL OR background_color ~ '^#[0-9A-Fa-f]{6}$'`
 - CHECK `ck_categories_parent_not_self`: `parent_id IS NULL OR parent_id <> id`
 - CHECK `ck_categories_status`: `status IN ('ACTIVE', 'INACTIVE', 'ARCHIVED')`
 - INDEX `ix_categories_parent_id`: (parent_id)
@@ -599,7 +605,7 @@ Constraints and indexes:
 Constraints and indexes:
 
 - CHECK `ck_stock_movements_movement_type`: `movement_type IN ('RECEIPT', 'ADJUSTMENT_IN', 'ADJUSTMENT_OUT', 'DAMAGE', 'WASTE', 'TRANSFER_IN', 'TRANSFER_OUT', 'DISPATCH')`
-- CHECK `ck_stock_movements_quantity`: `quantity > 0 OR quantity_base > 0`
+- CHECK `ck_stock_movements_quantity`: `quantity > 0 OR COALESCE(quantity_base, 0) > 0`
 - INDEX `ix_stock_movements_inventory_lot_id`: (inventory_lot_id)
 - INDEX `ix_stock_movements_movement_type`: (movement_type)
 - INDEX `ix_stock_movements_occurred_at`: (occurred_at)
@@ -638,7 +644,7 @@ Constraints and indexes:
 
 Constraints and indexes:
 
-- CHECK `ck_inventory_reservation_items_quantity`: `quantity > 0 OR quantity_base > 0`
+- CHECK `ck_inventory_reservation_items_quantity`: `quantity > 0 OR COALESCE(quantity_base, 0) > 0`
 - INDEX `ix_inventory_reservation_items_inventory_lot_id`: (inventory_lot_id)
 - INDEX `ix_inventory_reservation_items_order_item_id`: (order_item_id)
 - INDEX `ix_inventory_reservation_items_reservation_id`: (reservation_id)

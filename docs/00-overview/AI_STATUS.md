@@ -3,6 +3,21 @@
 > **Last verified:** 2026-10-14 (≈ 12:00–13:10 IST), branch `docs-and-primary-testing`, `HEAD` `8d6229e` ("chore(mobile): link EAS project under yash145"), **dirty working tree** (see §5).
 > **Purpose:** the "where are we right now" page for agents and developers: what works (and how that was checked), what is broken or unverified, what changed recently *according to the repository*, and what to do next. **Update this file whenever active development status, blockers or priorities change** ([AGENTS.md](../../AGENTS.md)). It is a snapshot; where it conflicts with the code or a fresh test run, trust those.
 
+## 0c. Category storefront display settings - 2026-11-13 (uncommitted, NOT deployed)
+
+Admin-controlled category tiles (tint, badge, Home / View all visibility, featured), a Home category grid in the app, duplicate-as-draft and header summary counts. Migration `a7c3d9e1f204` (additive: 5 columns on `categories`, existing rows stay visible).
+
+| Check | Result |
+|---|---|
+| `tests/test_category_display.py` (new) | 25 passed |
+| Every test file touching categories (19 files, disposable PostgreSQL 16 on loopback 15432) | 606 passed |
+| Migration | upgrade -> downgrade -1 -> upgrade, `alembic check` clean, single head `a7c3d9e1f204` |
+| Authz golden | regenerated: +1 operation (`GET /catalog/categories/admin/summary`) |
+| `tsc --noEmit` | `Admin/` and `mobile/`: exit 0 |
+| `API_REFERENCE` / `DATABASE_SCHEMA` | regenerated (244 operations) |
+
+**Not verified:** the full backend suite, any browser or device run of the new Admin form / Home grid, Admin `next build`. **Deploy order:** backend first (it runs `alembic upgrade head`), then the app (JS-only OTA is enough). An app build against the OLD backend still works: it just shows every category and no tint/badge. **Not built (scope):** icon library / asset table, drag-and-drop reordering (the existing "Arrange order" page stays), grid view, storefront-preview page (the form has a live tile preview instead), DRAFT status (use Inactive), category archive-with-reassignment flow, permission names beyond the existing `categories.*`.
+
 ## 0b. Pre-production verification - 2026-10-28 (uncommitted fixes on `feat/delivery-routing-aws-prep`)
 
 | Check | Result |

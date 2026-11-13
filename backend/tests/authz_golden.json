@@ -94,6 +94,9 @@
   "GET /api/v1/catalog/categories/admin": [
    "CATALOG_STAFF"
   ],
+  "GET /api/v1/catalog/categories/admin/summary": [
+   "CATALOG_STAFF"
+  ],
   "GET /api/v1/catalog/categories/admin/{category_id}": [
    "CATALOG_STAFF"
   ],
